@@ -1,0 +1,13 @@
+{
+  "name": "@verdikt/scripts",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Spikes and operational scripts — throwaway by design, kept for the evidence they produce",
+  "scripts": {
+    "spike:ens": "node spike-ens.mjs"
+  },
+  "dependencies": {
+    "viem": "^2.56.3"
+  }
+}

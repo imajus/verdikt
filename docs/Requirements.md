@@ -217,10 +217,17 @@ the architecture diagram live in [Specification.md](./Specification.md).
   the demo can only simulate that, and the submission should say so rather
   than implying a live attested deployment.
 - Availability tier boundaries/percentages may need tuning during build.
-- ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
+- ~~ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
   ABI stability, and tooling support (viem/ethers/ENS SDK) not yet
-  verified. The SLA has no Arc-side fallback, so this needs confirming
-  early.
+  verified.~~ **Resolved by Spike A**
+  ([spikes/A-ens-sepolia.md](./spikes/A-ens-sepolia.md)): addresses confirmed
+  on-chain, per-key EAC enforces, `viem` alone is sufficient. What remains is
+  that the contracts are still explicitly non-final before mainnet, so a
+  redeploy can move the addresses under us — `pnpm spike:ens --read-only`
+  re-checks them.
+- `verdikt.eth` is RESERVED on Sepolia ENSv2 (premigrated from mainnet), so
+  the parent name for the subname namespace is not yet settled — see Tasks
+  §0.6. Contained: the parent label appears once, in `packages/sdk/ens.js`.
 - Identity/SLA layer runs on Sepolia (ENSv2 has no mainnet deployment),
   separate from Arc's own network — a scope decision to state explicitly
   in the submission.

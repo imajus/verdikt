@@ -14,7 +14,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit -p jsconfig.json",
     "contracts:build": "pnpm --filter @verdikt/contracts build",
-    "contracts:test": "pnpm --filter @verdikt/contracts test"
+    "contracts:test": "pnpm --filter @verdikt/contracts test",
+    "spike:ens": "node scripts/spike-ens.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
