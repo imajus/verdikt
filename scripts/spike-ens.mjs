@@ -44,27 +44,52 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
+import { packetToBytes } from 'viem/ens';
+import { parseAbi } from 'viem';
 import {
   ALL_ROLES,
   DEFAULT_SEPOLIA_RPC,
-  REGISTRY_ROLE_SET_RESOLVER,
-  REGISTRY_ROLE_SET_SUBREGISTRY,
   RESOLVER_ROLES_VERDIKT_NEEDS,
   RESOLVER_ROLE_SET_TEXT,
   SEPOLIA_ENSV2,
   STATUS,
   anyId,
-  dnsEncode,
-  erc20Abi,
   factoryAbi,
   proxySalt,
-  registrarAbi,
   registryAbi,
   resolverAbi,
   rpc,
-  startAnvil,
-  universalResolverAbi
+  startAnvil
 } from './ens-sepolia.mjs';
+
+// Only this script registers a name, reads through the Universal Resolver, or
+// touches MockUSDC, so these stay here rather than in the shared module.
+
+const registrarAbi = parseAbi([
+  'function isAvailable(string label) view returns (bool)',
+  'function makeCommitment(string label, address owner, bytes32 secret, address subregistry, address resolver, uint64 duration, bytes32 referrer) view returns (bytes32)',
+  'function commit(bytes32 commitment)',
+  'function register(string label, address owner, bytes32 secret, address subregistry, address resolver, uint64 duration, address paymentToken, bytes32 referrer) returns (uint256)',
+  'function getRegisterPrice(string label, uint64 duration, address paymentToken) view returns (uint256, uint256)',
+  'function MIN_COMMITMENT_AGE() view returns (uint64)'
+]);
+
+const universalResolverAbi = parseAbi([
+  'function resolve(bytes name, bytes data) view returns (bytes, address)'
+]);
+
+const erc20Abi = parseAbi([
+  'function mint(address to, uint256 amount)',
+  'function approve(address spender, uint256 amount) returns (bool)'
+]);
+
+/** PermissionedRegistry ROLE_SET_RESOLVER. Deliberately NOT granted to providers. */
+const REGISTRY_ROLE_SET_RESOLVER = 1n << 24n;
+/** PermissionedRegistry ROLE_SET_SUBREGISTRY. */
+const REGISTRY_ROLE_SET_SUBREGISTRY = 1n << 20n;
+
+/** DNS wire format — what the resolver's `authorize*` functions take. */
+const dnsEncode = (name) => toHex(packetToBytes(name));
 
 const ONE_YEAR = 31_536_000n;
 

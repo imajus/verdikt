@@ -177,8 +177,18 @@ ENS SDK and no hand-rolled ABI encoding were needed: `packetToBytes` (from
 `namehash` the rest. Whether the ENS JS SDK also covers this surface was not
 tested — with `viem` sufficient there was nothing to gain by adding it.
 
-The spike lives in a `scripts` workspace package so `viem` resolves without a
-root-level dependency.
+The scripts live in a `scripts` workspace package so `viem` resolves without a
+root-level dependency, and share `scripts/ens-sepolia.mjs` — deployment
+addresses, the ABIs both need, role constants, and the anvil helpers. It holds
+only what both use; anything one script needs stays in that script.
+
+That file is temporary in one respect. When `resolveServiceRecord` is
+implemented, the read path — Universal Resolver address, resolver getter ABI,
+DNS encoding — will exist both there and in `packages/sdk/ens.js`, which is
+exactly the duplication the "only file that knows ENS exists" rule prevents.
+The SDK should own it at that point and the scripts should import it, leaving
+`ens-sepolia.mjs` the registrar/factory surface the SDK must never carry. Noted
+as a checklist item in Tasks §4.5 so it is not forgotten.
 
 ## Two traps worth remembering
 

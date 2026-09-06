@@ -7,11 +7,25 @@
 // scripts talk to the registry and the factory, which the SDK deliberately
 // never does, and they would otherwise duplicate every address and ABI
 // fragment twice over and drift apart.
+//
+// WHAT BELONGS HERE
+//
+// Only what both scripts use, or what this file needs to define what they use.
+// A constant one script needs stays in that script — a shared module that
+// accumulates single-caller items stops being a seam and becomes a junk drawer,
+// and the next reader can no longer tell which parts actually have to agree.
+//
+// PLANNED MOVE (Tasks.md 4.5)
+//
+// When `resolveServiceRecord` lands, the read path — the Universal Resolver
+// address, the resolver's getter ABI, DNS encoding — will exist here and in
+// `packages/sdk/ens.js`, which is the duplication that rule exists to prevent.
+// The SDK should own it then and these scripts should import it, leaving this
+// file the registrar/factory surface the SDK must never carry.
 
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { encodeAbiParameters, keccak256, parseAbi, stringToHex, toHex } from 'viem';
-import { packetToBytes } from 'viem/ens';
+import { encodeAbiParameters, keccak256, parseAbi, stringToHex } from 'viem';
 import { sepolia } from 'viem/chains';
 
 // --------------------------------------------------------------------------
@@ -55,15 +69,6 @@ export const registryAbi = parseAbi([
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
 ]);
 
-export const registrarAbi = parseAbi([
-  'function isAvailable(string label) view returns (bool)',
-  'function makeCommitment(string label, address owner, bytes32 secret, address subregistry, address resolver, uint64 duration, bytes32 referrer) view returns (bytes32)',
-  'function commit(bytes32 commitment)',
-  'function register(string label, address owner, bytes32 secret, address subregistry, address resolver, uint64 duration, address paymentToken, bytes32 referrer) returns (uint256)',
-  'function getRegisterPrice(string label, uint64 duration, address paymentToken) view returns (uint256, uint256)',
-  'function MIN_COMMITMENT_AGE() view returns (uint64)'
-]);
-
 export const resolverAbi = parseAbi([
   'function initialize(address admin, uint256 roleBitmap, bytes[] setters)',
   'function setText(bytes32 node, string key, string value)',
@@ -82,15 +87,6 @@ export const factoryAbi = parseAbi([
   'event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation)'
 ]);
 
-export const universalResolverAbi = parseAbi([
-  'function resolve(bytes name, bytes data) view returns (bytes, address)'
-]);
-
-export const erc20Abi = parseAbi([
-  'function mint(address to, uint256 amount)',
-  'function approve(address spender, uint256 amount) returns (bool)'
-]);
-
 // --------------------------------------------------------------------------
 // EAC roles. Values from the deployed contracts' documentation tables; both
 // scripts assert them against on-chain behaviour, so a wrong constant here
@@ -98,11 +94,10 @@ export const erc20Abi = parseAbi([
 
 /** Every role and admin counterpart — what ENS's own tooling passes on init. */
 export const ALL_ROLES = 0x1111111111111111111111111111111111111111111111111111111111111111n;
-/** PermissionedRegistry ROLE_SET_RESOLVER. Deliberately NOT granted to providers. */
-export const REGISTRY_ROLE_SET_RESOLVER = 1n << 24n;
-/** PermissionedRegistry ROLE_SET_SUBREGISTRY. */
-export const REGISTRY_ROLE_SET_SUBREGISTRY = 1n << 20n;
-/** PermissionedResolver ROLE_SET_TEXT — name-level, i.e. every text key at once. */
+/**
+ * PermissionedResolver ROLE_SET_TEXT — name-level, i.e. every text key at once.
+ * Shared because `RESOLVER_ROLES_VERDIKT_NEEDS` below is derived from it.
+ */
 export const RESOLVER_ROLE_SET_TEXT = 1n << 4n;
 /**
  * What Verdikt needs on a resolver's ROOT_RESOURCE to operate it: write the
@@ -130,9 +125,6 @@ export const STATUS = ['AVAILABLE', 'RESERVED', 'REGISTERED'];
  * addresses nothing afterwards. The labelhash is stable for the life of the name.
  */
 export const anyId = (label) => BigInt(keccak256(stringToHex(label)));
-
-/** DNS wire format — what the resolver's `authorize*` functions take. */
-export const dnsEncode = (name) => toHex(packetToBytes(name));
 
 /**
  * VerifiableFactory salt schemes. The proxy address is fully determined by
