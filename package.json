@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Verified x402 API marketplace — SLA conformance verified in a TEE, refunds enforced on-chain",
+  "description": "Verified x402 API marketplace \u2014 SLA conformance verified in a TEE, refunds enforced on-chain",
   "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=22"
@@ -16,7 +16,8 @@
     "contracts:build": "pnpm --filter @verdikt/contracts build",
     "contracts:test": "pnpm --filter @verdikt/contracts test",
     "spike:ens": "node --env-file-if-exists=.env scripts/spike-ens.mjs",
-    "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs"
+    "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs",
+    "demo": "node --env-file-if-exists=.env scripts/demo.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -137,8 +137,14 @@ fixture test.
 
 ### 0.6 Domain
 
-- [ ] Buy `verdikt.bond`, or pick a fallback subdomain on an owned domain
-      and update the docs
+- [x] **`verdikt.bond` is registered.** RDAP: created 2026-09-06, expires
+      2027-09-06, registrar NameCheap, nameservers `edna`/`sri.ns.cloudflare.com`,
+      status `add period`. Registered the same day as `verdikt.eth` on Sepolia,
+      which is strong circumstantial evidence it is ours — RDAP redacts the
+      registrant, so ownership is not provable from outside and is worth a
+      one-line confirmation. No fallback host needed; `PROXY_PUBLIC_HOST`
+      stands as-is. What remains is DNS: a wildcard `*.verdikt.bond` record
+      pointing at the proxy
 - [x] **ENS parent name.** `verdikt.eth` is registered on Sepolia ENSv2
       (expires 2027-09-06) with a `PermissionedResolver` attached, so
       `ENS_PARENT_NAME` stands as-is. Its subregistry is not deployed yet —
@@ -571,23 +577,38 @@ day saved in Phase 4 here.
 
 ### 6.1 Seed
 
-- [ ] Honest service: Proceeds paywall wrapping Open-Meteo
-- [ ] Violating twin: same upstream, an SLA it cannot meet (a latency bound
-      below the real p99, or a schema clause the paywall won't satisfy)
+- [x] The two SLAs exist as fixtures (`fixtures/sla/`) and drive both the demo
+      script and the dashboard's demo source: an honest service, and a twin
+      whose schema clause promises a field the upstream does not return and
+      whose latency bound no round trip can meet
+- [ ] **BLOCKED** — the live Proceeds paywall wrapping Open-Meteo. Needs the
+      Arc deployment and a provider wallet
 
 ### 6.2 Scripted end-to-end run
 
-- [ ] Register both, publish SLAs to ENS, fund bonds
-- [ ] Happy path call → PASS, verdict on Arc, dashboard updates
-- [ ] Violating call → FAIL → refund paid, visible on the dashboard
-- [ ] Repeat until the bond drains → SUSPENDED → proxy refuses routing
-- [ ] `payTo` mismatch → proxy blocks before payment
+`pnpm demo` — [scripts/demo.mjs](../scripts/demo.mjs). Runs today, on a
+throwaway `anvil` rather than Arc, because 2.4 is blocked. Same bytecode, same
+report encoding, same refund arithmetic; what it does not exercise is Arc
+itself, a real forwarder, and a real payment.
+
+- [x] Register both, fund bonds
+- [x] Happy path calls → PASS, no credit, deposit untouched
+- [x] Violating calls → FAIL → refund credited, asserted against the cap
+- [x] Repeat until the bond drains → SUSPENDED
+- [x] A DOWN refunds too — that call took payment and delivered nothing
+- [x] `withdraw()` pays exactly what was booked, asserted net of gas
+- [ ] Publish SLAs to ENS as part of the run — needs per-service subname
+      minting, which `setup-ens.mjs` does not yet do (it sets up the parent)
+- [ ] Dashboard reads it live — needs the deployment
+- [ ] `payTo` mismatch → proxy blocks before payment. Covered by
+      `proxy/src/app.test.js`, not yet by the scripted run
 
 ### 6.3 Submission
 
-- [ ] Recorded walkthrough
-- [ ] README
-- [ ] State the scope decisions confidently rather than apologetically: no
+- [x] README, with a "what is real, and what is not" section — a verification
+      product that overstated its own verification would be self-refuting
+- [x] State the scope decisions confidently rather than apologetically: no
       dispute layer is a design choice; ENS on Sepolia is a deployment
       constraint; attestation is simulated because CRE production
       enrollment is private-beta
+- [ ] Recorded walkthrough
