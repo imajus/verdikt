@@ -1,0 +1,13 @@
+{
+  "name": "@verdikt/sla",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SLA evaluation engine — pure, dependency-free, bundles into the CRE workflow",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "comment": "Dependencies stay empty on purpose (Tasks.md 1.2): this bundles into the CRE workflow, so the JSON Schema subset is hand-rolled rather than pulling ajv.",
+  "dependencies": {}
+}

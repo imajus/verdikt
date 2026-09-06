@@ -1,0 +1,18 @@
+{
+  "name": "@verdikt/sdk",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Arc + ENS read wrapper — callers never need to know two chains are involved",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./ens": "./ens.js",
+    "./payment": "./payment.js",
+    "./registry": "./registry.js"
+  },
+  "dependencies": {
+    "@verdikt/fixtures": "workspace:*",
+    "viem": "^2.56.3"
+  }
+}

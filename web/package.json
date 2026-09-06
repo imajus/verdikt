@@ -1,0 +1,19 @@
+{
+  "name": "@verdikt/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Marketplace dashboard — the primary demo surface",
+  "comment": "The UI framework is the one dependency left open on purpose: it is a Phase 5 decision, not a Wave 0 seam. Adding it is a single `pnpm add` inside this package.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@verdikt/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "vite": "^8.2.2"
+  }
+}

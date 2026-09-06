@@ -1,0 +1,22 @@
+{
+  "name": "verdikt",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Verified x402 API marketplace — SLA conformance verified in a TEE, refunds enforced on-chain",
+  "packageManager": "pnpm@12.3.4",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit -p jsconfig.json",
+    "contracts:build": "pnpm --filter @verdikt/contracts build",
+    "contracts:test": "pnpm --filter @verdikt/contracts test"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.0"
+  }
+}

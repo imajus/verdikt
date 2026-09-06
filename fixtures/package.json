@@ -1,0 +1,12 @@
+{
+  "name": "@verdikt/fixtures",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Recorded challenges, payloads and responses — everything downstream develops against these",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js"
+  },
+  "dependencies": {}
+}
