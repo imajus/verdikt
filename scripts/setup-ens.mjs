@@ -66,8 +66,8 @@ import {
   DEFAULT_SEPOLIA_RPC,
   RESOLVER_ROLES_VERDIKT_NEEDS,
   SEPOLIA_ENSV2,
-  STATUS,
   anyId,
+  readNameState,
   factoryAbi,
   proxySalt,
   registryAbi,
@@ -96,20 +96,8 @@ function parseArgs(argv) {
  * comes from here, so a re-run after a partial setup sees what actually landed.
  */
 async function readState(publicClient, parentLabel, operator) {
-  const id = anyId(parentLabel);
-  const [status, owner, resolver, subregistry] = await Promise.all([
-    publicClient.readContract({
-      address: SEPOLIA_ENSV2.ETHRegistry,
-      abi: registryAbi,
-      functionName: 'getStatus',
-      args: [id]
-    }),
-    publicClient.readContract({
-      address: SEPOLIA_ENSV2.ETHRegistry,
-      abi: registryAbi,
-      functionName: 'findOwner',
-      args: [parentLabel]
-    }),
+  const [name, resolver, subregistry] = await Promise.all([
+    readNameState(publicClient, SEPOLIA_ENSV2.ETHRegistry, parentLabel),
     publicClient.readContract({
       address: SEPOLIA_ENSV2.ETHRegistry,
       abi: registryAbi,
@@ -140,7 +128,14 @@ async function readState(publicClient, parentLabel, operator) {
     }
   }
 
-  return { status: STATUS[status], owner, resolver, subregistry, resolverOperable };
+  return {
+    status: name.status,
+    owner: name.latestOwner,
+    expiry: name.expiry,
+    resolver,
+    subregistry,
+    resolverOperable
+  };
 }
 
 /**

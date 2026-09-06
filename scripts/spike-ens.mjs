@@ -52,10 +52,9 @@ import {
   RESOLVER_ROLES_VERDIKT_NEEDS,
   RESOLVER_ROLE_SET_TEXT,
   SEPOLIA_ENSV2,
-  STATUS,
-  anyId,
   factoryAbi,
   proxySalt,
+  readNameState,
   registryAbi,
   resolverAbi,
   rpc,
@@ -268,29 +267,14 @@ async function main() {
     const parentLabel = args.parentLabel;
     let parentStatus;
     let parentOwner;
+    let parentTokenId;
 
     await check(`ETHRegistry state of "${parentLabel}"`, async () => {
-      const id = anyId(parentLabel);
-      parentStatus = STATUS[
-        await publicClient.readContract({
-          address: SEPOLIA_ENSV2.ETHRegistry,
-          abi: registryAbi,
-          functionName: 'getStatus',
-          args: [id]
-        })
-      ];
-      parentOwner = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistry,
-        abi: registryAbi,
-        functionName: 'findOwner',
-        args: [parentLabel]
-      });
-      const expiry = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistry,
-        abi: registryAbi,
-        functionName: 'getExpiry',
-        args: [id]
-      });
+      const state = await readNameState(publicClient, SEPOLIA_ENSV2.ETHRegistry, parentLabel);
+      parentStatus = state.status;
+      parentOwner = state.latestOwner;
+      parentTokenId = state.tokenId;
+      const expiry = state.expiry;
       const subregistry = await publicClient.readContract({
         address: SEPOLIA_ENSV2.ETHRegistry,
         abi: registryAbi,
@@ -346,15 +330,8 @@ async function main() {
       }
     }
 
-    let parentTokenId;
     await check(`${parentName} is owned by the deployer`, async () => {
       if (parentStatus === 'REGISTERED') {
-        parentTokenId = await publicClient.readContract({
-          address: SEPOLIA_ENSV2.ETHRegistry,
-          abi: registryAbi,
-          functionName: 'findTokenId',
-          args: [parentLabel]
-        });
         return `already registered to ${deployer.address}`;
       }
       const duration = ONE_YEAR;
@@ -421,18 +398,15 @@ async function main() {
         ]
       });
 
-      parentTokenId = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistry,
-        abi: registryAbi,
-        functionName: 'findTokenId',
-        args: [parentLabel]
-      });
-      const owner = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistry,
-        abi: registryAbi,
-        functionName: 'findOwner',
-        args: [parentLabel]
-      });
+      // Re-read rather than reuse the pre-registration state: the token id only
+      // exists now, and it is what every later registry setter is keyed on.
+      const registered = await readNameState(
+        publicClient,
+        SEPOLIA_ENSV2.ETHRegistry,
+        parentLabel
+      );
+      parentTokenId = registered.tokenId;
+      const owner = registered.latestOwner;
       assert(owner.toLowerCase() === deployer.address.toLowerCase(), `owner is ${owner}`);
       return `registered to ${owner} for ${Number(price) / 1e6} USDC`;
     });
@@ -604,23 +578,15 @@ async function main() {
           BigInt(Math.floor(Date.now() / 1000) + 365 * 24 * 3600)
         ]
       });
-      const owner = await publicClient.readContract({
-        address: subRegistryAddress,
-        abi: registryAbi,
-        functionName: 'findOwner',
-        args: [args.slug]
-      });
+      const minted = await readNameState(publicClient, subRegistryAddress, args.slug);
+      assert(minted.status === 'REGISTERED', `subname status is ${minted.status}`);
+      const owner = minted.latestOwner;
       assert(owner.toLowerCase() === provider.address.toLowerCase(), `owner is ${owner}`);
       return `owner ${owner}`;
     });
 
     await check('provider CANNOT repoint its own subname at another resolver', async () => {
-      const tokenId = await publicClient.readContract({
-        address: subRegistryAddress,
-        abi: registryAbi,
-        functionName: 'findTokenId',
-        args: [args.slug]
-      });
+      const { tokenId } = await readNameState(publicClient, subRegistryAddress, args.slug);
       return expectEacRevert(
         publicClient.simulateContract({
           account: provider,
