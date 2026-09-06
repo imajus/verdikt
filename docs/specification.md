@@ -16,8 +16,12 @@ adapted from IBM's WSLA per-guarantee predicate model[^1]:
   nothing per-call is published beyond Arc.
 - **Periodic availability score** — computed as a continuous uptime
   percentage (100% minus percentage downtime) over a trailing window, then
-  mapped through a published tier table to a refund percentage, following
-  the same tiered-credit approach used in commercial cloud SLAs[^2].
+  mapped through a published tier table to a score shown in the marketplace
+  listing (§5), following the same tiered-banding approach used in
+  commercial cloud SLA credit tables[^2]. Availability never triggers a
+  refund (§3): if a service was down, it couldn't have collected payment
+  for that window either, so there is nothing to refund — the score exists
+  purely to help consumers rank services.
 
 Both scores recompute **hourly** from a rolling trailing **7-day** window of
 `VerdictWritten` events:
@@ -31,9 +35,9 @@ Both scores recompute **hourly** from a rolling trailing **7-day** window of
 An hourly rolling-window write costs at most one ENS update per service per
 hour, regardless of call volume, and is fresher than a weekly one while
 still reflecting a week of history. Per-call events remain the ground truth
-on Arc; the ratios are a derived summary (§4). Because the window overlaps
-between runs, refunds pay only the new shortfall each hour rather than
-re-settling the full week (§3).
+on Arc; both ratios are derived, display-only summaries (§4) — a missed or
+late hourly run just leaves a stale score until the next run overwrites it,
+with no refund state to reconcile.
 
 Both mechanisms share one evaluation engine and one SLA schema. Mixing a
 boolean-per-clause model with one graduated aggregate metric follows Rana
@@ -98,13 +102,13 @@ settles, confidential because it touches the provider's actual response. It
 also triggers the per-request refund (§3) directly from its own PASS/FAIL
 result.
 
-The hourly reputation/refund-checkpoint run (§1, §3) is a separate CRE
-workflow on a cron trigger. It only reads `VerdictWritten` events already
-public on Arc, so it needs no confidentiality and doesn't run in the TEE:
-it computes the trailing-7-day ratios, settles the idempotent shortfall
-refund via the checkpoint, and writes to ENS. Confidentiality is an
-optional, layered feature of a CRE workflow, and Cron is a first-class
-trigger type alongside HTTP and on-chain events[^6].
+The hourly reputation-scoring run (§1) is a separate CRE workflow on a
+cron trigger. It only reads `VerdictWritten` events already public on Arc,
+so it needs no confidentiality and doesn't run in the TEE: it computes the
+trailing-7-day conformance and availability ratios and writes both to ENS
+as marketplace scores — it makes no Arc writes and settles no refund.
+Confidentiality is an optional, layered feature of a CRE workflow, and Cron
+is a first-class trigger type alongside HTTP and on-chain events[^6].
 
 Merging the two would make the aggregate depend on traffic timing (an hour
 with zero calls would never publish) and put non-confidential logic inside
@@ -129,21 +133,13 @@ the TEE workflow — kept separate instead.
   signer, can `setVerdict`). Neither the provider nor Verdikt itself can
   write a verdict — enforced at the contract level. The provider has no
   write role on Arc — their authorship happens on the ENS side (§4).
-- **Two refund paths, both auto-executed, no dispute step**:
-  1. *Per-request*: a FAIL verdict for a specific paid request releases a
-     fixed refund from that service's deposit to the paying agent
-     automatically (the proxy already correlates request↔payment↔verdict).
-  2. *Periodic availability*: an **hourly** scheduled CRE run reads the
-     trailing 7 days of `VerdictWritten` events, computes the conformance
-     and availability ratios (§1), and writes both to the provider's ENS
-     subname (§4). Unlike the per-request path above, this can't be settled
-     instantly inside a single verification call — availability is an
-     aggregate over a rolling 7-day window, not a property of any one
-     request — so a per-service "refunded up to" checkpoint on Arc tracks
-     how far refunds have been settled. Each run pays only the new
-     shortfall since that checkpoint and advances it; without it, the same
-     downtime would get re-paid on every one of the ~168 overlapping hourly
-     runs that see it in their trailing window.
+- **Refund, auto-executed, no dispute step**: a FAIL verdict for a specific
+  paid request releases a fixed refund from that service's deposit to the
+  paying agent automatically (the proxy already correlates
+  request↔payment↔verdict). This is the only refund trigger — availability
+  is scored (§1, §5) but never refunded: if the service was down, it
+  couldn't have collected payment for that window in the first place, so
+  there's nothing to refund.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up.
@@ -197,10 +193,10 @@ decision for a two-week build.
   - A **`conformance` text record** — the SLA conformance ratio (0–1000,
     §1), and an **`availability` text record** — the availability ratio
     (0–1000, §1), both written by the CRE workflow's signer hourly over
-    the trailing 7-day window (§1), not per call. This is the same
-    scheduled run that checks Arc's periodic refund path (§3); per-call
-    PASS/FAIL verdicts stay Arc-only events (§1) and never touch ENS
-    individually.
+    the trailing 7-day window (§1), not per call — the same scheduled run
+    described in §2's "Two CRE workflows". Neither record ever triggers a
+    refund (§3); per-call PASS/FAIL verdicts stay Arc-only events (§1) and
+    never touch ENS individually.
   - An **address record**, owner-controlled, set to the provider's
     payout wallet.
 - At payment time, the CRE workflow resolves the subname's address record
@@ -257,9 +253,8 @@ On-chain registry (Arc)
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days
    - reads VerdictWritten events from the trailing 7-day window on Arc
    - computes conformance ratio + availability ratio (0-1000 each)
-   - refunds only the new shortfall since Arc's "refunded up to" checkpoint
-     (avoids re-paying the same violation across overlapping runs)
-   - writes both ratios to the ENS subname (Sepolia)
+   - writes both ratios to the ENS subname (Sepolia) as marketplace scores
+   - no Arc write, no refund -- availability never triggers a refund
    |
    v
 ENS subname (Sepolia, verdikt.eth, ENSv2 Permissioned Registry/Resolver)

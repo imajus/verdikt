@@ -49,9 +49,10 @@ based on its actual track record instead of a provider's own claims.
   choose between similar options based on live metrics instead of picking
   at random.
 - Demonstrate two distinct, appropriately-matched verdict types in one
-  system: a **boolean** per-call verdict for discrete conformance clauses,
-  and a **graduated** score for an aggregate/continuous property
-  (availability).
+  system: a **boolean** per-call verdict for discrete conformance clauses
+  that triggers an automatic refund, and a **graduated** score for an
+  aggregate/continuous property (availability) that ranks services in the
+  marketplace instead.
 - Ship a real, live, end-to-end demo (register → verify → refund → query)
   on a public testnet, with a dashboard that visualizes it.
 - Fit within a solo 2-week build.
@@ -79,6 +80,10 @@ based on its actual track record instead of a provider's own claims.
 - **Re-derivation/challenge of a CRE verdict** — x402 responses are
   pay-gated, so there is no free, public source of truth a challenger could
   use to re-check a claim. The bond substitutes for re-derivation.
+- **Availability-triggered refunds** — downtime affects a service's
+  marketplace score, not its deposit. If a service was down, it couldn't
+  have collected payment for that window either, so there's nothing to
+  refund ([spec §3](./specification.md#3-on-chain-registry)).
 
 ## 5. Users
 
@@ -119,8 +124,9 @@ Verdikt is four subsystems working together; full mechanics, data flow, and
 the architecture diagram live in [specification.md](./specification.md).
 
 - **SLA verification** — a per-request boolean verdict for discrete
-  conformance clauses (schema, latency, price), plus a periodic graduated
-  availability score, both evaluated against the provider's own declared
+  conformance clauses (schema, latency, price) that triggers an automatic
+  refund, plus a periodic graduated availability score used only for
+  marketplace ranking, both evaluated against the provider's own declared
   SLA ([spec §1](./specification.md#1-sla-verification-model)).
 - **Verification execution** — a Chainlink CRE Confidential Workflow (TEE)
   fetches the provider's response directly and evaluates it, so Verdikt's
@@ -192,16 +198,6 @@ short.
 - The demo API's x402 integration and response schema not yet confirmed as
   a good verification target — may need a thinner/different demo API.
 - Availability tier boundaries/percentages may need tuning during build.
-- Cross-chain delivery on the hourly run (Arc checkpoint update + ENS
-  `conformance`/`availability` write) has no defined behavior for partial
-  failure — e.g. checkpoint advances but the Sepolia write doesn't land.
-  Runs 168x more often than the earlier weekly design, so worth resolving
-  early. The SLA path has no equivalent risk since it's never written by
-  CRE.
-- The "refunded up to" checkpoint on Arc
-  ([spec §3](./specification.md#3-on-chain-registry)) needs testing for
-  missed or late runs — does the next run catch up the gap without
-  double-refunding?
 - ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
   ABI stability, and tooling support (viem/ethers/ENS SDK) not yet
   verified. The SLA has no Arc-side fallback, so this needs confirming
