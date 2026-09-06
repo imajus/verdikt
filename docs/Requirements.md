@@ -164,32 +164,22 @@ Verdikt spans two chains, each chosen for what only it provides:
 
 - **Registry/escrow/payment chain**: **Arc**, Circle's stablecoin-native L1.
   The registrar, escrow deposits, verdicts, and refunds
-  ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here — and
-  the x402 call is paid on Arc too. USDC is Arc's native gas token, so the
-  payment, the bond, and the refund are all denominated in the same asset
-  that secures them, on one chain. This collapses what would otherwise be a
-  cross-chain correlation problem: the paying agent pays on Arc and, on a
-  FAIL verdict, is refunded on Arc from the same-asset bond. The x402
-  payment settles via **Circle Gateway** (batched `GatewayWalletBatched`
-  scheme) — validated end-to-end on Arc Testnet: a paid call returned the
-  provider's real JSON response, with the payment debited from the caller's
-  Gateway balance and a `success` receipt on `eip155:5042002`. The bond is
-  held as native USDC while the payment debits a Gateway balance — same
-  asset and chain, different rails, so a refunded agent receives native
-  USDC rather than Gateway credit.
-- **Demo x402 provider**: **[Proceeds](https://myproceeds.xyz)** paywalls,
-  which wrap an arbitrary upstream API behind an x402 gate and accept payment
-  on **Arc Testnet** (among other networks). The demo service wraps
-  [Open-Meteo](https://open-meteo.com) (free, no-auth, stable JSON schema),
-  giving the verifier a real, well-schematized response to check against a
-  declared SLA. Because we control the paywall, we can also stand up a
-  second service that deliberately violates its SLA to demo the FAIL →
-  refund path on cue. Verdikt does not require a provider to use Proceeds or
-  to settle on Arc — the proxy relays the x402 handshake on whatever the
-  provider's 402 challenge advertises — but settling on Arc is the default
-  that keeps the payment and refund legs unified; independently-operated
+  ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here, and
+  the x402 call is paid on Arc too. USDC is Arc's native gas token, so
+  payment, bond, and refund are denominated in the same asset on one chain:
+  the paying agent pays on Arc and, on a FAIL verdict, is refunded on Arc
+  from the same-asset bond, with no cross-chain correlation between the two
+  legs. The x402 payment settles via **Circle Gateway** (batched
+  `GatewayWalletBatched` scheme), which debits a pre-funded Gateway balance;
+  the bond is held as native USDC, so a refunded agent receives native USDC
+  rather than Gateway credit.
+- **Demo x402 provider**: a [Proceeds](https://myproceeds.xyz) paywall on Arc
+  Testnet stands in for a live provider. Verdikt does not require a provider to
+  use Proceeds or to settle on Arc — the proxy relays the x402 handshake on
+  whatever the provider's 402 challenge advertises — but settling on Arc is the
+  default that keeps the payment and refund legs unified; independently-operated
   mainnet providers (e.g. [Blockrun](https://blockrun.ai/docs/x402/endpoints))
-  remain the production target once live.
+  are the production target.
 - **Identity/SLA chain**: **Ethereum Sepolia** — the only network with an
   ENSv2 Permissioned Registry/Resolver deployment, which the SLA and
   reputation layer requires
@@ -211,17 +201,13 @@ Verdikt spans two chains, each chosen for what only it provides:
   x402-capable wallet across EVM chains without building custom signing
   infrastructure.
 
-Verdikt is a natural fit for Arc's agent-commerce ecosystem: Circle's own
-[agent marketplace](https://agents.circle.com/sell) lets providers list
-x402 endpoints for agents to discover and pay, and scores an endpoint's
-"agent-readiness" before it goes live (e.g.
-[agents.circle.com/sell/score?url=nano.blockrun.ai](https://agents.circle.com/sell/score?url=nano.blockrun.ai)).
-That scoring step checks whether an endpoint is structurally ready to be
-listed — it does not check whether a listed endpoint keeps delivering what
-it promised after it's live and being paid per call. Verdikt is the missing
-piece downstream of listing: ongoing, automatic verification of delivery
-against a provider's own SLA, with code-enforced refunds when it falls
-short.
+Verdikt fits Arc's agent-commerce ecosystem: Circle's own
+[agent marketplace](https://agents.circle.com/sell) lets providers list x402
+endpoints and scores an endpoint's "agent-readiness" before listing — a check
+that an endpoint is structurally ready to be listed, not that a listed endpoint
+keeps delivering what it promised once it's live and paid per call. Verdikt is
+the piece downstream of listing: ongoing, automatic verification of delivery
+against a provider's own SLA, with code-enforced refunds when it falls short.
 
 ## 9. Competitive landscape
 
@@ -247,12 +233,10 @@ short.
 - Payment settlement uses Circle Gateway's batched scheme
   (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
   balance (a `direct` on-chain deposit into the Gateway wallet) rather than
-  paying from the wallet's plain token balance. The paid x402 leg is proven
-  on Arc Testnet, but the escrow contract's refund side is not yet wired to
-  the payment: the refund must credit the paying agent on Arc off a FAIL
-  verdict, and that registrar→refund path still needs building and
-  end-to-end testing. (Keeping payment and refund on Arc removes the earlier
-  cross-chain settlement risk — both legs are now same-chain, same-asset.)
+  paying from the wallet's plain token balance. The escrow contract's refund
+  side is not yet wired to the payment leg: a FAIL verdict must credit the
+  paying agent on Arc from the bond, and that registrar→refund path still
+  needs building and testing.
 - **Induced-failure griefing.** With no dispute layer, an agent can craft
   requests designed to push a service into violating its own SLA — a query
   hitting a slow path, or one that trips a schema edge case — and collect a
@@ -262,7 +246,7 @@ short.
   ([spec §3](./Specification.md#3-on-chain-registry)); any refund larger
   than the payment turns griefing into a strategy, with no arbitration to
   fall back on.
-- The trust argument now rests on attestation — that the enclave is running
+- The trust argument rests on attestation — that the enclave is running
   the published workflow code. Production CRE enrollment is private-beta, so
   the demo can only simulate that, and the submission should say so rather
   than implying a live attested deployment.
