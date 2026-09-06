@@ -397,17 +397,40 @@ store.
 
 ### 4.1 Routing
 
-- [ ] `ALL /:slug/*` → target resolved from the registry
-- [ ] Branch on the presence of `X-PAYMENT`
+- [x] `<slug>.verdikt.bond/*` **and** `/:slug/*` — the host form is how agents
+      actually call; the path form keeps local development off wildcard DNS
+- [x] Branch on the presence of `X-PAYMENT`
+- [x] Refuse a SUSPENDED, DEREGISTERED or unregistered service before any
+      upstream call — on the unpaid leg too, since an agent that never sees a
+      challenge cannot pay one
+- [x] Target resolved from the **ENS `url` record**, not the registry — see the
+      decision below
+
+> **Decision — the upstream endpoint is an ENS text record.** §4.1 said "target
+> resolved from the registry", but the registry has no such field and adding
+> one costs a chain write per URL change, a second provider-writable field, and
+> an Arc read on the unpaid leg that is otherwise unnecessary. The URL is
+> provider-authored and not consensus-critical, which is exactly what the ENS
+> side is for, and the per-key EAC that already scopes `sla` to the provider
+> covers `url` for free. `ServiceRecord` gains a fifth record and the proxy
+> still makes one resolution call.
 
 ### 4.2 Passthrough branch
 
-- [ ] Forward the request; capture the 402 challenge
-- [ ] Resolve the slug's ENS address record (cache with a TTL)
-- [ ] Compare against the challenge's `payTo`
-- [ ] On mismatch: return an error and **do not relay the challenge** — the
-      agent must never see a spoofed `payTo` to sign against
-- [ ] Otherwise relay the challenge unchanged
+- [x] Forward the request; capture the 402 challenge
+- [x] Resolve the slug's ENS address record (cached, TTL from
+      `PROXY_ENS_CACHE_TTL_MS`)
+- [x] Compare against the challenge's `payTo` — **every** option in `accepts`,
+      since the agent may pick any of them
+- [x] On mismatch: return an error and **do not relay the challenge** — the
+      agent must never see a spoofed `payTo` to sign against. Also blocks when
+      the challenge will not parse, offers no `payTo`, or the service has
+      published no address to compare against
+- [x] Otherwise relay the challenge unchanged
+- [x] Refuse a provider `url` pointed at a private or link-local host. The
+      record is provider-authored and the proxy dials it from Verdikt's own
+      network, so without this it is a server-side-request-forgery primitive;
+      `PROXY_ALLOW_PRIVATE_UPSTREAM` opts a localhost demo provider back in
 
 ### 4.3 Verified branch
 

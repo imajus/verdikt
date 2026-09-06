@@ -12,6 +12,7 @@ export {
   serviceName,
   writeServiceScores
 } from './ens.js';
+export { DEFAULT_ARC_RPC, arcTestnet, createRegistryReader, registryAbi } from './arc.js';
 export { decodePayment } from './payment.js';
 export {
   OUTCOME_ORDINAL,

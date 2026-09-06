@@ -66,8 +66,8 @@ export const DEFAULT_SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com'
 
 export const DEFAULT_PARENT_NAME = 'verdikt.eth';
 
-/** The four records Verdikt stores, in the order `ServiceRecord` reports them. */
-export const TEXT_KEYS = Object.freeze(['sla', 'conformance', 'availability']);
+/** The text records Verdikt stores on a subname. `address` is not a text record. */
+export const TEXT_KEYS = Object.freeze(['url', 'sla', 'conformance', 'availability']);
 
 export const universalResolverAbi = parseAbi([
   'function resolve(bytes name, bytes data) view returns (bytes, address)'
@@ -262,8 +262,9 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     return value === '0x0000000000000000000000000000000000000000' ? null : value;
   };
 
-  const [address, sla, conformance, availability] = await Promise.all([
+  const [address, url, sla, conformance, availability] = await Promise.all([
     readAddr(),
+    readText('url'),
     readText('sla'),
     readText('conformance'),
     readText('availability')
@@ -274,6 +275,7 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     name,
     serviceId,
     address,
+    url,
     sla,
     conformance: conformance === null ? null : parseScore(conformance),
     availability: availability === null ? null : parseScore(availability),

@@ -4,7 +4,7 @@ import { defineConfig } from 'vitest/config';
 // file each parallel job wants to edit. Tests are picked up by glob instead.
 export default defineConfig({
   test: {
-    include: ['{packages,fixtures,cre,proxy,web}/**/*.test.js'],
+    include: ['{packages,fixtures,cre,proxy,web,scripts}/**/*.test.js'],
     exclude: ['**/node_modules/**', '**/dist/**', 'contracts/**'],
     environment: 'node'
   }

@@ -166,6 +166,10 @@ importers:
       fastify:
         specifier: ^5.12.3
         version: 5.12.3
+    devDependencies:
+      '@verdikt/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
 
   scripts:
     dependencies:

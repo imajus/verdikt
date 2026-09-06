@@ -22,6 +22,17 @@ interface ServiceRecord {
    */
   address: string | null;
   /**
+   * The provider's upstream endpoint — where the proxy relays `<slug>.verdikt.bond/*`.
+   *
+   * Lives on ENS rather than on Arc because it is provider-authored, changes
+   * without consensus significance, and the per-key EAC that already scopes
+   * `sla` to the provider covers it for free. Putting it on Arc would mean a
+   * chain write per URL change and a second provider-writable field on the
+   * registry, and the proxy would need an Arc read on the unpaid leg it does
+   * not otherwise need.
+   */
+  url: string | null;
+  /**
    * The `sla` text record, raw and unparsed. Parsing and validation belong to
    * @verdikt/sla — this layer deliberately knows nothing about SLA schema.
    */
@@ -65,4 +76,78 @@ interface DecodedPayment {
   payer: string;
   /** Integer, minor units. USDC has 6 decimals. */
   amount: bigint;
+}
+
+interface ArcOptions {
+  /** Defaults to `ARC_RPC_URL`, then Arc Testnet's public RPC. */
+  rpcUrl?: string;
+  /** Defaults to `VERDIKT_REGISTRY_ADDRESS`. */
+  address?: string;
+  /** Where log scans start. Defaults to `VERDIKT_REGISTRY_DEPLOY_BLOCK`, else 0. */
+  deployBlock?: bigint;
+  /** Chunk size for `eth_getLogs`; most public RPCs cap the range. */
+  maxBlockRange?: bigint;
+}
+
+interface LogRange {
+  fromBlock?: bigint;
+  toBlock?: bigint;
+  /** Filters `VerdictWritten` to one service. */
+  serviceId?: string;
+}
+
+/** Live registry state for one service. `deposit` is in Arc's 18-decimal native view. */
+interface ServiceState {
+  provider: string;
+  status: ServiceStatus;
+  deposit: bigint;
+}
+
+interface RegisteredService extends ServiceState {
+  serviceId: string;
+  /** Recoverable only from `ServiceRegistered` — keccak256 is one-way. */
+  slug: string;
+  registeredAtBlock: bigint | null;
+}
+
+/** `paidAmount` is in USDC minor units (6 decimals), as x402 carried it. */
+interface VerdictRecord {
+  serviceId: string;
+  requestId: string;
+  outcome: SlaOutcome;
+  payer: string;
+  paidAmount: bigint;
+  blockNumber: bigint | null;
+  transactionHash: string | null;
+}
+
+/** `amount` is in Arc's 18-decimal native view — it came out of the bond. */
+interface RefundRecord {
+  serviceId: string;
+  requestId: string;
+  payer: string;
+  amount: bigint;
+  blockNumber: bigint | null;
+}
+
+interface StoredVerdict {
+  serviceId: string;
+  outcome: SlaOutcome;
+  payer: string;
+  paidAmount: bigint;
+  refundCredited: bigint;
+  /** Unix seconds. */
+  writtenAt: number;
+}
+
+interface RegistryReader {
+  client: unknown;
+  address: string;
+  getService(serviceId: string): Promise<ServiceState>;
+  /** `null` when no verdict is recorded for that requestId. */
+  getVerdict(requestId: string): Promise<StoredVerdict | null>;
+  getOwed(payer: string): Promise<bigint>;
+  listServices(range?: LogRange): Promise<RegisteredService[]>;
+  listVerdicts(range?: LogRange): Promise<VerdictRecord[]>;
+  listRefunds(range?: LogRange): Promise<RefundRecord[]>;
 }

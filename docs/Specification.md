@@ -203,7 +203,12 @@ an accepted scope decision for a two-week build.
   call — maps directly to `provider-name.verdikt.eth` with no lookup table.
 - At mint, EAC roles are set once: the provider's address scoped to the `sla`
   key; the CRE signer scoped to the `conformance` and `availability` keys.
-- The subname carries four records:
+- The subname carries five records:
+  - **`url`** — the provider's upstream endpoint, where the proxy relays
+    `<slug>.verdikt.bond/*`. Provider-authored and not consensus-significant, so
+    it belongs on the side that already has a per-key ACL for provider writes;
+    putting it on Arc would cost a chain write per URL change and an Arc read on
+    the unpaid leg that is otherwise unnecessary.
   - **`sla`** — written directly by the provider, any time, no Arc involvement;
     the sole copy of the SLA (§3).
   - **`conformance`** and **`availability`** — the two ratios (0–1000, §1),
@@ -212,10 +217,15 @@ an accepted scope decision for a two-week build.
     `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
   - **address** — owner-controlled, set to the provider's payout wallet.
 - On the unpaid leg the proxy resolves the address record and compares it against
-  the live 402 challenge's `payTo` before relaying (§2). A mismatch blocks
+  the live 402 challenge's `payTo` before relaying (§2) — every option the
+  challenge offers, since the agent may pick any of them. A mismatch blocks
   pre-payment, not post-hoc like §1's checks, since a spoofed `payTo` leaves no
-  bonded deposit to reclaim from. Runs outside the enclave — the challenge is
-  public.
+  bonded deposit to reclaim from; so does a challenge that will not parse or
+  carries no `payTo` at all. Runs outside the enclave — the challenge is public.
+- Because the proxy dials the `url` record from Verdikt's own network, a
+  provider-authored URL is a server-side-request-forgery primitive unless it is
+  constrained. Private, loopback and link-local hosts are refused before any
+  request is made.
 - The workflow reads the live `sla` record straight from the Permissioned
   Resolver as its verification input, with no IPFS pointer or Arc-side copy to
   drift out of sync.

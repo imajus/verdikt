@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "es2023",
-    "lib": ["es2023"],
+    "lib": [
+      "es2023",
+      "dom"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowJs": true,
@@ -17,8 +20,13 @@
     "fixtures/**/*.js",
     "cre/**/*.js",
     "proxy/**/*.js",
+    "proxy/**/*.d.ts",
     "web/**/*.js",
     "vitest.config.js"
   ],
-  "exclude": ["**/node_modules/**", "**/dist/**", "cre/spike/**"]
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "cre/spike/**"
+  ]
 }

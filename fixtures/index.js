@@ -70,6 +70,7 @@ export const SERVICE_RECORD = Object.freeze({
   name: 'weather.verdikt.eth',
   serviceId: '0x0000000000000000000000000000000000000000000000000000000000000000',
   address: FIXTURE_PROVIDER_PAYOUT,
+  url: 'https://provider.example/weather',
   sla: JSON.stringify(HONEST_SLA),
   conformance: 1000,
   availability: 1000,

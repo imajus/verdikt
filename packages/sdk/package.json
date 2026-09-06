@@ -3,13 +3,14 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Arc + ENS read wrapper — callers never need to know two chains are involved",
+  "description": "Arc + ENS read wrapper \u2014 callers never need to know two chains are involved",
   "main": "index.js",
   "exports": {
     ".": "./index.js",
     "./ens": "./ens.js",
     "./payment": "./payment.js",
-    "./registry": "./registry.js"
+    "./registry": "./registry.js",
+    "./arc": "./arc.js"
   },
   "dependencies": {
     "@verdikt/fixtures": "workspace:*",
