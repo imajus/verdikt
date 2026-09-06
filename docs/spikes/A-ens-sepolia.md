@@ -118,21 +118,30 @@ it is revoked. `@verdikt/sdk` has exactly one correct call here and this is it.
 
 ## `verdikt.eth` on Sepolia
 
-`verdikt.eth` **is registered** on Sepolia ENSv2, expiring 2027-09-06, with a
-`PermissionedResolver` proxy already attached — so the parent name is not a
-blocker and Tasks §0.6 only has the `verdikt.bond` DNS purchase left. The spike
-runs against it directly: on a fork it impersonates the registered owner rather
-than registering a throwaway label, so the ACL assertions are made on the real
-name.
+`verdikt.eth` is registered on Sepolia ENSv2, expiring 2027-09-06, and
+`pnpm setup:ens` has run against it. The namespace is live:
 
-`pnpm spike:ens --read-only` prints the live owner, expiry and subregistry;
-don't take an address from this document, because the name changed hands once
-during the spike itself.
+| | |
+| --- | --- |
+| resolver | `0x3d411f1bA3B11B630a2405F1Fb51f088Cc2E23C9` |
+| subname registry | `0x3618849F8B562DcC9D25dCbA67cF0be5C8213A97` |
+| backward pointer | `(ETHRegistry, "verdikt")` |
 
-What is **not** yet set up is the subregistry. `getSubregistry("verdikt")`
-returns the zero address, and until it points at a `UserRegistry` proxy no
-`<slug>.verdikt.eth` can exist at all. That is the one remaining on-chain step,
-and it is the sequence in "A subname needs a subregistry" above.
+Both proxies verify against the `VerifiableFactory` as the expected
+implementations, the operator holds the resolver's root roles, and the earlier
+resolver is no longer attached. So `<slug>.verdikt.eth` can now be minted, and
+Tasks §0.6 has only the `verdikt.bond` DNS purchase left.
+
+Worth recording: those two addresses are exactly the ones the fork rehearsal
+predicted before anything was broadcast. The CREATE2 derivation from (factory,
+sender, salt) held on live Sepolia, which is what makes the plan-then-sign flow
+in `setup-ens.mjs` trustworthy rather than merely convenient.
+
+The spike runs against the real name: on a fork it impersonates the registered
+owner rather than registering a throwaway label, so the ACL assertions are made
+on `verdikt.eth` itself. `pnpm spike:ens --read-only` prints live owner, expiry
+and subregistry — prefer that to the table above, which is a snapshot; the name
+already changed hands once during this work.
 
 Two neighbouring facts, since they were checked and are easy to assume wrongly:
 
