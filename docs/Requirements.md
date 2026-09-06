@@ -18,13 +18,15 @@ of its Validation Registry[^3].
 
 Verification is also hard to bolt on after the fact, for two structural
 reasons. First, paid API responses often carry proprietary or sensitive
-data — market feeds, model outputs, personal data — that a client has no
-interest in routing through a third-party verifier just to confirm
-delivery; a verification layer that terminates the response itself becomes
-the trust problem it was meant to solve. Second, x402 calls are pay-per-
-request micropayments, often sub-cent, at a volume no human can audit one
-response at a time — whatever checks delivery has to run automatically, per
-call, not as an occasional spot-check.
+data — market feeds, model outputs, personal data — and any layer that
+checks delivery has to read that data to check it. A verifier whose
+operators the provider simply has to take on faith becomes the trust
+problem it was meant to solve, so the evaluation has to be auditable:
+attested code, published in the open, that anyone can check against what
+actually ran. Second, x402 calls are pay-per-request micropayments, often
+sub-cent, at a volume no human can audit one response at a time — whatever
+checks delivery has to run automatically, per call, not as an occasional
+spot-check.
 
 ## 2. Product summary
 
@@ -111,9 +113,10 @@ based on its actual track record instead of a provider's own claims.
      its live conformance and availability metrics.
   2. Compare similar services on those metrics before choosing one to
      call.
-  3. Call the chosen service through Verdikt's HTTP API endpoint — Verdikt
-     handles the x402 payment handshake, verification, and
-     refund-if-needed behind that single request, without the caller
+  3. Call the chosen service through Verdikt's HTTP endpoint with any
+     x402-capable client, paying exactly as they would against the
+     provider directly. Verdikt relays the 402 challenge, checks it,
+     verifies the response, and refunds if needed — without the caller
      needing to know multiple chains or a TEE workflow are involved.
   4. View a service's verdict/refund history and deposit balance at any
      time via the dashboard or the view functions directly.
@@ -129,8 +132,9 @@ the architecture diagram live in [Specification.md](./Specification.md).
   marketplace ranking, both evaluated against the provider's own declared
   SLA ([spec §1](./Specification.md#1-sla-verification-model)).
 - **Verification execution** — a Chainlink CRE Confidential Workflow (TEE)
-  fetches the provider's response directly and evaluates it, so Verdikt's
-  own infrastructure never sees response content
+  makes the paid call and evaluates the response inside the enclave, so the
+  code that reads response content is attested and open source rather than
+  taken on trust
   ([spec §2](./Specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
 - **On-chain registry** — a registrar/escrow contract on Arc holds each
   provider's bonded deposit, records verdicts, and auto-executes refunds
@@ -162,7 +166,10 @@ Verdikt spans two chains, each chosen for what only it provides:
   payment settles via **Circle Gateway** (batched `GatewayWalletBatched`
   scheme) — validated end-to-end on Arc Testnet: a paid call returned the
   provider's real JSON response, with the payment debited from the caller's
-  Gateway balance and a `success` receipt on `eip155:5042002`.
+  Gateway balance and a `success` receipt on `eip155:5042002`. The bond is
+  held as native USDC while the payment debits a Gateway balance — same
+  asset and chain, different rails, so a refunded agent receives native
+  USDC rather than Gateway credit.
 - **Demo x402 provider**: **[Proceeds](https://myproceeds.xyz)** paywalls,
   which wrap an arbitrary upstream API behind an x402 gate and accept payment
   on **Arc Testnet** (among other networks). The demo service wraps
@@ -191,9 +198,11 @@ Verdikt spans two chains, each chosen for what only it provides:
   Simpler to implement than an IPFS-plus-hash-record design, and the write
   is infrequent (registration and occasional edits, not per call), so
   on-chain string-storage cost is acceptable.
-- **Payments**: x402, settled in USDC via the Circle Agent Wallet CLI,
-  which gives both Verdikt's proxy and demo callers a ready x402-capable
-  wallet across EVM chains without building custom signing infrastructure.
+- **Payments**: x402, settled in USDC by the calling agent itself — Verdikt
+  relays the handshake and holds no wallet on the payment leg. The demo
+  caller uses the Circle Agent Wallet CLI, which provides a ready
+  x402-capable wallet across EVM chains without building custom signing
+  infrastructure.
 
 Verdikt is a natural fit for Arc's agent-commerce ecosystem: Circle's own
 [agent marketplace](https://agents.circle.com/sell) lets providers list
@@ -237,6 +246,19 @@ short.
   verdict, and that registrar→refund path still needs building and
   end-to-end testing. (Keeping payment and refund on Arc removes the earlier
   cross-chain settlement risk — both legs are now same-chain, same-asset.)
+- **Induced-failure griefing.** With no dispute layer, an agent can craft
+  requests designed to push a service into violating its own SLA — a query
+  hitting a slow path, or one that trips a schema edge case — and collect a
+  refund each time until the bond drains and the service auto-suspends.
+  Capping the refund at the amount actually paid makes the attack
+  break-even-minus-gas rather than profitable
+  ([spec §3](./Specification.md#3-on-chain-registry)); any refund larger
+  than the payment turns griefing into a strategy, with no arbitration to
+  fall back on.
+- The trust argument now rests on attestation — that the enclave is running
+  the published workflow code. Production CRE enrollment is private-beta, so
+  the demo can only simulate that, and the submission should say so rather
+  than implying a live attested deployment.
 - Availability tier boundaries/percentages may need tuning during build.
 - ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
   ABI stability, and tooling support (viem/ethers/ENS SDK) not yet

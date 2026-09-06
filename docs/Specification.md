@@ -69,29 +69,31 @@ third party.
 
 ## 2. Verification execution — Chainlink CRE Confidential Workflows
 
-Verification runs inside a Chainlink CRE Confidential Workflow (TEE); the
-workflow itself makes the outbound HTTP call to the provider's API, so
-Verdikt's own proxy/backend never receives or terminates the provider's
-response. If Verdikt's infrastructure fetched the response first, it would
-already be exposed before the enclave got it — confidentiality has to be
-enforced at the point of fetch.
+Verification runs inside a Chainlink CRE Confidential Workflow (TEE): the
+workflow makes the paid HTTP call to the provider's API and evaluates the
+response inside the enclave. The paying agent's own connection terminates
+at Verdikt's proxy, so the payload necessarily transits it on the way back
+— what the enclave buys is not that Verdikt never handles those bytes, but
+that the code which reads and judges them is fixed, attested, and
+published. Anyone can check the running enclave's measurement against the
+open-source workflow.
 
 API responses often contain proprietary or otherwise valuable data — market
 data feeds, proprietary model outputs, personal data — that a provider has
-a legitimate interest in keeping confidential even from the verification
-layer. Because the enclave fetches directly, Verdikt never sees response
-content, only the derived verdict.
+a legitimate interest in keeping out of a verification layer's hands.
+Attestation is what makes handing it over acceptable: the provider trusts a
+published workflow and an enclave measurement, not Verdikt's operators or
+their good intentions. The proxy relays; it does not evaluate, retain, or
+log response bodies.
 
-The enclave fetches the provider's response directly (request credentials
-kept encrypted in-enclave), evaluates the checks in §1, releases the
-response to the calling agent, and posts a signed verdict on-chain — per
+The enclave replays the agent's payment against the provider (request
+credentials kept encrypted in-enclave), evaluates the checks in §1, returns
+the response payload for the proxy to relay back to the caller, and posts a
+signed verdict on-chain — per
 [Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall).
-Verdikt's backend is a thin coordinator: it handles the x402 handshake
-(relaying the 402 challenge, correlating payment to request) and triggers
-the workflow run, without ever decrypting or logging a provider response
-body. The handshake and the USDC payment settle on **Arc** — the same chain
-the verdict and refund land on (§3) — so payment and refund share one chain
-and one asset. The demo provider is a [Proceeds](https://myproceeds.xyz)
+The USDC payment settles on **Arc** — the same chain the verdict and refund
+land on (§3) — so payment and refund share one chain and one asset. The
+demo provider is a [Proceeds](https://myproceeds.xyz)
 paywall wrapping a real upstream API (Open-Meteo) and accepting x402 on Arc
 Testnet; payment settles via **Circle Gateway** (the batched
 `GatewayWalletBatched` scheme), proven end-to-end on Arc Testnet — a paid
@@ -104,6 +106,32 @@ refund legs unified.
 Production CRE enrollment is currently private-beta; `cre workflow
 simulate` is self-serve, and the ETHOnline2026 Chainlink track accepts CLI
 simulation as sufficient evidence.
+
+### Proxy request path
+
+The proxy branches on whether the incoming request carries an `X-PAYMENT`
+header:
+
+- **No `X-PAYMENT`** — plain passthrough to the provider. The provider
+  answers with its 402 challenge, and the proxy compares the challenge's
+  `payTo` against the address record on the service's ENS subname (§4)
+  before relaying it. On mismatch the proxy blocks and returns an error
+  instead of the challenge, so the agent never signs a payment to a spoofed
+  address. Nothing on this leg is sensitive — the 402 challenge is public
+  by construction — so the check runs outside the enclave, in ordinary
+  proxy code.
+- **`X-PAYMENT` present** — the proxy triggers the confidential workflow
+  and passes the header through. The enclave replays it against the
+  provider, receives the paid response, evaluates it against the SLA (§1),
+  writes the verdict to Arc (§3), and returns the payload for the proxy to
+  relay back.
+
+The paying agent signs its own payment, exactly as it would calling the
+provider directly; Verdikt holds no wallet on the payment leg and never
+signs on an agent's behalf. Because the payer address and the paid amount
+are both recoverable from the payment payload, a refund needs no session
+state correlating request to payment — the verdict carries everything the
+registrar needs.
 
 ### Two CRE workflows
 
@@ -132,9 +160,11 @@ the TEE workflow — kept separate instead.
   routing subdomain and the `<slug>.verdikt.eth` ENS subname label (§4) —
   one identifier, reused across all three surfaces.
 - **Deposit/bond**: held in an escrow contract keyed by `serviceId`, paid in
-  USDC, **fixed amount** for MVP (no reputation-scaled tiering). This is the
-  pool refunds are paid from. Paid directly to escrow, not through the
-  proxy.
+  **native USDC** (Arc's gas token, so escrow holds value directly rather
+  than an ERC-20 balance — no `approve`/`transferFrom` and no token address
+  to configure), **fixed amount** for MVP (no reputation-scaled tiering).
+  This is the pool refunds are paid from. Paid directly to escrow, not
+  through the proxy.
 - **No SLA storage on Arc**: the registry struct has no SLA field and no
   `setSLA` function. The SLA lives only on the provider's ENS subname
   (§4); the verification workflow reads it from ENS at run time, diffing
@@ -144,16 +174,26 @@ the TEE workflow — kept separate instead.
   write a verdict — enforced at the contract level. The provider has no
   write role on Arc — their authorship happens on the ENS side (§4).
 - **Refund, auto-executed, no dispute step**: a FAIL verdict for a specific
-  paid request releases a fixed refund from that service's deposit to the
-  paying agent automatically (the proxy already correlates
-  request↔payment↔verdict). This is the only refund trigger — availability
-  is scored (§1, §5) but never refunded: if the service was down, it
-  couldn't have collected payment for that window in the first place, so
-  there's nothing to refund. The refund is paid on Arc from the bonded
-  deposit, in the same asset (USDC) and on the same chain the x402 call was
-  paid on (§2) — payment and refund share one chain, so there is no
+  paid request releases a refund from that service's deposit to the paying
+  agent automatically. The verdict carries the payer address and the paid
+  amount, both read out of the payment payload (§2), so the registrar needs
+  no correlation table; it records the `requestId` to make a second refund
+  against the same request revert. This is the only refund trigger —
+  availability is scored (§1, §5) but never refunded: if the service was
+  down, it couldn't have collected payment for that window in the first
+  place, so there's nothing to refund. The refund is paid on Arc from the
+  bonded deposit, in the same asset (USDC) and on the same chain the x402
+  call was paid on (§2) — payment and refund share one chain, so there is no
   cross-chain correlation between the leg the agent paid on and the leg it is
   refunded on.
+- **Refund capped at the amount paid**: the payout is
+  `min(fixedRefund, paidAmount)`, never a penalty on top. Without a dispute
+  layer there is no way to contest a refund, so a refund larger than the
+  payment would make induced failure profitable — an agent crafting requests
+  that push a service into violating its own SLA could drain the bond and
+  force an auto-suspend. Capping at the payment makes that attack
+  break-even-minus-gas: the griefer recovers only what they spent, and the
+  provider's exposure per bad call is bounded by its own price.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up.
@@ -213,11 +253,13 @@ decision for a two-week build.
     never touch ENS individually.
   - An **address record**, owner-controlled, set to the provider's
     payout wallet.
-- At payment time, the CRE workflow resolves the subname's address record
-  and compares it against the `payTo` address in the live x402 402
-  response. A mismatch blocks payment before it is sent — checked
-  pre-payment, not post-hoc like §1's checks, since a spoofed payTo
-  address leaves no bonded deposit to reclaim funds from.
+- On the unpaid leg, the proxy resolves the subname's address record and
+  compares it against the `payTo` address in the live 402 challenge before
+  relaying that challenge to the agent (§2). A mismatch blocks the payment
+  before it is signed — checked pre-payment, not post-hoc like §1's checks,
+  since a spoofed payTo address leaves no bonded deposit to reclaim funds
+  from. This one runs outside the enclave: the 402 challenge is public, so
+  the check touches nothing confidential and does not need attestation.
 - The CRE workflow reads the live `sla` text record straight from the
   Permissioned Resolver (Sepolia) as its verification input, with no IPFS
   pointer or Arc-side copy to drift out of sync.
@@ -240,31 +282,41 @@ decision for a two-week build.
 ## 6. Architecture
 
 ```
-Paying agent
+Paying agent (signs its own x402 payment; Verdikt holds no payment wallet)
    |
+   | 1st call -- no X-PAYMENT header
    v
-Verdikt proxy (thin coordinator — handshake + payment/request
-correlation only; never decrypts or logs a provider response)
+Verdikt proxy, passthrough branch (ordinary code, outside the enclave)
+   - relays the request to the provider, gets the 402 challenge back
+   - resolves <slug>.verdikt.eth address record (Sepolia)
+   - blocks if the challenge's payTo != that record; otherwise relays the
+     challenge on -- the challenge is public, so no attestation needed
    |
-   | relays 402 challenge; checks verdikt.eth payTo record before
-   | payment; x402 payment settles on Arc via Circle Gateway
-   | (Proceeds paywall wrapping Open-Meteo as the demo provider);
-   | triggers a workflow run
+   | agent signs the payment, retries with X-PAYMENT
+   v
+Verdikt proxy, verified branch (relays only -- no evaluation, no
+response-body retention or logging)
+   |
+   | passes the X-PAYMENT header into the workflow
    v
 Chainlink CRE Confidential Workflow (TEE) -- per-request run
-   - fetches the provider's API response directly, inside the enclave
+   - replays the agent's payment against the provider from inside the
+     enclave (x402 settles on Arc via Circle Gateway; Proceeds paywall
+     wrapping Open-Meteo as the demo provider)
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
    - diffs observed response vs SLA -> PASS/FAIL
-   - releases the response payload to the calling agent
-   - writes PASS/FAIL to Arc as a `VerdictWritten` event (refund trigger
-     if FAIL) -- Arc only, no per-call ENS write
+   - returns the response payload for the proxy to relay to the agent
+   - writes PASS/FAIL to Arc as a `VerdictWritten` event carrying the
+     payer address and paid amount (refund trigger if FAIL) -- Arc only,
+     no per-call ENS write
    |
    v
 On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
-   - auto-refund on per-request FAIL (paid on Arc from the bond, same
-     chain and asset the call was paid on -- both legs USDC on Arc)
+   - auto-refund on per-request FAIL: min(fixedRefund, paidAmount), paid
+     in native USDC from the bond, same chain the call was paid on
+   - requestId recorded; a second refund on the same request reverts
    - auto-suspend at zero deposit
 
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days
