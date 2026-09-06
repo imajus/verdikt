@@ -5,12 +5,12 @@
 # Sepolia is here because the CRE runtime resolves ENS-side reads through the
 # same EVM capability, and the spike needs to prove both selectors resolve.
 staging-settings:
-  evms:
+  rpcs:
     # Arc Testnet. eip155:5042002, selector 3034092155422581607.
     # Verified against smartcontractkit/chain-selectors selectors.yml and
     # EVMClient.SUPPORTED_CHAIN_SELECTORS['arc-testnet'] in @chainlink/cre-sdk.
-    - chain-selector: "3034092155422581607"
-      rpc-url: "https://rpc.testnet.arc.network"
+    - chain-name: "arc-testnet"
+      url: "https://rpc.testnet.arc.network"
     # Ethereum Sepolia — ENSv2 lives here (Specification.md §4).
-    - chain-selector: "16015286601757825753"
-      rpc-url: "https://ethereum-sepolia-rpc.publicnode.com"
+    - chain-name: "ethereum-testnet-sepolia"
+      url: "https://ethereum-sepolia-rpc.publicnode.com"
