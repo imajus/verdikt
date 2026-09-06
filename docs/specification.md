@@ -1,8 +1,8 @@
 # Verdikt — Specification
 
 Detailed mechanics and technical decisions behind the subsystems introduced
-in `docs/Requirements.md` §6. Read that document first for problem, product
-summary, goals, and scope.
+in [Requirements.md](./Requirements.md) §7. Read that document first for
+problem, product summary, goals, scope, and user flows.
 
 ## 1. SLA verification model
 
@@ -136,13 +136,21 @@ the TEE workflow — kept separate instead.
   2. *Periodic availability*: an **hourly** scheduled CRE run reads the
      trailing 7 days of `VerdictWritten` events, computes the conformance
      and availability ratios (§1), and writes both to the provider's ENS
-     subname (§4). A per-service "refunded up to" checkpoint on Arc tracks
-     how far refunds have been settled, so each run pays only the new
-     shortfall since that checkpoint and advances it — the overlapping
-     rolling window can't pay the same violation twice.
+     subname (§4). Unlike the per-request path above, this can't be settled
+     instantly inside a single verification call — availability is an
+     aggregate over a rolling 7-day window, not a property of any one
+     request — so a per-service "refunded up to" checkpoint on Arc tracks
+     how far refunds have been settled. Each run pays only the new
+     shortfall since that checkpoint and advances it; without it, the same
+     downtime would get re-paid on every one of the ~168 overlapping hourly
+     runs that see it in their trailing window.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up.
+- **Deregistration**: `deregister(serviceId)`, provider-only, delists the
+  service from the marketplace and withdraws the remaining deposit. Blocked
+  while status is SUSPENDED, so a provider can't deregister to dodge an
+  outstanding refund obligation.
 - **Reading**: any agent or dApp checks a service's verdict/deposit via view
   functions (`getVerdict`, `getDeposit`) on Arc, and its SLA by resolving
   the ENS subname directly (§4) — no `getSLA` on Arc. A minimal JS SDK
@@ -206,14 +214,18 @@ decision for a two-week build.
 
 ## 5. Product / dashboard
 
-- **MVP**: a platform dashboard (own web UI) showing aggregate stats —
-  services registered, verdict breakdown (PASS/FAIL), deposits held,
-  refunds paid out over time. The primary demo surface.
+- **MVP**: a marketplace dashboard (own web UI) listing every registered
+  service with its live conformance/availability metrics, deposit balance,
+  and verdict history — the surface consumers use to compare similar
+  services and pick one, plus aggregate platform stats (services
+  registered, verdict breakdown, refunds paid out over time). The primary
+  demo surface.
 - **Stretch, in priority order**:
   1. Provider self-serve dashboard (own verdict history, deposit balance,
      SLA-JSON editor).
-  2. Discovery UI/API — human browse/search plus a machine-facing discovery
-     API for agents filtering by cost/latency/availability.
+  2. Machine-facing discovery API — agents filtering the marketplace by
+     cost/latency/availability programmatically, on top of the human-facing
+     MVP listing.
 
 ## 6. Architecture
 
