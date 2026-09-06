@@ -82,11 +82,29 @@ adapted from IBM's WSLA per-guarantee predicate model[^4]:
 - **Per-request boolean verdict (PASS/FAIL)** — schema/input-output
   conformance, latency, and price range are each evaluated as an
   independent true/false predicate against the provider's declared SLA
-  JSON, per call.
+  JSON, per call. Each result is emitted as a `VerdictWritten` event on Arc
+  (§6.3) — this is the raw, per-call record; nothing per-call is published
+  beyond Arc.
 - **Periodic availability score** — computed as a continuous uptime
   percentage (100% minus percentage downtime) over a rolling window, then
   mapped through a published tier table to a refund percentage, following
   the same tiered-credit approach used in commercial cloud SLAs[^5].
+
+Both scores are aggregated over the same rolling window (e.g. weekly) from
+the window's `VerdictWritten` events, rather than published per call:
+- **SLA conformance ratio** — PASS count ÷ total calls in the window,
+  expressed on a **0–1000 scale** (e.g. 987 = 98.7% conformance) rather than
+  a percentage, since ENS text records are strings and an integer avoids
+  decimal-formatting ambiguity.
+- **Availability ratio** — the same 0–1000 scale applied to the uptime
+  percentage above.
+
+Publishing per-call would mean one ENS write per request; aggregating to a
+weekly ratio means one ENS write per service per window regardless of call
+volume — both cheaper and a better fit for a reputation signal, which
+should describe a service's track record, not its latest single call. The
+per-call events remain the ground truth on Arc; the ratios are a derived,
+periodically-refreshed summary (§6.4).
 
 Both mechanisms share one evaluation engine and one SLA schema — this is a
 single verification stack, not a menu of interchangeable approaches. The
@@ -184,10 +202,12 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
   1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
      automatically (the proxy already correlates request↔payment↔verdict).
-  2. *Periodic availability*: at each monitoring window's end, if computed
-     uptime falls below the SLA's advertised availability, a refund
-     percentage from the tier table (§6.1) is distributed pro-rata from
-     the deposit to everyone who paid during that window.
+  2. *Periodic availability*: at each monitoring window's end, a scheduled
+     CRE run reads the window's `VerdictWritten` events, computes the
+     conformance and availability ratios (§6.1), distributes a pro-rata
+     refund from the tier table if uptime fell below the SLA's advertised
+     availability, and writes both ratios to the provider's ENS subname
+     (§6.4) — one run, one Arc refund check, one ENS update.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up — no governance step.
@@ -210,13 +230,13 @@ Permissioned Resolver — not ENSv1. This is a deliberate narrowing, not an
 oversight: ENSv2's Enhanced Access Control (EAC) lets a resolver scope write
 permission down to a single text-record key via
 `authorizeTextRoles(name, key, account, grant)`, so an address can be
-granted the right to write *only* the `sla` key, or *only* the `verdict`
-key, with any other key reverting for that address. ENSv1's PublicResolver
-has no equivalent — any approved operator on a name can write any text
-key — so it cannot make the guarantee this design depends on: the provider
-can write their own SLA, the CRE verifier can write the reputation record,
-and neither can touch the other's key, enforced by the resolver contract
-itself rather than by convention.
+granted the right to write *only* the `sla` key, or *only* the `conformance`/
+`availability` keys, with any other key reverting for that address. ENSv1's
+PublicResolver has no equivalent — any approved operator on a name can write
+any text key — so it cannot make the guarantee this design depends on: the
+provider can write their own SLA, the CRE verifier can write the reputation
+ratios, and neither can touch the other's key, enforced by the resolver
+contract itself rather than by convention.
 
 That per-key ACL is why the SLA now lives **only** on ENS, with no second
 copy anywhere. Earlier drafts had the provider write the SLA to Arc's
@@ -240,15 +260,20 @@ build, not something to gloss over in the submission.
   lookup table.
 - At mint time, the resolver's EAC roles are set: the provider's address
   gets a role scoped to the `sla` key only; the CRE workflow's signer
-  address gets a role scoped to the `verdict` key only. This is a one-time
-  authorization at registration, not a per-write step.
-- The subname carries three records:
+  address gets a role scoped to the `conformance` and `availability` keys
+  only. This is a one-time authorization at registration, not a per-write
+  step.
+- The subname carries four records:
   - An **`sla` text record**, written directly by the provider, any time,
     with no Arc involvement — the sole copy of the SLA (§6.3).
-  - A **`verdict` text record**, written by the CRE workflow's signer after
-    each verification run — the same run that also triggers the Arc-side
-    refund logic (§6.3), so this write (not the SLA) is what fans out to
-    both chains from one workflow execution.
+  - A **`conformance` text record** — the SLA conformance ratio (0–1000,
+    §6.1), and an **`availability` text record** — the availability ratio
+    (0–1000, §6.1), both written by the CRE workflow's signer once per
+    monitoring window (e.g. weekly), not per call. This is the same
+    scheduled run that checks Arc's periodic refund path (§6.3), so it's
+    the only thing that fans out to both chains from one workflow
+    execution — the per-call PASS/FAIL verdicts stay Arc-only events
+    (§6.1) and never touch ENS individually.
   - An **address record**, owner-controlled, set to the provider's
     payout wallet.
 - At payment time, the CRE workflow resolves the subname's address record
@@ -286,26 +311,36 @@ correlation only; never decrypts or logs a provider response)
    | relays 402 challenge; checks verdikt.eth payTo record before
    | payment; triggers a workflow run once payment settles
    v
-Chainlink CRE Confidential Workflow (TEE)
+Chainlink CRE Confidential Workflow (TEE) -- per-request run
    - fetches the provider's API response directly, inside the enclave
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
-   - diffs observed response vs SLA -> PASS/FAIL + availability score
+   - diffs observed response vs SLA -> PASS/FAIL
    - releases the response payload to the calling agent
-   - writes the verdict: Arc (refund trigger) + ENS `verdict` key (Sepolia)
-   |
-   +-----------------------------+
-   v                             v
-On-chain registry (Arc)     ENS subname (Sepolia, verdikt.eth,
-   - verdict, deposit          ENSv2 Permissioned Registry/Resolver)
-     balance -- no SLA field     - `sla` text record (owner-authored,
-   - auto-refund on FAIL /        EAC-scoped to owner only)
-     low availability            - `verdict` text record (CRE-authored,
-   - auto-suspend at zero          EAC-scoped to CRE signer only)
-     deposit                     - address record (payout wallet)
+   - writes PASS/FAIL to Arc as a `VerdictWritten` event (refund trigger
+     if FAIL) -- Arc only, no per-call ENS write
    |
    v
-Dashboard — reads verdict/deposit from Arc, SLA from ENS
+On-chain registry (Arc)
+   - verdict events, deposit balance -- no SLA field
+   - auto-refund on per-request FAIL
+   - auto-suspend at zero deposit
+
+Chainlink CRE Confidential Workflow (TEE) -- periodic run (e.g. weekly)
+   - reads the window's VerdictWritten events from Arc
+   - computes conformance ratio + availability ratio (0-1000 each)
+   - triggers pro-rata refund on Arc if availability under SLA threshold
+   - writes both ratios to the ENS subname (Sepolia)
+   |
+   v
+ENS subname (Sepolia, verdikt.eth, ENSv2 Permissioned Registry/Resolver)
+   - `sla` text record (owner-authored, EAC-scoped to owner only)
+   - `conformance` / `availability` text records (CRE-authored,
+     EAC-scoped to CRE signer only, updated per window not per call)
+   - address record (payout wallet)
+   |
+   v
+Dashboard — reads verdict events/deposit from Arc, SLA + ratios from ENS
 ```
 
 ## 8. Target chain & stack
@@ -366,11 +401,13 @@ multiple tracks count as one slot).
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
   named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
-- Cross-chain verdict delivery (Arc registry + ENS `verdict` record on
-  Sepolia from one CRE run) needs a defined behavior for partial failure —
-  e.g. the Arc write succeeds but the Sepolia write doesn't land — not yet
-  designed. The SLA path has no equivalent risk, since it's never written
-  by CRE at all.
+- Cross-chain delivery on the periodic run (Arc refund check + ENS
+  `conformance`/`availability` records on Sepolia from one CRE run) needs a
+  defined behavior for partial failure — e.g. the Arc write succeeds but
+  the Sepolia write doesn't land — not yet designed. Lower-stakes than in
+  the earlier per-call design, since this now happens once per window, not
+  once per request; the SLA path has no equivalent risk at all, since it's
+  never written by CRE.
 - ENSv2's Permissioned Registry/Resolver are beta: exact deployed
   Sepolia addresses, ABI stability, and tooling support (viem/ethers/ENS
   SDK) not yet verified against the current build. Since the SLA now has no
