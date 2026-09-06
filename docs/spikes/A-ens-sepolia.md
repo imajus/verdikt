@@ -1,7 +1,7 @@
 # Spike A — ENSv2 permissioned records on Sepolia
 
 Answers [Tasks.md §0.2](../Tasks.md); resolves the ENSv2 entry under
-[Requirements.md §10](../Requirements.md) and confirms the mechanics assumed by
+[Requirements.md §9](../Requirements.md) and confirms the mechanics assumed by
 [Specification.md §4](../Specification.md).
 
 **Verdict: green. ENSv2 stays. No fallback to ENSv1's PublicResolver.**
@@ -37,9 +37,11 @@ still executing the same contract code a live run would — the ACL assertions
 are the point of the spike, and they are decided entirely by that code.
 
 What fork mode does *not* prove is that a live signer holds Sepolia ETH and the
-parent name. `--live` covers that once both exist; it takes
-`ENS_DEPLOYER_PRIVATE_KEY`, `PROVIDER_PRIVATE_KEY` and `VERIFIER_PRIVATE_KEY`,
-and waits out the real commit-reveal window instead of warping time.
+parent name. `--live` covers that; it takes `ENS_DEPLOYER_PRIVATE_KEY`,
+`PROVIDER_PRIVATE_KEY` and `VERIFIER_PRIVATE_KEY`, and waits out the real
+commit-reveal window instead of warping time. Note that `--live` mints a real
+subname and repoints records, so run `pnpm setup:ens` first and treat `--live`
+as a deliberate act rather than a check.
 
 ## Deployment addresses (Sepolia, ENSv2 Beta)
 
@@ -187,9 +189,28 @@ The spike derives its own signers from a Verdikt-specific string and asserts
 they are code-free before doing anything else. Any future forked-Sepolia test
 needs the same care.
 
+## Setting the namespace up
+
+`scripts/setup-ens.mjs` (`pnpm setup:ens`) turns the sequence above into the
+transactions that still need sending against `verdikt.eth`: deploy a resolver
+the operator controls, point the name at it, deploy the `UserRegistry`, attach
+it, and set the backward pointer. Every step reads live state first and skips
+what is already in place, so a re-run after a partial failure resumes.
+
+It rehearses on an anvil fork before doing anything. In the default mode that
+is all it does — it prints the resulting `to`/`data` pairs for signing from any
+wallet. A `VerifiableFactory` proxy address is fixed by (factory, sender,
+salt), so the addresses the rehearsal produces are the ones a live run
+produces; the printed calldata was applied to a fork independently and landed
+on exactly the predicted addresses, with the spike then passing 31/31 against
+the result. `--send` broadcasts using `ENS_DEPLOYER_PRIVATE_KEY`, and refuses
+unless that key's address is `ENS_OPERATOR_ADDRESS` — a different signer would
+silently deploy a different resolver at a different address.
+
 ## What this unblocks
 
 `packages/sdk/ens.js` can be implemented against the v2 backend directly; the
 `ENS_BACKEND.V1` fallback stays defined but is now expected to stay unused.
-The registration path above is the shape the provider-onboarding script needs.
-Phases 3, 4 and 5 read through `resolveServiceRecord` unchanged.
+Provider onboarding is one `subRegistry.register` plus the `authorizeTextRoles`
+grants, once `pnpm setup:ens` has run. Phases 3, 4 and 5 read through
+`resolveServiceRecord` unchanged.

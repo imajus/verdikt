@@ -54,11 +54,11 @@ Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 > addresses, and the two ACL-bypass routes the role bitmap has to close are in
 > [spikes/A-ens-sepolia.md](./spikes/A-ens-sepolia.md).
 >
-> Two things to carry forward. `verdikt.eth` has no subregistry yet, so no
-> `<slug>.verdikt.eth` can exist until one is deployed and attached — that is
-> 3.x's provider-onboarding work. And the resolver's `ROOT_RESOURCE` roles do
-> not move when the name is transferred, so they have to be pointed at the
-> operator address deliberately.
+> Two things to carry forward, both handled by `pnpm setup:ens`
+> (`scripts/setup-ens.mjs`). `verdikt.eth` has no subregistry yet, so no
+> `<slug>.verdikt.eth` can exist until one is deployed and attached. And the
+> resolver's `ROOT_RESOURCE` roles do not move when the name is transferred, so
+> they have to be pointed at the operator address deliberately.
 
 ### 0.3 Spike B — Chainlink CRE
 
