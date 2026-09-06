@@ -273,9 +273,6 @@ multiple tracks count as one slot).
   verification exists today. No confidential-compute angle; Verdikt's
   differentiator is verifying actual response content against a
   provider-declared SLA, privately, not just probing uptime.
-- **Settld** — a live competitor with framing ("no way to prove the work
-  was actually done before the money moves") close to Verdikt's own thesis.
-  Flagged for direct evaluation before submission.
 - **x402disputes.com** and **x402r.org** — both address x402 refunds, but
   via manual dispute/arbitration: a party files a dispute with evidence
   (x402disputes.com) or an escrow with a pluggable arbiter resolves a claim
@@ -289,7 +286,6 @@ multiple tracks count as one slot).
 
 ## 11. Open risks / unresolved
 
-- Settld not yet evaluated directly as a competitor.
 - The demo API's x402 integration and response schema not yet confirmed as
   a good verification target — may need a thinner/different demo API.
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
