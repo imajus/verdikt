@@ -16,7 +16,7 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 
 Wave 0 (seams) only. Every JS function throws `NOT_IMPLEMENTED` and `IVerdiktRegistry.sol` is an interface with no bodies. The exceptions are the enum mappings in `packages/sdk/registry.js`, which are implemented because they *are* the seam.
 
-Three spikes in `docs/Tasks.md` §0.2–0.4 gate everything downstream and none have run yet: ENSv2 on Sepolia, CRE simulate, and `X-PAYMENT` decoding. Don't build on assumptions they're meant to resolve.
+Three spikes in `docs/Tasks.md` §0.2–0.4 gate everything downstream. Spike A (ENSv2 on Sepolia) has run and passed — `pnpm spike:ens`, findings in `docs/spikes/A-ens-sepolia.md`. CRE simulate and `X-PAYMENT` decoding have not; don't build on assumptions they're meant to resolve.
 
 ## Commands
 
@@ -47,7 +47,7 @@ Foundry installs to `~/.foundry/bin` and its installer writes the `PATH` line to
 
 **Arc** holds the registry, escrow, verdicts, refunds — and the x402 payment itself. USDC is Arc's native gas token, so value moves as `msg.value`, not ERC-20 transfers: no `approve`/`transferFrom`, no token address. Payment, bond, and refund are the same asset on the same chain, which is what removes any cross-chain correlation between the leg an agent paid on and the leg it is refunded on.
 
-**Ethereum Sepolia** holds ENS. The SLA lives *only* as the `sla` text record on `<slug>.verdikt.eth` — there is no SLA field on Arc and no `setSLA`. ENSv2's Permissioned Resolver is chosen over v1 specifically for per-key access control: the provider is scoped to write `sla`, the CRE signer to `conformance`/`availability`, and cross-writes revert. If that ACL doesn't enforce, the reason for choosing v2 is gone.
+**Ethereum Sepolia** holds ENS. The SLA lives *only* as the `sla` text record on `<slug>.verdikt.eth` — there is no SLA field on Arc and no `setSLA`. ENSv2's Permissioned Resolver is chosen over v1 specifically for per-key access control: the provider is scoped to write `sla`, the CRE signer to `conformance`/`availability`, and cross-writes revert. Spike A confirmed that ACL enforces on Sepolia, and also that it has two bypasses the role bitmap must close: never grant a provider `ROLE_SET_RESOLVER` on its own subname, and grant per-key with `authorizeTextRoles`, never name-wide with `authorizeNameRoles`.
 
 One slug is reused as three identifiers: the Arc `serviceId` (`keccak256`), the `<slug>.verdikt.bond` route, and the `<slug>.verdikt.eth` subname.
 

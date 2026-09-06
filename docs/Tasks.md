@@ -33,23 +33,31 @@ Nothing in Phases 1–5 is safe to build until 0.2–0.4 have answers.
 The SLA has no Arc-side fallback, so if this layer doesn't work there is no
 source of truth to verify against.
 
-- [ ] Find the deployed Permissioned Registry / Permissioned Resolver
+- [x] Find the deployed Permissioned Registry / Permissioned Resolver
       addresses on Sepolia
-- [ ] Mint a subname under a parent name we control
-- [ ] Write an `sla` text record; read it back byte-identical
-- [ ] Exercise `authorizeTextRoles(name, key, account, grant)`
-- [ ] Assert the negative case: an address scoped to `sla` **reverts** when
+- [x] Mint a subname under a parent name we control
+- [x] Write an `sla` text record; read it back byte-identical
+- [x] Exercise `authorizeTextRoles(name, key, account, grant)`
+- [x] Assert the negative case: an address scoped to `sla` **reverts** when
       writing `conformance`. Per-key ACL is the entire reason for choosing
       ENSv2 over v1 (spec §4) — if it doesn't enforce, the justification is
       gone
-- [ ] Determine tooling: does viem/ethers/the ENS SDK support these, or are
+- [x] Determine tooling: does viem/ethers/the ENS SDK support these, or are
       raw ABI calls needed?
 
 Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 
-> **Gate — end of day 3.** Not working → fall back to ENSv1 PublicResolver,
-> demote EAC to future work, say so in the submission. Do not let this block
-> Phases 1–3.
+> **Gate passed.** 29/29 green — `pnpm spike:ens`. Per-key EAC enforces,
+> `sla` round-trips byte-identical, and `UniversalResolverV2` serves all four
+> records by name. ENSv2 stays; the ENSv1 PublicResolver fallback is not
+> taken. Findings, the confirmed Sepolia addresses, and the two ACL-bypass
+> routes the role bitmap has to close are in
+> [spikes/A-ens-sepolia.md](./spikes/A-ens-sepolia.md).
+>
+> One thing came back different: `verdikt.eth` is RESERVED on Sepolia ENSv2
+> (premigrated from mainnet) and cannot be registered there. That is 0.6's
+> decision to make, not a blocker here — the parent label appears once, in
+> `packages/sdk/ens.js`.
 
 ### 0.3 Spike B — Chainlink CRE
 
@@ -101,6 +109,10 @@ fixture test.
 
 - [ ] Buy `verdikt.bond`, or pick a fallback subdomain on an owned domain
       and update the docs
+- [ ] **Decide the ENS parent name.** `verdikt.eth` is RESERVED on Sepolia
+      ENSv2 and only its mainnet owner can promote it (Spike A). Either buy
+      `verdikt.eth` on mainnet and migrate, or pick a label that is actually
+      available on Sepolia and update `ENS_PARENT_NAME`
 
 ---
 

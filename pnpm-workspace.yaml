@@ -4,4 +4,5 @@ packages:
   - fixtures
   - cre
   - proxy
+  - scripts
   - web
