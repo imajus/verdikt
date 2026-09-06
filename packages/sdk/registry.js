@@ -10,8 +10,8 @@
  */
 export const OUTCOME_ORDINAL = Object.freeze({
   PASS: 0,
-  FAIL_CONFORMANCE: 1,
-  FAIL_UNREACHABLE: 2
+  FAIL: 1,
+  DOWN: 2
 });
 
 /**
@@ -26,7 +26,7 @@ export const STATUS_ORDINAL = Object.freeze({
 });
 
 /** @type {SlaOutcome[]} */
-const OUTCOME_BY_ORDINAL = ['PASS', 'FAIL_CONFORMANCE', 'FAIL_UNREACHABLE'];
+const OUTCOME_BY_ORDINAL = ['PASS', 'FAIL', 'DOWN'];
 
 /** @type {ServiceStatus[]} */
 const STATUS_BY_ORDINAL = ['NONE', 'ACTIVE', 'SUSPENDED', 'DEREGISTERED'];

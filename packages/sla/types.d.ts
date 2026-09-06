@@ -5,7 +5,7 @@
  * mapping lives in `packages/sdk/registry.js`, which is the only place that
  * talks to the chain.
  */
-type SlaOutcome = 'PASS' | 'FAIL_CONFORMANCE' | 'FAIL_UNREACHABLE';
+type SlaOutcome = 'PASS' | 'FAIL' | 'DOWN';
 
 /**
  * What the verifier observed for one paid call. This is the engine's entire
@@ -16,7 +16,7 @@ interface SlaObservation {
   /**
    * HTTP status of the provider's response, or `null` when no usable response
    * came back at all — transport error, timeout, unparseable frame. `null` is
-   * what makes an outcome `FAIL_UNREACHABLE`; keeping that classification in
+   * what makes an outcome `DOWN`; keeping that classification in
    * the engine rather than in the workflow keeps the refund trigger
    * deterministic and testable in one place.
    */

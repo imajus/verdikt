@@ -11,20 +11,20 @@
 /** @type {Readonly<Record<SlaOutcome, SlaOutcome>>} */
 export const OUTCOME = Object.freeze({
   PASS: 'PASS',
-  FAIL_CONFORMANCE: 'FAIL_CONFORMANCE',
-  FAIL_UNREACHABLE: 'FAIL_UNREACHABLE'
+  FAIL: 'FAIL',
+  DOWN: 'DOWN'
 });
 
 /**
  * Evaluate an observed call against the provider's declared SLA.
  *
  * Returns one of the three outcomes — never `null`. `observation.status ===
- * null` yields `FAIL_UNREACHABLE`; a response that arrived and broke a clause
- * yields `FAIL_CONFORMANCE`.
+ * null` yields `DOWN`; a response that arrived and broke a clause
+ * yields `FAIL`.
  *
  * Throws on a malformed SLA, a missing field or an unknown clause type, so the
  * caller falls back to `evaluateStatusOnly` rather than silently manufacturing
- * a FAIL out of a provider's bond (Specification.md §1).
+ * a refund out of a provider's bond (Specification.md §1).
  *
  * @param {SlaDocument} sla
  * @param {SlaObservation} observation
@@ -37,7 +37,7 @@ export function evaluate(sla, observation) {
 /**
  * Fallback for when the `sla` ENS record is unreachable or will not parse.
  *
- * 2xx -> PASS, 5xx -> FAIL_CONFORMANCE, 4xx -> `outcome: null`, meaning write
+ * 2xx -> PASS, 5xx -> FAIL, 4xx -> `outcome: null`, meaning write
  * no verdict at all. Kept a separate function rather than a branch inside
  * `evaluate` because its contract genuinely differs: this one can decline to
  * produce a verdict, and every caller has to handle that.

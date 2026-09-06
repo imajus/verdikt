@@ -21,8 +21,8 @@ interface IVerdiktRegistry {
     ///      them as `OUTCOME_ORDINAL`; the two must change together.
     enum Outcome {
         PASS, // 0
-        FAIL_CONFORMANCE, // 1 — a response arrived and broke a clause
-        FAIL_UNREACHABLE // 2 — payment settled, nothing usable came back
+        FAIL, // 1 — a response arrived and broke a clause
+        DOWN // 2 — payment settled, nothing usable came back
     }
 
     enum Status {
@@ -97,7 +97,7 @@ interface IVerdiktRegistry {
 
     // --------------------------------------------------------- verifier writes
 
-    /// @notice Records a per-call verdict and, on either FAIL, credits a refund.
+    /// @notice Records a per-call verdict and, on either FAIL or DOWN, credits a refund.
     /// @dev Verifier-only. Credit is `min(FIXED_REFUND(), paidAmount, remaining
     ///      deposit)` — never a penalty on top of the payment, which is what
     ///      keeps induced-failure griefing at break-even-minus-gas with no

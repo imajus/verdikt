@@ -119,8 +119,8 @@ and in the enclave.
 ### 1.2 `evaluate()`
 
 - [ ] `evaluate(sla, observation) → { outcome, clauses: [{ id, type, pass,
-      expected, actual }] }` where `outcome` is `PASS`, `FAIL_CONFORMANCE`,
-      or `FAIL_UNREACHABLE`
+      expected, actual }] }` where `outcome` is `PASS`, `FAIL`,
+      or `DOWN`
 - [ ] `observation = { status, headers, body, latencyMs, paidAmount }`
 - [ ] Pure — no I/O, no clock, no network
 - [ ] **No heavy dependencies.** It has to bundle into the CRE workflow;
@@ -145,7 +145,7 @@ here is unrecoverable — it burns a real bond.
 - [ ] Malformed SLA, missing fields, unknown clause type → **throws**, so
       the caller takes the status-only fallback rather than silently
       producing a FAIL (spec §1)
-- [ ] Status-only fallback path: 2xx PASS, 5xx `FAIL_CONFORMANCE`, 4xx
+- [ ] Status-only fallback path: 2xx PASS, 5xx `FAIL`, 4xx
       returns no verdict at all
 
 ---
@@ -160,10 +160,10 @@ Registrar and escrow in one contract for MVP.
 - [ ] `topUp(bytes32 serviceId) payable`
 - [ ] `deregister(bytes32 serviceId)` — provider only, reverts while
       SUSPENDED
-- [ ] `enum Outcome { PASS, FAIL_CONFORMANCE, FAIL_UNREACHABLE }`
+- [ ] `enum Outcome { PASS, FAIL, DOWN }`
 - [ ] `setVerdict(bytes32 serviceId, bytes32 requestId, Outcome outcome,
       address payer, uint256 paidAmount)` — verifier role only
-- [ ] Refund on either FAIL: `min(fixedRefund, paidAmount, remainingDeposit)`
+- [ ] Refund on either FAIL or DOWN: `min(fixedRefund, paidAmount, remainingDeposit)`
 - [ ] `requestId` recorded; a second refund on the same request reverts
 - [ ] Auto-suspend when the deposit hits zero
 - [ ] `withdraw()` — agent collects credited refunds
@@ -195,7 +195,7 @@ the dashboard still shows an end-to-end refund without a manual step.
 State machine, table-driven:
 
 - [ ] `register` → ACTIVE
-- [ ] Either FAIL → refund credited, deposit decremented, `RefundCredited`
+- [ ] Either FAIL or DOWN → refund credited, deposit decremented, `RefundCredited`
       emitted
 - [ ] `PASS` → no credit, deposit untouched
 - [ ] `paidAmount < fixedRefund` → credit equals `paidAmount`
@@ -230,18 +230,18 @@ Inputs: `serviceId`, target URL, method, headers, body, `X-PAYMENT`.
 - [ ] Write `setVerdict` to Arc
 - [ ] Return payload + verdict to the proxy
 - [ ] Keep request credentials encrypted in-enclave
-- [ ] Classify the outcome: no usable response → `FAIL_UNREACHABLE`;
-      response that broke a clause → `FAIL_CONFORMANCE`
+- [ ] Classify the outcome: no usable response → `DOWN`;
+      response that broke a clause → `FAIL`
 - [ ] **SLA-unavailable fallback**: ENS unreachable or SLA malformed →
-      status-only default (2xx PASS, 5xx `FAIL_CONFORMANCE`, 4xx no verdict),
+      status-only default (2xx PASS, 5xx `FAIL`, 4xx no verdict),
       response still relayed (spec §1)
 
 ### 3.2 Hourly aggregate workflow (plain, cron)
 
 - [ ] Read `VerdictWritten` over the trailing 7 days from Arc
-- [ ] Conformance = `PASS ÷ (PASS + FAIL_CONFORMANCE) × 1000`; unreachable
+- [ ] Conformance = `PASS ÷ (PASS + FAIL) × 1000`; unreachable
       calls excluded from the denominator
-- [ ] Availability = `(PASS + FAIL_CONFORMANCE) ÷ all verdicts × 1000`
+- [ ] Availability = `(PASS + FAIL) ÷ all verdicts × 1000`
 - [ ] **Empty window → both ratios 1000**, not 0 — a service with no traffic
       is presumed healthy (spec §1). Guard the divide-by-zero explicitly;
       getting this backwards would brand every new listing as broken

@@ -167,7 +167,7 @@ Verdikt spans two chains, each chosen for what only it provides:
   ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here, and
   the x402 call is paid on Arc too. USDC is Arc's native gas token, so
   payment, bond, and refund are denominated in the same asset on one chain:
-  the paying agent pays on Arc and, on a FAIL verdict, is refunded on Arc
+  the paying agent pays on Arc and, on a FAIL or DOWN verdict, is refunded on Arc
   from the same-asset bond, with no cross-chain correlation between the two
   legs. The x402 payment settles via **Circle Gateway** (batched
   `GatewayWalletBatched` scheme), which debits a pre-funded Gateway balance;
@@ -234,7 +234,7 @@ against a provider's own SLA, with code-enforced refunds when it falls short.
   (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
   balance (a `direct` on-chain deposit into the Gateway wallet) rather than
   paying from the wallet's plain token balance. The escrow contract's refund
-  side is not yet wired to the payment leg: a FAIL verdict must credit the
+  side is not yet wired to the payment leg: a FAIL or DOWN verdict must credit the
   paying agent on Arc from the bond, and that registrar→refund path still
   needs building and testing.
 - **Induced-failure griefing.** With no dispute layer, an agent can craft

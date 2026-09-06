@@ -12,8 +12,8 @@ adapted from IBM's WSLA per-guarantee predicate model[^1]:
 - **Per-request boolean verdict** — schema/input-output conformance,
   latency, and price range are each evaluated as an independent true/false
   predicate against the provider's declared SLA JSON, per call. The call's
-  outcome is one of three: `PASS`, `FAIL_CONFORMANCE` (a response arrived
-  and broke a clause), or `FAIL_UNREACHABLE` (payment settled and no usable
+  outcome is one of three: `PASS`, `FAIL` (a response arrived
+  and broke a clause), or `DOWN` (payment settled and no usable
   response came back). Each result emits a `VerdictWritten` event on Arc
   (§3); nothing per-call is published beyond Arc.
 - **Periodic availability score** — derived from those same verdicts rather
@@ -31,13 +31,13 @@ The two metrics stay distinct because the outcome enum separates them:
 conformance measures the quality of responses that *arrived*, availability
 measures whether they arrived at all. Both recompute **hourly** from a
 rolling trailing **7-day** window of `VerdictWritten` events:
-- **SLA conformance ratio** — `PASS ÷ (PASS + FAIL_CONFORMANCE)` over the
+- **SLA conformance ratio** — `PASS ÷ (PASS + FAIL)` over the
   trailing 7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7%
   conformance) rather than a percentage (ENS text records are strings; an
   integer avoids decimal-formatting ambiguity). Unreachable calls are
   excluded from the denominator — they say nothing about whether the
   response body would have conformed.
-- **Availability ratio** — `(PASS + FAIL_CONFORMANCE) ÷ all verdicts` on
+- **Availability ratio** — `(PASS + FAIL) ÷ all verdicts` on
   the same 0–1000 scale. An empty window yields 1000.
 
 An hourly rolling-window write costs at most one ENS update per service per
@@ -60,7 +60,7 @@ WSLA-predicate plus tiered-credit stack above.
 
 If the ENS record is unreachable or won't parse, the workflow does not skip
 the call. It falls back to a status-only default: **2xx → PASS, 5xx →
-`FAIL_CONFORMANCE`, and a 4xx writes no verdict at all.**
+`FAIL`, and a 4xx writes no verdict at all.**
 
 The 4xx carve-out matters. A 4xx is usually the provider correctly
 rejecting a malformed request, so treating it as a failure would let an
@@ -158,7 +158,7 @@ registrar needs.
 
 The workflow above is per-request: proxy-triggered right after payment
 settles, confidential because it touches the provider's actual response. It
-also triggers the per-request refund (§3) directly from its own PASS/FAIL
+also triggers the per-request refund (§3) directly from its own PASS/FAIL/DOWN
 result.
 
 The hourly reputation-scoring run (§1) is a separate CRE workflow on a
@@ -194,7 +194,7 @@ the TEE workflow — kept separate instead.
   signer, can `setVerdict`). Neither the provider nor Verdikt itself can
   write a verdict — enforced at the contract level. The provider has no
   write role on Arc — their authorship happens on the ENS side (§4).
-- **Refund, auto-executed, no dispute step**: either FAIL outcome for a
+- **Refund, auto-executed, no dispute step**: either FAIL or DOWN outcome for a
   specific paid request credits a refund from that service's deposit to the
   paying agent automatically. The verdict carries the payer address and the
   paid amount, both read out of the payment payload (§2), so the registrar
@@ -279,7 +279,7 @@ decision for a two-week build.
     (0–1000, §1), both written by the CRE workflow's signer hourly over
     the trailing 7-day window (§1), not per call — the same scheduled run
     described in §2's "Two CRE workflows". Neither record ever triggers a
-    refund (§3); per-call PASS/FAIL verdicts stay Arc-only events (§1) and
+    refund (§3); per-call PASS/FAIL/DOWN verdicts stay Arc-only events (§1) and
     never touch ENS individually.
   - An **address record**, owner-controlled, set to the provider's
     payout wallet.
@@ -335,16 +335,17 @@ Chainlink CRE Confidential Workflow (TEE) -- per-request run
      wrapping Open-Meteo as the demo provider)
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
-   - diffs observed response vs SLA -> PASS/FAIL
+   - classifies the paid call -> PASS / FAIL / DOWN (diffs the observed
+     response vs SLA, or DOWN when no usable response came back)
    - returns the response payload for the proxy to relay to the agent
-   - writes PASS/FAIL to Arc as a `VerdictWritten` event carrying the
-     payer address and paid amount (refund trigger if FAIL) -- Arc only,
+   - writes PASS/FAIL/DOWN to Arc as a `VerdictWritten` event carrying the
+     payer address and paid amount (refund trigger if FAIL or DOWN) -- Arc only,
      no per-call ENS write
    |
    v
 On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
-   - auto-refund on per-request FAIL: min(fixedRefund, paidAmount), paid
+   - auto-refund on per-request FAIL or DOWN: min(fixedRefund, paidAmount), paid
      in native USDC from the bond, same chain the call was paid on
    - requestId recorded; a second refund on the same request reverts
    - auto-suspend at zero deposit
