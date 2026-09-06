@@ -194,6 +194,10 @@ per-request one. It never touches a provider response — it only reads
 confidentiality requirement and doesn't run inside the TEE. It's a plain
 CRE workflow whose job is aggregation: compute the trailing-7-day ratios,
 settle the idempotent shortfall refund via the checkpoint, write to ENS.
+This split is a directly supported CRE pattern, not a workaround:
+confidentiality is an optional, layered feature of a workflow, not a
+property every CRE workflow must have, and the Cron trigger is a first-class
+standard trigger type alongside HTTP and on-chain-event triggers[^10].
 
 The two are deliberately not merged: piggybacking the hourly aggregate onto
 whichever per-request run happens to land within an hour would make the
@@ -495,3 +499,9 @@ multiple tracks count as one slot).
     Dec 2025), which uses non-interactive zero-knowledge proofs.
 [^9]: x402-list.com sells a self-serve verification badge for $0.25/check,
     with its methodology published at x402-list.com/methodology.
+[^10]: Chainlink's [Confidential Workflows](https://docs.chain.link/cre/concepts/confidential-workflows)
+    docs describe confidentiality as an optional, layered feature carved
+    out of a standard workflow, not a requirement of every CRE workflow;
+    the [Trigger Capability](https://docs.chain.link/cre/capabilities/triggers)
+    docs list the Cron trigger as a standard, first-class trigger type
+    alongside HTTP and on-chain EVM Log triggers.
