@@ -64,12 +64,14 @@ Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 
 ### 0.3 Spike B — Chainlink CRE
 
+Run. Findings in [spikes/cre.md](./spikes/cre.md), code in `cre/spike/`.
+
 - [ ] `cre workflow simulate` on a hello-world
-- [ ] Confirm an HTTP trigger, an outbound HTTP call from inside the
+- [x] Confirm an HTTP trigger, an outbound HTTP call from inside the
       workflow, and an EVM write
-- [ ] Confirm an **Arc chain selector exists** for the EVM write capability
+- [x] Confirm an **Arc chain selector exists** for the EVM write capability
 - [ ] Confirm confidential mode simulates
-- [ ] **Decide the workflow language.** The CRE SDK is Go or TypeScript. TS
+- [x] **Decide the workflow language.** The CRE SDK is Go or TypeScript. TS
       lets `packages/sla` be imported directly; Go means the evaluation
       engine is written twice and the two copies can drift — which for a
       final, undisputable verdict is a correctness risk, not just
@@ -77,8 +79,30 @@ Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 
 Deliverable: `cre/spike/` green under `simulate`.
 
-> **Gate — day 3.** No Arc chain selector → verdict writes need a relay
-> path (workflow signs, proxy or a keeper submits). Decide before Phase 3.
+> **Gate — day 3: passed.** `arc-testnet` (`3034092155422581607`) is a
+> supported CRE write target, so verdicts go straight from the workflow and
+> need no relay path. Language: **TypeScript** — `@verdikt/sla` and
+> `@verdikt/sdk` were confirmed to typecheck and bundle into the WASM binary,
+> so the evaluation engine is shared rather than ported.
+
+The two unchecked boxes are one blocker, not two: `cre workflow simulate`
+refuses to run without a logged-in CRE account, and `cre login` needs a
+browser. `bun run test` and `bun run compile` in `cre/spike/verify` carry the rest of
+the evidence and need no credentials.
+
+Two findings reshape work downstream, both detailed in
+[spikes/cre.md](./spikes/cre.md):
+
+- **Phase 2 changes shape.** A workflow cannot call `setVerdict`; writes
+  arrive through the KeystoneForwarder as `onReport(metadata, report)`. The
+  registry becomes an `IReceiver` and the verifier role becomes the forwarder
+  address plus a `workflowOwner` check on the report metadata. The §3
+  invariants — pull payments, the refund cap — are untouched.
+- **The proxy's request path has an open question.** Whether the workflow's
+  return value reaches the caller on the same HTTP request is contradicted
+  between two Chainlink docs pages, and `Specification.md` §2 needs the
+  permissive reading. One logged-in `simulate --listen` run settles it; do
+  that before Phase 3.
 
 ### 0.4 Spike C — `X-PAYMENT` decoding
 

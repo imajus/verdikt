@@ -12,6 +12,9 @@ contracts/lib/
 
 # cre
 cre/.cre/
+# Spike B build output: cre-compile writes a bundled .js next to the .wasm,
+# and a stray .js under cre/ would land in `pnpm typecheck`'s include glob.
+cre/spike/**/.tmp/
 
 .DS_Store
 *.log

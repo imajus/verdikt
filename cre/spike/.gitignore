@@ -1,0 +1,7 @@
+node_modules/
+.tmp/
+.env
+
+# bun.lock IS committed: it is what makes `bun install` here reproducible,
+# and the file: links to packages/ are relative and stable.
+bun.lockb
