@@ -333,7 +333,12 @@ Dashboard — reads verdict events/deposit from Arc, SLA + ratios from ENS
 - **Verification compute**: Chainlink CRE — a Confidential Workflow (TEE)
   per request, plus a separate plain (non-confidential) scheduled workflow
   for the hourly reputation aggregate (§6.2).
-- **Storage**: IPFS for SLA JSON blobs.
+- **Storage**: no separate storage layer for the SLA — it's written directly
+  as the ENS `sla` text record (§6.4), an arbitrary UTF-8 string per
+  ENSIP-5[^11], not an IPFS-pointed blob. Simpler to implement than an
+  IPFS-plus-hash-record design, and the write is infrequent (registration
+  and occasional edits, not per call), so on-chain string-storage cost is
+  acceptable.
 - **Payments**: x402, settled in USDC.
 
 Verdikt is a natural fit for Arc's agent-commerce ecosystem: Circle's own
@@ -443,3 +448,7 @@ multiple tracks count as one slot).
     the [Trigger Capability](https://docs.chain.link/cre/capabilities/triggers)
     docs list the Cron trigger as a standard, first-class trigger type
     alongside HTTP and on-chain EVM Log triggers.
+[^11]: [ENSIP-5: Text Records](https://docs.ens.domains/ens-improvement-proposals/ensip-5-text-records)
+    specifies a text record value as "any arbitrary UTF-8 string," with no
+    protocol-level size or content-type constraint — the resolver stores
+    and returns it as an opaque string regardless of what's inside it.
