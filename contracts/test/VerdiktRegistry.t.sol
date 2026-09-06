@@ -36,8 +36,12 @@ contract ReentrantPayer {
 }
 
 contract VerdiktRegistryTest is Test {
-    uint256 internal constant DEPOSIT = 10e6;
-    uint256 internal constant REFUND = 1e6;
+    /// Bond and refund are in Arc's 18-decimal native view (msg.value): 10 and
+    /// 1 USDC. `paidAmount` below is in the 6-decimal minor-unit view, which is
+    /// what x402 carries — the two differ by 1e12 and the registry converts.
+    uint256 internal constant DEPOSIT = 10e18;
+    uint256 internal constant REFUND = 1e18;
+    uint256 internal constant ONE_USDC_MINOR = 1e6;
 
     address internal constant FORWARDER = address(0xF0F0);
     address internal constant WORKFLOW_OWNER = address(0x0E0E);
@@ -54,7 +58,7 @@ contract VerdiktRegistryTest is Test {
 
     function setUp() public {
         registry = new VerdiktRegistry(FORWARDER, WORKFLOW_OWNER, WORKFLOW_NAME, DEPOSIT, REFUND);
-        vm.deal(provider, 100e6);
+        vm.deal(provider, 100e18);
         serviceId = keccak256(bytes(SLUG));
     }
 
@@ -229,7 +233,7 @@ contract VerdiktRegistryTest is Test {
             _metadata(WORKFLOW_OWNER, bytes10("anything!!")),
             _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500)
         );
-        assertEq(unpinned.getOwed(payer), 2500);
+        assertEq(unpinned.getOwed(payer), 2500 * registry.NATIVE_PER_MINOR_UNIT());
     }
 
     function test_supportsTheForwardersProbe() public view {
@@ -270,11 +274,34 @@ contract VerdiktRegistryTest is Test {
     }
 
     /// @dev The cap that keeps induced-failure griefing at break-even-minus-gas.
+    ///      400 minor units is $0.0004, well under the 1 USDC fixed refund.
     function test_refundNeverExceedsWhatWasPaid() public {
         _register();
         _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 400);
-        assertEq(registry.getOwed(payer), 400);
-        assertEq(registry.getDeposit(serviceId), DEPOSIT - 400);
+        assertEq(registry.getOwed(payer), 400 * registry.NATIVE_PER_MINOR_UNIT());
+        assertEq(registry.getDeposit(serviceId), DEPOSIT - 400 * registry.NATIVE_PER_MINOR_UNIT());
+    }
+
+    /// @dev Arc exposes the same USDC as 18 decimals natively and 6 as an
+    ///      ERC-20. x402 pays in the 6-decimal view and the bond is held in the
+    ///      18-decimal one, so an unconverted comparison would have refunded a
+    ///      millionth of a millionth of what the agent paid.
+    function test_refundConvertsMinorUnitsToTheNativeView() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, ONE_USDC_MINOR / 2);
+        assertEq(registry.getOwed(payer), 0.5e18);
+
+        // And the event still carries the amount in minor units, which is what
+        // the price clause and the dashboard read.
+        assertEq(registry.getVerdict("r1").paidAmount, ONE_USDC_MINOR / 2);
+    }
+
+    /// @dev A nonsense amount must not be able to revert an otherwise valid
+    ///      verdict by overflowing the conversion.
+    function test_anAbsurdPaidAmountSaturatesInsteadOfReverting() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, type(uint256).max);
+        assertEq(registry.getOwed(payer), REFUND);
     }
 
     function testFuzz_refundIsCappedThreeWays(uint96 paidAmount, uint8 outcomeOrdinal) public {
@@ -284,7 +311,7 @@ contract VerdiktRegistryTest is Test {
         _deliver("r1", IVerdiktRegistry.Outcome(outcomeOrdinal), payer, paidAmount);
 
         uint256 credited = registry.getVerdict("r1").refundCredited;
-        assertLe(credited, paidAmount);
+        assertLe(credited, uint256(paidAmount) * registry.NATIVE_PER_MINOR_UNIT());
         assertLe(credited, REFUND);
         assertLe(credited, before);
         if (outcomeOrdinal == uint8(IVerdiktRegistry.Outcome.PASS)) assertEq(credited, 0);
@@ -293,7 +320,7 @@ contract VerdiktRegistryTest is Test {
     }
 
     function test_creditLargerThanTheRemainingDepositBooksTheRemainderAndSuspends() public {
-        VerdiktRegistry chunky = new VerdiktRegistry(FORWARDER, WORKFLOW_OWNER, WORKFLOW_NAME, DEPOSIT, 3e6);
+        VerdiktRegistry chunky = new VerdiktRegistry(FORWARDER, WORKFLOW_OWNER, WORKFLOW_NAME, DEPOSIT, 3e18);
         vm.prank(provider);
         chunky.register{value: DEPOSIT}(SLUG);
 
@@ -304,7 +331,7 @@ contract VerdiktRegistryTest is Test {
                 _report(serviceId, bytes32(i + 1), IVerdiktRegistry.Outcome.FAIL, payer, 10e6)
             );
         }
-        assertEq(chunky.getDeposit(serviceId), 1e6);
+        assertEq(chunky.getDeposit(serviceId), 1e18);
 
         vm.expectEmit(true, false, false, false);
         emit IVerdiktRegistry.ServiceSuspended(serviceId);
@@ -315,7 +342,7 @@ contract VerdiktRegistryTest is Test {
         );
 
         assertEq(chunky.getDeposit(serviceId), 0);
-        assertEq(chunky.getOwed(payer), 10e6);
+        assertEq(chunky.getOwed(payer), 10e18);
         assertEq(uint8(chunky.getStatus(serviceId)), uint8(IVerdiktRegistry.Status.SUSPENDED));
     }
 
@@ -326,7 +353,7 @@ contract VerdiktRegistryTest is Test {
         }
         assertEq(registry.getDeposit(serviceId), 0);
         assertEq(uint8(registry.getStatus(serviceId)), uint8(IVerdiktRegistry.Status.SUSPENDED));
-        assertEq(registry.getOwed(payer), 10e6);
+        assertEq(registry.getOwed(payer), 10e18);
     }
 
     // -------------------------------------------------------- declined reports
@@ -431,7 +458,7 @@ contract VerdiktRegistryTest is Test {
     function test_topUpRejectsAnUnknownOrDeregisteredService() public {
         vm.prank(provider);
         vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.UnknownService.selector, serviceId));
-        registry.topUp{value: 1e6}(serviceId);
+        registry.topUp{value: 1e18}(serviceId);
 
         _register();
         vm.prank(provider);
@@ -442,7 +469,7 @@ contract VerdiktRegistryTest is Test {
                 IVerdiktRegistry.ServiceIsInactive.selector, serviceId, IVerdiktRegistry.Status.DEREGISTERED
             )
         );
-        registry.topUp{value: 1e6}(serviceId);
+        registry.topUp{value: 1e18}(serviceId);
     }
 
     // ---------------------------------------------------------------- withdraw

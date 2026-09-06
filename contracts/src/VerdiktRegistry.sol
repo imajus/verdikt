@@ -31,8 +31,28 @@ contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
     address public immutable WORKFLOW_OWNER;
     bytes10 public immutable WORKFLOW_NAME;
 
+    /// @notice Bond and refund, in Arc's 18-decimal native view (`msg.value`).
     uint256 public immutable DEPOSIT_AMOUNT;
     uint256 public immutable FIXED_REFUND;
+
+    /// @notice Scale between the two views Arc exposes of the same USDC.
+    /// @dev Arc's native token *is* USDC, but `msg.value` and gas use an
+    ///      18-decimal view while the ERC-20 view — and therefore x402 payment
+    ///      amounts and the SLA's price clause — use 6. They differ by 1e12.
+    ///
+    ///      This contract is the one place the two meet: `paidAmount` arrives in
+    ///      minor units (6) because that is what `decodePayment` normalises to
+    ///      and what `VerdictWritten` must carry for the price clause and the
+    ///      dashboard, while the bond it is capped against is `msg.value` (18).
+    ///      Comparing them unconverted would cap every refund at a millionth of
+    ///      a millionth of what the agent actually paid.
+    uint256 public constant NATIVE_PER_MINOR_UNIT = 1e12;
+
+    /// @dev Above this, `paidAmount * NATIVE_PER_MINOR_UNIT` would overflow, so
+    ///      the conversion saturates instead of reverting. A report that
+    ///      absurd is capped by the deposit anyway; reverting would let a
+    ///      malformed amount destroy an otherwise valid verdict.
+    uint256 private constant MAX_MINOR_UNITS = type(uint256).max / NATIVE_PER_MINOR_UNIT;
 
     mapping(bytes32 serviceId => Service) private _services;
     mapping(bytes32 requestId => Verdict) private _verdicts;
@@ -182,8 +202,10 @@ contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
 
         uint256 credited;
         if (outcome != Outcome.PASS) {
+            // `paidAmount` is in USDC minor units; the bond is in native wei.
+            uint256 paidNative = paidAmount > MAX_MINOR_UNITS ? type(uint256).max : paidAmount * NATIVE_PER_MINOR_UNIT;
             credited = FIXED_REFUND;
-            if (paidAmount < credited) credited = paidAmount;
+            if (paidNative < credited) credited = paidNative;
             if (service.deposit < credited) credited = service.deposit;
         }
 
