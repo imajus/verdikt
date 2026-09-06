@@ -15,3 +15,6 @@ cre/.cre/
 
 .DS_Store
 *.log
+
+# scripts/setup-ens.mjs output
+ens-setup-plan.json

@@ -198,8 +198,12 @@ it, and set the backward pointer. Every step reads live state first and skips
 what is already in place, so a re-run after a partial failure resumes.
 
 It rehearses on an anvil fork before doing anything. In the default mode that
-is all it does — it prints the resulting `to`/`data` pairs for signing from any
-wallet. A `VerifiableFactory` proxy address is fixed by (factory, sender,
+is all it does — it writes the resulting `to`/`data` pairs to
+`ens-setup-plan.json` for signing from any wallet, and shows them abbreviated
+with a byte count. The terminal deliberately does not print full calldata:
+300 bytes of unbroken hex wraps and clips when copied, and a truncated copy is
+still valid-looking hex that is a correct *prefix* of the real value. That
+happened once in review. Take calldata from the file, or use `--send`. A `VerifiableFactory` proxy address is fixed by (factory, sender,
 salt), so the addresses the rehearsal produces are the ones a live run
 produces; the printed calldata was applied to a fork independently and landed
 on exactly the predicted addresses, with the spike then passing 31/31 against
