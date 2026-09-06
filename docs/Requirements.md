@@ -121,23 +121,36 @@ unbiased third party, not negotiated or self-reported by either side.
 
 ### 6.2 Verification execution — Chainlink CRE Confidential Workflows
 
-Verification runs inside a Chainlink CRE Confidential Workflow (TEE), so
-raw request/response payloads never leave the enclave — only the derived
-verdict crosses back out.
+Verification runs inside a Chainlink CRE Confidential Workflow (TEE). Critically,
+the **workflow itself makes the outbound HTTP call to the provider's API** —
+Verdikt's own proxy/backend never receives or terminates the provider's
+response. If Verdikt's infrastructure fetched the response and only then
+handed it to the enclave for diffing, the response would already have been
+exposed to a party outside the enclave and the confidentiality guarantee
+would be void before verification even started. Confidentiality has to be
+enforced at the point of fetch, not after.
 
 This is essential, not incidental. API responses frequently contain
 proprietary, licensed, or otherwise valuable data — market data feeds,
 proprietary model outputs, personal data — that a provider has a legitimate
 interest in keeping confidential even from the verification layer itself.
-Running the diff inside a TEE means Verdikt itself never gains visibility
-into response content, only the derived boolean/graduated verdict: the
-provider's data stays private through verification, not just through
-settlement.
+Because the enclave performs the fetch directly, Verdikt itself never gains
+visibility into response content, only the derived boolean/graduated
+verdict: the provider's data stays private through verification, not just
+through settlement.
 
-The workflow architecture is: fetch external data with credentials kept
-encrypted in-enclave, evaluate the independent checks described in §6.1,
-merge the results, and post only a signed verdict on-chain, per
-[Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall).
+The workflow architecture is: the enclave fetches the provider's API
+response directly (with any request credentials kept encrypted in-enclave),
+evaluates the independent checks described in §6.1, merges the results,
+releases the response payload to the calling agent, and posts only a
+signed verdict on-chain — per
+[Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall),
+where the confidential workflow itself sits directly in front of the
+sensitive call rather than receiving already-exposed data. Verdikt's own
+backend is reduced to a thin coordinator: it handles the x402 protocol
+handshake (relaying the 402 challenge, correlating payment to request) and
+triggers the workflow run, but never decrypts or logs a provider response
+body.
 
 Production CRE enrollment is currently private-beta; `cre workflow
 simulate` is self-serve, and the ETHOnline2026 Chainlink track explicitly
@@ -216,14 +229,18 @@ Verdikt uses `api.eth` as a namespace for provider identity:
 Paying agent
    |
    v
-Verdikt proxy  <--- intercepts x402 request/response
+Verdikt proxy (thin coordinator — handshake + payment/request
+correlation only; never decrypts or logs a provider response)
    |
+   | relays 402 challenge; [stretch] checks api.eth payTo record
+   | before payment; triggers a workflow run once payment settles
    v
 Chainlink CRE Confidential Workflow (TEE)
+   - fetches the provider's API response directly, inside the enclave
    - resolves provider's SLA JSON (IPFS)
    - diffs observed response vs SLA -> PASS/FAIL + availability score
-   - [stretch] resolves provider's api.eth subname address record,
-     compares vs payTo, blocks payment on mismatch
+   - releases the response payload to the calling agent
+   - posts only the signed verdict on-chain
    |
    v
 On-chain registry (Arc)
