@@ -22,7 +22,8 @@
     "cre/*.d.ts",
     "proxy/**/*.js",
     "proxy/**/*.d.ts",
-    "web/**/*.js",
+    "web/src/**/*.js",
+    "web/*.d.ts",
     "vitest.config.js"
   ],
   "exclude": [

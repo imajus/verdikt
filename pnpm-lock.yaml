@@ -182,10 +182,19 @@ importers:
 
   web:
     dependencies:
+      '@verdikt/cre':
+        specifier: workspace:*
+        version: link:../cre
       '@verdikt/sdk':
         specifier: workspace:*
         version: link:../packages/sdk
+      '@verdikt/sla':
+        specifier: workspace:*
+        version: link:../packages/sla
     devDependencies:
+      '@verdikt/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       vite:
         specifier: ^8.2.2
         version: 8.2.2(@types/node@24.13.3)

@@ -23,6 +23,12 @@ export default [
   },
   js.configs.recommended,
   {
+    // The dashboard is the one package that runs in a browser, so it is the one
+    // place `document`, `location` and friends are legitimate globals.
+    files: ['web/src/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } }
+  },
+  {
     languageOptions: {
       // `latest`, not a pinned year: @verdikt/sla imports schema.json with an
       // import attribute (`with { type: 'json' }`), which 2023 cannot parse.

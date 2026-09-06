@@ -3,17 +3,20 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Marketplace dashboard — the primary demo surface",
-  "comment": "The UI framework is the one dependency left open on purpose: it is a Phase 5 decision, not a Wave 0 seam. Adding it is a single `pnpm add` inside this package.",
+  "description": "Marketplace dashboard \u2014 the primary demo surface",
+  "comment": "No UI framework on purpose: the whole surface is a list, a detail panel and a stats strip, and a framework would be the largest dependency in the repo for markup that fits in one file.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "@verdikt/sdk": "workspace:*"
+    "@verdikt/cre": "workspace:*",
+    "@verdikt/sdk": "workspace:*",
+    "@verdikt/sla": "workspace:*"
   },
   "devDependencies": {
+    "@verdikt/fixtures": "workspace:*",
     "vite": "^8.2.2"
   }
 }
