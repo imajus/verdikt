@@ -83,7 +83,8 @@ const registryAbi = parseAbi([
   'function getSubregistry(string label) view returns (address)',
   'function getResolver(string label) view returns (address)',
   'function getExpiry(uint256 anyId) view returns (uint64)',
-  'function latestOwnerOf(uint256 tokenId) view returns (address)',
+  'function getStatus(uint256 anyId) view returns (uint8)',
+  'function findOwner(string label) view returns (address)',
   'function findTokenId(string label) view returns (uint256)',
   'function initialize(address rootAccount, uint256 roleBitmap)',
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
@@ -106,11 +107,13 @@ const resolverAbi = parseAbi([
   'function addr(bytes32 node) view returns (address)',
   'function authorizeTextRoles(bytes toName, string key, address account, bool grant) returns (bool)',
   'function authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant) returns (bool)',
+  'function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)',
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
 ]);
 
 const factoryAbi = parseAbi([
   'function deployProxy(address implementation, uint256 salt, bytes data) returns (address)',
+  'function verifyContract(address proxy) view returns (address)',
   'event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation)'
 ]);
 
@@ -136,6 +139,22 @@ const REGISTRY_ROLE_SET_RESOLVER = 1n << 24n;
 const REGISTRY_ROLE_SET_SUBREGISTRY = 1n << 20n;
 /** PermissionedResolver ROLE_SET_TEXT — name-level, i.e. every text key at once. */
 const RESOLVER_ROLE_SET_TEXT = 1n << 4n;
+/**
+ * What Verdikt needs on a resolver's ROOT_RESOURCE to operate it: write the
+ * address record, write text, and — the one that matters — the admin role that
+ * lets it delegate individual text keys to providers and to the CRE signer.
+ */
+const RESOLVER_ROLES_VERDIKT_NEEDS =
+  (1n << 0n) | RESOLVER_ROLE_SET_TEXT | (RESOLVER_ROLE_SET_TEXT << 128n);
+
+/**
+ * `IPermissionedRegistry.Status`. Read it with `getStatus`, never by inferring
+ * from an owner lookup: a name's token id is NOT its labelhash (the low 32 bits
+ * are a version counter that changes on re-registration and role updates), so
+ * `latestOwnerOf(labelhash)` returns the zero address for a perfectly healthy
+ * REGISTERED name and makes it look RESERVED.
+ */
+const STATUS = ['AVAILABLE', 'RESERVED', 'REGISTERED'];
 
 const ONE_YEAR = 31_536_000n;
 
@@ -311,7 +330,8 @@ async function main() {
     accounts = [...keys.map((k) => privateKeyToAccount(k)), privateKeyToAccount(forkKey('stranger'))];
   }
 
-  const [deployer, provider, verifier, stranger] = accounts ?? [];
+  let [deployer] = accounts ?? [];
+  const [, provider, verifier, stranger] = accounts ?? [];
   const publicClient = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
   const walletFor = (account) => createWalletClient({ account, chain: sepolia, transport: http(rpcUrl) });
 
@@ -360,37 +380,47 @@ async function main() {
     }
 
     // ---------------------------------------------------------------- stage 2
-    section(`2. Parent name — is "${args.parentLabel}.eth" registrable?`);
+    section(`2. Parent name — what state is "${args.parentLabel}.eth" in?`);
 
-    let parentLabel = args.parentLabel;
-    let parentAvailable = false;
+    const parentLabel = args.parentLabel;
+    let parentStatus;
+    let parentOwner;
 
-    await check(`ETHRegistrar.isAvailable("${args.parentLabel}")`, async () => {
-      parentAvailable = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistrar,
-        abi: registrarAbi,
-        functionName: 'isAvailable',
-        args: [args.parentLabel]
+    await check(`ETHRegistry state of "${parentLabel}"`, async () => {
+      const anyId = BigInt(keccak256(stringToHex(parentLabel)));
+      parentStatus = STATUS[
+        await publicClient.readContract({
+          address: SEPOLIA_ENSV2.ETHRegistry,
+          abi: registryAbi,
+          functionName: 'getStatus',
+          args: [anyId]
+        })
+      ];
+      parentOwner = await publicClient.readContract({
+        address: SEPOLIA_ENSV2.ETHRegistry,
+        abi: registryAbi,
+        functionName: 'findOwner',
+        args: [parentLabel]
       });
-      if (parentAvailable) return 'available';
       const expiry = await publicClient.readContract({
         address: SEPOLIA_ENSV2.ETHRegistry,
         abi: registryAbi,
         functionName: 'getExpiry',
-        args: [BigInt(keccak256(stringToHex(args.parentLabel)))]
+        args: [anyId]
       });
-      const owner = await publicClient.readContract({
+      const subregistry = await publicClient.readContract({
         address: SEPOLIA_ENSV2.ETHRegistry,
         abi: registryAbi,
-        functionName: 'latestOwnerOf',
-        args: [BigInt(keccak256(stringToHex(args.parentLabel)))]
+        functionName: 'getSubregistry',
+        args: [parentLabel]
       });
-      // owner == 0 with a non-zero expiry is ENSv2's RESERVED state: the name
-      // was reserved by premigration and only a migration controller (holding
-      // ROLE_REGISTER_RESERVED) can promote it. Not a failure of this spike —
-      // a fact the parent-name decision has to account for (Tasks.md 0.6).
-      const state = owner === zeroAddress ? 'RESERVED (premigration)' : `REGISTERED to ${owner}`;
-      return `NOT available — ${state}, expiry ${expiry}`;
+      const suffix =
+        parentStatus === 'AVAILABLE'
+          ? ''
+          : `, owner ${parentOwner}, expiry ${expiry}, subregistry ${
+              subregistry === zeroAddress ? 'NOT SET' : subregistry
+            }`;
+      return `${parentStatus}${suffix}`;
     });
 
     if (mode === 'read-only') {
@@ -398,22 +428,13 @@ async function main() {
       return;
     }
 
-    if (!parentAvailable) {
-      if (mode === 'live') {
-        throw new Error(
-          `"${args.parentLabel}.eth" is not registrable on Sepolia ENSv2; pass --parent <label> or claim it first`
-        );
-      }
-      parentLabel = `${args.parentLabel}-spike`;
-      const fallbackFree = await publicClient.readContract({
-        address: SEPOLIA_ENSV2.ETHRegistrar,
-        abi: registrarAbi,
-        functionName: 'isAvailable',
-        args: [parentLabel]
-      });
-      assert(fallbackFree, `neither "${args.parentLabel}" nor "${parentLabel}" is available`);
-      console.log(`  NOTE  falling back to "${parentLabel}.eth" for this run`);
-    }
+    // RESERVED means premigration holds the name and only an account with
+    // ROLE_REGISTER_RESERVED on the ETHRegistry root — the migration
+    // controllers — can promote it. Nothing this spike can route around.
+    assert(
+      parentStatus !== 'RESERVED',
+      `"${parentLabel}.eth" is RESERVED on Sepolia ENSv2; it can only be claimed through a migration controller. Pass --parent <label>.`
+    );
 
     const parentName = `${parentLabel}.eth`;
     const serviceName = `${args.slug}.${parentName}`;
@@ -421,10 +442,38 @@ async function main() {
     const serviceDnsName = dnsEncode(serviceName);
 
     // ---------------------------------------------------------------- stage 3
-    section(`3. Register "${parentName}" and wire up a subname registry`);
+    section(`3. Take ownership of "${parentName}" and wire up a subname registry`);
+
+    if (parentStatus === 'REGISTERED') {
+      // The parent already exists. Registering a throwaway label instead would
+      // test a name nobody uses, so run against the real one: on a fork,
+      // impersonate its owner; live, that owner has to be the deployer key.
+      if (mode === 'fork') {
+        await check(`impersonating ${parentName}'s owner`, async () => {
+          await rpc(rpcUrl, 'anvil_impersonateAccount', [parentOwner]);
+          await rpc(rpcUrl, 'anvil_setBalance', [parentOwner, toHex(10n ** 20n)]);
+          deployer = { address: parentOwner, type: 'json-rpc' };
+          return parentOwner;
+        });
+      } else {
+        assert(
+          parentOwner.toLowerCase() === deployer.address.toLowerCase(),
+          `${parentName} is owned by ${parentOwner}, not the deployer key ${deployer.address}`
+        );
+      }
+    }
 
     let parentTokenId;
-    await check(`ETHRegistrar commit/reveal registers ${parentName}`, async () => {
+    await check(`${parentName} is owned by the deployer`, async () => {
+      if (parentStatus === 'REGISTERED') {
+        parentTokenId = await publicClient.readContract({
+          address: SEPOLIA_ENSV2.ETHRegistry,
+          abi: registryAbi,
+          functionName: 'findTokenId',
+          args: [parentLabel]
+        });
+        return `already registered to ${deployer.address}`;
+      }
       const duration = ONE_YEAR;
       const [base, premium] = await publicClient.readContract({
         address: SEPOLIA_ENSV2.ETHRegistrar,
@@ -498,51 +547,119 @@ async function main() {
       const owner = await publicClient.readContract({
         address: SEPOLIA_ENSV2.ETHRegistry,
         abi: registryAbi,
-        functionName: 'latestOwnerOf',
-        args: [parentTokenId]
+        functionName: 'findOwner',
+        args: [parentLabel]
       });
       assert(owner.toLowerCase() === deployer.address.toLowerCase(), `owner is ${owner}`);
-      return `owner ${owner}, ${Number(price) / 1e6} USDC`;
+      return `registered to ${owner} for ${Number(price) / 1e6} USDC`;
     });
 
-    let resolverAddress;
-    await check('VerifiableFactory deploys a PermissionedResolver for the deployer', async () => {
-      const salt = proxySalt('OwnedResolver', 'address', deployer.address);
-      const data = encodeFunctionData({
-        abi: resolverAbi,
-        functionName: 'initialize',
-        args: [deployer.address, ALL_ROLES, []]
-      });
+    // Both proxies are deployed at a CREATE2 address derived from a fixed salt
+    // scheme, so a second deployProxy with the same salt reverts on collision.
+    // Reuse whatever the parent already points at — a name that has been set up
+    // before is the normal case, not an error.
+    const deployProxy = async (implementation, salt, data) => {
       const receipt = await send(deployer, {
         address: SEPOLIA_ENSV2.VerifiableFactory,
         abi: factoryAbi,
         functionName: 'deployProxy',
-        args: [SEPOLIA_ENSV2.PermissionedResolverImpl, salt, data]
+        args: [implementation, salt, data]
       });
       const [log] = parseEventLogs({ abi: factoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs });
-      resolverAddress = log.args.proxyAddress;
-      assert(resolverAddress && resolverAddress !== zeroAddress, 'no proxy address in ProxyDeployed');
-      return resolverAddress;
+      assert(log?.args.proxyAddress, 'no proxy address in ProxyDeployed');
+      return log.args.proxyAddress;
+    };
+
+    let resolverAddress;
+    await check('PermissionedResolver proxy for the deployer', async () => {
+      const existing = await publicClient.readContract({
+        address: SEPOLIA_ENSV2.ETHRegistry,
+        abi: registryAbi,
+        functionName: 'getResolver',
+        args: [parentLabel]
+      });
+      if (existing !== zeroAddress) {
+        // Trust it only if the factory vouches for its provenance and
+        // implementation — an arbitrary resolver would make every EAC
+        // assertion below meaningless.
+        const impl = await publicClient.readContract({
+          address: SEPOLIA_ENSV2.VerifiableFactory,
+          abi: factoryAbi,
+          functionName: 'verifyContract',
+          args: [existing]
+        });
+        assert(
+          impl.toLowerCase() === SEPOLIA_ENSV2.PermissionedResolverImpl,
+          `${existing} is not a factory-deployed PermissionedResolver (impl ${impl})`
+        );
+        // ...and only if the deployer can actually operate it. Resolvers are
+        // per-account, so a name that changed hands still points at the *old*
+        // holder's resolver: the new owner holds the name but none of the
+        // resolver's root roles. Reusing it in that state fails every write
+        // below with an error that looks like the ACL is broken.
+        const operable = await publicClient.readContract({
+          address: existing,
+          abi: resolverAbi,
+          functionName: 'hasRootRoles',
+          args: [RESOLVER_ROLES_VERDIKT_NEEDS, deployer.address]
+        });
+        if (operable) {
+          resolverAddress = existing;
+          return `reusing ${existing}`;
+        }
+        console.log(
+          `  NOTE  ${existing} is attached to ${parentName} but ${deployer.address}` +
+            ' holds none of its root roles — deploying the deployer\'s own resolver'
+        );
+      }
+      resolverAddress = await deployProxy(
+        SEPOLIA_ENSV2.PermissionedResolverImpl,
+        proxySalt('OwnedResolver', 'address', deployer.address),
+        encodeFunctionData({
+          abi: resolverAbi,
+          functionName: 'initialize',
+          args: [deployer.address, ALL_ROLES, []]
+        })
+      );
+      return `deployed ${resolverAddress}`;
+    });
+
+    await check('the deployer holds the resolver roles Verdikt operates on', async () => {
+      const operable = await publicClient.readContract({
+        address: resolverAddress,
+        abi: resolverAbi,
+        functionName: 'hasRootRoles',
+        args: [RESOLVER_ROLES_VERDIKT_NEEDS, deployer.address]
+      });
+      assert(
+        operable,
+        `${deployer.address} lacks ROLE_SET_ADDR / ROLE_SET_TEXT / ROLE_SET_TEXT_ADMIN on ${resolverAddress}`
+      );
+      return `${deployer.address} on ${resolverAddress}`;
     });
 
     let subRegistryAddress;
-    await check(`VerifiableFactory deploys a UserRegistry for ${parentName}`, async () => {
-      const salt = proxySalt('UserRegistry', 'bytes32', namehash(parentName));
-      const data = encodeFunctionData({
+    await check(`UserRegistry proxy for ${parentName}`, async () => {
+      const existing = await publicClient.readContract({
+        address: SEPOLIA_ENSV2.ETHRegistry,
         abi: registryAbi,
-        functionName: 'initialize',
-        args: [deployer.address, ALL_ROLES]
+        functionName: 'getSubregistry',
+        args: [parentLabel]
       });
-      const receipt = await send(deployer, {
-        address: SEPOLIA_ENSV2.VerifiableFactory,
-        abi: factoryAbi,
-        functionName: 'deployProxy',
-        args: [SEPOLIA_ENSV2.UserRegistryImpl, salt, data]
-      });
-      const [log] = parseEventLogs({ abi: factoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs });
-      subRegistryAddress = log.args.proxyAddress;
-      assert(subRegistryAddress && subRegistryAddress !== zeroAddress, 'no proxy address in ProxyDeployed');
-      return subRegistryAddress;
+      if (existing !== zeroAddress) {
+        subRegistryAddress = existing;
+        return `reusing ${existing}`;
+      }
+      subRegistryAddress = await deployProxy(
+        SEPOLIA_ENSV2.UserRegistryImpl,
+        proxySalt('UserRegistry', 'bytes32', namehash(parentName)),
+        encodeFunctionData({
+          abi: registryAbi,
+          functionName: 'initialize',
+          args: [deployer.address, ALL_ROLES]
+        })
+      );
+      return `deployed ${subRegistryAddress}`;
     });
 
     await check(`${parentName} points at the subname registry and the resolver`, async () => {
@@ -607,15 +724,8 @@ async function main() {
       const owner = await publicClient.readContract({
         address: subRegistryAddress,
         abi: registryAbi,
-        functionName: 'latestOwnerOf',
-        args: [
-          await publicClient.readContract({
-            address: subRegistryAddress,
-            abi: registryAbi,
-            functionName: 'findTokenId',
-            args: [args.slug]
-          })
-        ]
+        functionName: 'findOwner',
+        args: [args.slug]
       });
       assert(owner.toLowerCase() === provider.address.toLowerCase(), `owner is ${owner}`);
       return `owner ${owner}`;

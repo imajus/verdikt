@@ -6,7 +6,7 @@ Answers [Tasks.md §0.2](../Tasks.md); resolves the ENSv2 entry under
 
 **Verdict: green. ENSv2 stays. No fallback to ENSv1's PublicResolver.**
 
-Reproduce with `pnpm spike:ens` (29/29 checks). Run
+Reproduce with `pnpm spike:ens` (31/31 checks). Run
 `pnpm spike:ens --read-only` to check only the live-Sepolia facts, without
 spawning a fork.
 
@@ -114,24 +114,49 @@ ratios included. The spike demonstrates this positively — under a name-level
 grant the provider successfully forges `conformance`, then is denied again once
 it is revoked. `@verdikt/sdk` has exactly one correct call here and this is it.
 
-## `verdikt.eth` is not registrable on Sepolia
+## `verdikt.eth` on Sepolia
 
-`ETHRegistrar.isAvailable("verdikt")` returns false. The name is in ENSv2's
-`RESERVED` state — owner `0x0`, expiry `1820214744` (2027-09-02). So are
-`nick` and `vitalik`, with their mainnet expiries mirrored, while an
-unregistered nonsense label is available: Sepolia's ENSv2 beta premigrated
-mainnet's `.eth` name set. Promotion from `RESERVED` needs
-`ROLE_REGISTER_RESERVED`, held by the migration controllers, and is reachable
-only by whoever owns `verdikt.eth` on mainnet.
+`verdikt.eth` **is registered** on Sepolia ENSv2, expiring 2027-09-06, with a
+`PermissionedResolver` proxy already attached — so the parent name is not a
+blocker and Tasks §0.6 only has the `verdikt.bond` DNS purchase left. The spike
+runs against it directly: on a fork it impersonates the registered owner rather
+than registering a throwaway label, so the ACL assertions are made on the real
+name.
 
-This is a decision for [Tasks.md §0.6](../Tasks.md), not a blocker for this
-spike. Either pick a parent label that is actually available on Sepolia, or
-claim `verdikt.eth` on mainnet first and migrate. Until it is settled,
-`ENS_PARENT_NAME` stays `verdikt.eth` in `.env.example` and the spike falls
-back to `verdikt-spike.eth` for its own run, printing a `NOTE` when it does.
+`pnpm spike:ens --read-only` prints the live owner, expiry and subregistry;
+don't take an address from this document, because the name changed hands once
+during the spike itself.
 
-Nothing else depends on the choice: the parent label appears once, in
-`packages/sdk/ens.js`.
+What is **not** yet set up is the subregistry. `getSubregistry("verdikt")`
+returns the zero address, and until it points at a `UserRegistry` proxy no
+`<slug>.verdikt.eth` can exist at all. That is the one remaining on-chain step,
+and it is the sequence in "A subname needs a subregistry" above.
+
+Two neighbouring facts, since they were checked and are easy to assume wrongly:
+
+- Premigration reservations are real but they are **not** what holds
+  `verdikt`. `nick` and `vitalik` are `RESERVED` (owner `0x0`, resolving
+  through `ENSV1Resolver`), and a name in that state can only be promoted by
+  an account holding `ROLE_REGISTER_RESERVED` — the migration controllers. The
+  spike stops with that explanation if `--parent` names a reserved label.
+- The reservation expiries do **not** mirror the mainnet ones. `nick` expires
+  2034 on mainnet and 2027 in the Sepolia reservation; `vitalik`, 2048 and
+  2068. Whatever sets them, it is not a copy.
+
+### Resolver roles do not follow the name
+
+The resolver is per-*account*, so transferring the ENSv2 name transfers the
+token and the registry roles but **not** the resolver's `ROOT_RESOURCE` roles.
+Observed live: after `verdikt.eth` moved wallets, the resolver's root roles
+still sat with the previous address, which means that address could still write
+every record on the name and on any subname pointed at that resolver.
+
+For Verdikt this is a property to rely on rather than fight — the resolver
+Verdikt operates is the one that must hold the root roles, independent of who
+holds the name — but it has to be set deliberately. The spike now checks it:
+if the resolver attached to the parent is one the deployer cannot operate, it
+says so and deploys the deployer's own instead of failing seven writes later
+with what looks like a broken ACL.
 
 ## Tooling
 
@@ -144,14 +169,23 @@ tested — with `viem` sufficient there was nothing to gain by adding it.
 The spike lives in a `scripts` workspace package so `viem` resolves without a
 root-level dependency.
 
-## One trap worth remembering
+## Two traps worth remembering
 
-anvil's default mnemonic accounts already carry EIP-7702 delegation code on
-Sepolia. That makes `to.code.length > 0` true, so the registry's ERC-1155 mint
-calls `onERC1155Received` on them and reverts with `ERC1155InvalidReceiver` —
-an error that points nowhere near the actual cause. The spike derives its own
-signers from a Verdikt-specific string and asserts they are code-free before
-doing anything else. Any future forked-Sepolia test needs the same care.
+**A name's token id is not its labelhash.** ENSv2 token ids are mutable: the
+low 32 bits are a version counter that changes on re-registration and on role
+updates. So `latestOwnerOf(labelhash)` returns the zero address for a perfectly
+healthy `REGISTERED` name. Read state with `getStatus(anyId)` and ownership
+with `findOwner(label)` or `latestOwnerOf(findTokenId(label))` — never by
+inferring a state from a zero owner. An earlier draft of this spike did exactly
+that and reported `verdikt.eth` as reserved when it was registered.
+
+**anvil's default mnemonic accounts already carry EIP-7702 delegation code on
+Sepolia.** That makes `to.code.length > 0` true, so the registry's ERC-1155
+mint calls `onERC1155Received` on them and reverts with
+`ERC1155InvalidReceiver` — an error that points nowhere near the actual cause.
+The spike derives its own signers from a Verdikt-specific string and asserts
+they are code-free before doing anything else. Any future forked-Sepolia test
+needs the same care.
 
 ## What this unblocks
 
