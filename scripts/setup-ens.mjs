@@ -22,8 +22,13 @@
 //
 // HOW IT RUNS
 //
-//   node scripts/setup-ens.mjs           # plan: dry-run on a fork, print calldata
+//   node scripts/setup-ens.mjs           # plan: dry-run on a fork, write calldata
 //   node scripts/setup-ens.mjs --send    # broadcast to Sepolia
+//
+// The plan is written to `ens-setup-plan.json` (--out to change it) and shown
+// abbreviated in the terminal, because a 300-byte hex string copied out of a
+// terminal can be clipped into something that still looks like valid calldata.
+// --full prints it in full anyway.
 //
 // The default is a rehearsal on an anvil fork of Sepolia. Because a
 // VerifiableFactory proxy address is fully determined by (factory, sender,
@@ -36,6 +41,8 @@
 // the configured operator. It rehearses on a fork first and stops if the
 // rehearsal fails, so a broken sequence is never broadcast.
 
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   createPublicClient,
   createWalletClient,
@@ -69,8 +76,10 @@ function parseArgs(argv) {
   };
   return {
     send: argv.includes('--send'),
+    full: argv.includes('--full'),
     parentLabel: valueOf('parent', (process.env.ENS_PARENT_NAME ?? 'verdikt.eth').replace(/\.eth$/, '')),
     operator: valueOf('operator', process.env.ENS_OPERATOR_ADDRESS),
+    out: valueOf('out', 'ens-setup-plan.json'),
     rpcUrl: valueOf('rpc', process.env.SEPOLIA_RPC_URL || DEFAULT_SEPOLIA_RPC)
   };
 }
@@ -285,24 +294,65 @@ async function verify(publicClient, parentLabel, operator, expected) {
   if (problems.length) throw new Error(problems.join('; '));
 }
 
-function printPlan(txs, parentLabel) {
+/**
+ * Calldata is written to a file, and shown abbreviated with its byte length.
+ *
+ * Printing 300 bytes of hex invites copying it out of a terminal, and a
+ * terminal is exactly where a long unbroken token gets clipped — silently, into
+ * something that is still a valid hex string and still a correct *prefix* of
+ * the real one. Signing that is unrecoverable. The byte count makes a short
+ * copy obvious; the JSON file makes copying unnecessary.
+ */
+function abbreviate(data, full) {
+  const bytes = (data.length - 2) / 2;
+  if (full || data.length <= 46) return `${data}  (${bytes} bytes)`;
+  return `${data.slice(0, 34)}…${data.slice(-8)}  (${bytes} bytes — full value in the plan file)`;
+}
+
+function printPlan(txs, { parentLabel, operator, outPath, full }) {
   if (!txs.length) {
     console.log('\nNothing to do — the namespace is already set up.');
     return;
   }
-  console.log(`\nTransactions to sign, in order, from the operator address:\n`);
+
+  writeFileSync(
+    outPath,
+    `${JSON.stringify(
+      {
+        chainId: sepolia.id,
+        parent: `${parentLabel}.eth`,
+        operator,
+        generatedAt: new Date().toISOString(),
+        transactions: txs.map((tx, i) => ({
+          step: i + 1,
+          title: tx.title,
+          to: tx.to,
+          value: '0x0',
+          data: tx.data,
+          ...(tx.result ? { deploys: tx.result } : {})
+        }))
+      },
+      null,
+      2
+    )}\n`
+  );
+
+  console.log(`\nTransactions to sign, in order, from ${operator}:\n`);
   txs.forEach((tx, i) => {
     console.log(`  ${i + 1}. ${tx.title}`);
     console.log(`     to    ${tx.to}`);
     console.log(`     value 0`);
-    console.log(`     data  ${tx.data}`);
-    if (tx.result) console.log(`     -> deploys ${tx.result}`);
+    console.log(`     data  ${abbreviate(tx.data, full)}`);
+    if (tx.result) console.log(`     ->    deploys ${tx.result}`);
     console.log();
   });
   console.log(
-    `Addresses above are what a live run will produce: a VerifiableFactory proxy\n` +
+    `Full calldata: ${outPath}\n` +
+      `Take it from that file, not from this terminal — a long hex string wraps and\n` +
+      `clips, and a truncated copy is still valid-looking hex. (--full prints it here.)\n\n` +
+      `Addresses above are what a live run will produce: a VerifiableFactory proxy\n` +
       `address is fixed by (factory, sender, salt), so the fork predicts it exactly.\n` +
-      `Sign these from any wallet, or run with --send.\n\n` +
+      `Sign these from any wallet, or run with --send and skip the copying entirely.\n\n` +
       `Afterwards, put the two deployed addresses in .env as\n` +
       `ENS_RESOLVER_ADDRESS and ENS_SUBNAME_REGISTRY_ADDRESS, then confirm with\n` +
       `  pnpm spike:ens --read-only --parent ${parentLabel}`
@@ -369,7 +419,12 @@ async function main() {
   }
 
   if (!args.send) {
-    printPlan(rehearsed.txs, args.parentLabel);
+    printPlan(rehearsed.txs, {
+      parentLabel: args.parentLabel,
+      operator: args.operator,
+      outPath: resolve(args.out),
+      full: args.full
+    });
     return;
   }
 
