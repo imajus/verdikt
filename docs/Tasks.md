@@ -66,11 +66,11 @@ Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 
 Run. Findings in [spikes/cre.md](./spikes/cre.md), code in `cre/spike/`.
 
-- [ ] `cre workflow simulate` on a hello-world
+- [x] `cre workflow simulate` on a hello-world
 - [x] Confirm an HTTP trigger, an outbound HTTP call from inside the
       workflow, and an EVM write
 - [x] Confirm an **Arc chain selector exists** for the EVM write capability
-- [ ] Confirm confidential mode simulates
+- [x] Confirm confidential mode simulates
 - [x] **Decide the workflow language.** The CRE SDK is Go or TypeScript. TS
       lets `packages/sla` be imported directly; Go means the evaluation
       engine is written twice and the two copies can drift — which for a
@@ -85,10 +85,11 @@ Deliverable: `cre/spike/` green under `simulate`.
 > `@verdikt/sdk` were confirmed to typecheck and bundle into the WASM binary,
 > so the evaluation engine is shared rather than ported.
 
-The two unchecked boxes are one blocker, not two: `cre workflow simulate`
-refuses to run without a logged-in CRE account, and `cre login` needs a
-browser. `bun run test` and `bun run compile` in `cre/spike/verify` carry the rest of
-the evidence and need no credentials.
+> **Both closed, 2026-09-07.** The one-time `cre login` has been done, and
+> `cre workflow simulate verify --listen` runs green in confidential mode — the
+> run prints the TEE banner and completes the handler inside it. Captured in
+> [evidence/cre-simulate-verify.log](./evidence/cre-simulate-verify.log).
+> Simulation still cannot be a CI check, because the login is interactive.
 
 Two findings reshape work downstream, both detailed in
 [spikes/cre.md](./spikes/cre.md):
@@ -98,11 +99,13 @@ Two findings reshape work downstream, both detailed in
   registry becomes an `IReceiver` and the verifier role becomes the forwarder
   address plus a `workflowOwner` check on the report metadata. The §3
   invariants — pull payments, the refund cap — are untouched.
-- **The proxy's request path has an open question.** Whether the workflow's
-  return value reaches the caller on the same HTTP request is contradicted
-  between two Chainlink docs pages, and `Specification.md` §2 needs the
-  permissive reading. One logged-in `simulate --listen` run settles it; do
-  that before Phase 3.
+- **The proxy's request path is settled, restrictively.** The `--listen` run
+  above answered it: the trigger POST returns 200 with an empty body in under a
+  millisecond, and the handler's return value appears in the simulator, not in
+  that response. `Specification.md` §2 needed the permissive reading and does
+  not get it, so the proxy triggers and then **blocks on the execution result**
+  rather than reading the response itself — keeping the provider's bytes inside
+  the enclave, which is the argument §2 is built on.
 
 ### 0.4 Spike C — `X-PAYMENT` decoding
 
@@ -353,40 +356,73 @@ State machine, table-driven:
 
 ## Phase 3 — CRE workflows (days 5–8)
 
+Both workflows live in `cre/workflows/`. Everything that decides whether a bond
+is touched, or what number is published under a provider's name, is in
+`cre/lib/` as plain JS under vitest — `simulate` needs an interactive login, so
+logic that lives only in a `.ts` workflow is logic nothing tests per commit.
+
 ### 3.1 Per-request confidential workflow
 
-Inputs: `serviceId`, target URL, method, headers, body, `X-PAYMENT`.
+Inputs: `serviceId`, `requestId`, target URL, method, `X-PAYMENT`, payer,
+paid amount, and the raw `sla` record.
 
-- [ ] Resolve the `sla` text record from the Sepolia resolver
-- [ ] Replay the payment against the provider; measure latency
-- [ ] `evaluate(sla, observation)`
-- [ ] Write `setVerdict` to Arc
-- [ ] Return payload + verdict to the proxy
-- [ ] Keep request credentials encrypted in-enclave
-- [ ] Classify the outcome: no usable response → `DOWN`;
+- [x] The `sla` text record — resolved by the **proxy** and passed in, not read
+      in the enclave. `packages/sdk/ens.js` is the only file that knows ENS
+      exists, and the enclave is not the exception; it arrives raw so the
+      engine, not the workflow, decides whether it parses
+- [x] Replay the payment against the provider; measure latency
+- [x] `evaluate(sla, observation)` — the real `@verdikt/sla`, bundled into the
+      WASM binary (asserted by grepping the bundle for its error strings)
+- [x] Write the verdict to Arc as a DON-signed report
+- [x] Return the verdict to the proxy
+- [x] Keep request credentials in-enclave — no `runtime.log` of the body, and a
+      failed request's message is discarded rather than echoed, since logs leave
+      the enclave
+- [x] Classify the outcome: no usable response → `DOWN`;
       response that broke a clause → `FAIL`
-- [ ] **SLA-unavailable fallback**: ENS unreachable or SLA malformed →
-      status-only default (2xx PASS, 5xx `FAIL`, 4xx no verdict),
-      response still relayed (spec §1)
+- [x] **SLA-unavailable fallback**: unreadable or malformed SLA →
+      status-only default (2xx PASS, 5xx `FAIL`, 4xx no verdict)
+- [x] A `null` outcome writes **nothing** — `onReport` cannot express "no
+      verdict", so the skip happens before a report is built
 
 ### 3.2 Hourly aggregate workflow (plain, cron)
 
-- [ ] Read `VerdictWritten` over the trailing 7 days from Arc
-- [ ] Conformance = `PASS ÷ (PASS + FAIL) × 1000`; unreachable
+- [x] Read `VerdictWritten` over the trailing 7 days from Arc
+- [x] Conformance = `PASS ÷ (PASS + FAIL) × 1000`; unreachable
       calls excluded from the denominator
-- [ ] Availability = `(PASS + FAIL) ÷ all verdicts × 1000`
-- [ ] **Empty window → both ratios 1000**, not 0 — a service with no traffic
-      is presumed healthy (spec §1). Guard the divide-by-zero explicitly;
-      getting this backwards would brand every new listing as broken
-- [ ] Write both text records to the ENS subname
-- [ ] Makes no Arc write and settles no refund (spec §2)
+- [x] Availability = `(PASS + FAIL) ÷ all verdicts × 1000`
+- [x] **Empty window → both ratios 1000**, not 0 — and the service list is
+      built from `ServiceRegistered`, not from the verdicts, because a
+      zero-traffic service can only be *published* as 1000 if it appears in the
+      list at all
+- [x] Write both text records to the ENS subname
+- [x] Makes no Arc write and settles no refund (spec §2)
+
+> **Constraint — the workflow cannot call `setText`.** A workflow holds no key
+> and its only on-chain write is a DON-signed report to an `IReceiver`; an ENS
+> resolver is not one. `contracts/src/VerdiktScoreWriter.sol` on Sepolia holds
+> the key-scoped EAC roles and calls `setText` itself. The report carries the
+> **slug**, not a node, and the node is derived from an immutable parent — so a
+> report can only ever address a child of `verdikt.eth`.
+
+> **Approximation — log timestamps.** An EVM log carries `blockNumber` but no
+> timestamp, and a header read per block would be thousands of calls an hour.
+> Logs are dated from the head block and a configured nominal block time. Fine
+> *here specifically*: both ratios are display-only and recomputed hourly with
+> no refund state behind them, so a verdict on the wrong side of the boundary
+> costs a stale number for an hour. It would not be fine anywhere a refund
+> depended on it.
 
 ### 3.3 Simulation harness
 
-- [ ] Both workflows green under `cre workflow simulate` against the
-      Phase 0 fixtures
-- [ ] Capture the simulation output — it is the submission's evidence, since
-      production enrollment is private-beta
+- [x] `verify` green under `cre workflow simulate --listen`, in confidential
+      mode, driven by a real trigger POST
+- [x] Capture the simulation output — it is the submission's evidence, since
+      production enrollment is private-beta:
+      [evidence/cre-simulate-verify.log](./evidence/cre-simulate-verify.log)
+- [ ] **BLOCKED** — `aggregate` under `simulate`. With
+      `registryDeployBlock: "0"` it scans Arc from genesis and stalls; it needs
+      a deployed registry and its real deploy block, which is 2.4's blocker
 
 ---
 
