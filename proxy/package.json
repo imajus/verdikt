@@ -1,0 +1,17 @@
+{
+  "name": "@verdikt/proxy",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "x402 relay — passthrough branch checks payTo, verified branch triggers the enclave",
+  "comment": "@verdikt/sla is deliberately NOT a dependency. The proxy relays and never evaluates (Specification.md §2); if it needs the engine, something has moved to the wrong side of the enclave boundary.",
+  "scripts": {
+    "dev": "node --watch src/server.js",
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@verdikt/sdk": "workspace:*",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.12.3"
+  }
+}

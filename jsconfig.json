@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "lib": ["es2023"],
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true
+  },
+  "include": [
+    "packages/**/*.js",
+    "packages/**/*.d.ts",
+    "fixtures/**/*.js",
+    "cre/**/*.js",
+    "proxy/**/*.js",
+    "web/**/*.js",
+    "vitest.config.js"
+  ],
+  "exclude": ["**/node_modules/**", "**/dist/**"]
+}

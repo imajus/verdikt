@@ -1,0 +1,7 @@
+packages:
+  - contracts
+  - packages/*
+  - fixtures
+  - cre
+  - proxy
+  - web
