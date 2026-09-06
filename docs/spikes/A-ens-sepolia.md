@@ -177,6 +177,40 @@ ENS SDK and no hand-rolled ABI encoding were needed: `packetToBytes` (from
 `namehash` the rest. Whether the ENS JS SDK also covers this surface was not
 tested — with `viem` sufficient there was nothing to gain by adding it.
 
+### Why not `ensdomains/ens-cli`
+
+[`ens-cli`](https://github.com/ensdomains/ens-cli) covers more of this than
+expected — it knows the ENSv2 Sepolia deployment, uses the same
+`keccak256("OwnedResolver")` / `keccak256("UserRegistry")` salt schemes, and
+generates unsigned calldata for four of `setup-ens.mjs`'s five steps
+(`resolver deploy`, `resolver set`, `subregistry deploy`, `subregistry set`),
+plus `subname create` and `set text`. It cannot replace these scripts:
+
+- **`authorizeTextRoles` does not exist in it.** The string `authorize` appears
+  once in the whole repository, inside a recommendation message. Its role
+  vocabulary is registry-only — there is no `ROLE_SET_TEXT` and no
+  resolver-level EAC at all. That is the one capability ENSv2 was chosen for.
+- **`setParent` does not exist either**, so a namespace built with it alone
+  would not resolve through the hierarchy.
+- **`subname create` defaults the new owner's bitmap to include
+  `ROLE_SET_RESOLVER`** (and its admin role). That is bypass #1 above: a
+  provider onboarded with the default could repoint its own subname at a
+  resolver it controls and forge `conformance`. `--role-bitmap 0` overrides it,
+  but a plausible-looking default that defeats the security model is worse than
+  no tool.
+- It emits calldata only — no broadcasting, no fork rehearsal, and no way to
+  assert a *revert reason*, which is what most of this spike consists of.
+
+Two things were worth taking. `getState(anyId)` returns status, expiry, owner
+and token id in one call, replacing four separate reads here; its results were
+checked against `getStatus`/`findOwner`/`getExpiry`/`findTokenId` on Sepolia for
+a REGISTERED, a RESERVED and an AVAILABLE name and agree in every field. And
+all six shared ENSv2 Sepolia addresses plus both salt schemes match what ENS's
+own tooling uses — an independent confirmation of constants otherwise taken
+from the docs.
+
+## Package layout
+
 The scripts live in a `scripts` workspace package so `viem` resolves without a
 root-level dependency, and share `scripts/ens-sepolia.mjs` — deployment
 addresses, the ABIs both need, role constants, and the anvil helpers. It holds

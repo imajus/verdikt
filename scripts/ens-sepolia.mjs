@@ -61,10 +61,7 @@ export const registryAbi = parseAbi([
   'function getParent() view returns (address, string)',
   'function getSubregistry(string label) view returns (address)',
   'function getResolver(string label) view returns (address)',
-  'function getExpiry(uint256 anyId) view returns (uint64)',
-  'function getStatus(uint256 anyId) view returns (uint8)',
-  'function findOwner(string label) view returns (address)',
-  'function findTokenId(string label) view returns (uint256)',
+  'function getState(uint256 anyId) view returns ((uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource))',
   'function initialize(address rootAccount, uint256 roleBitmap)',
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
 ]);
@@ -109,11 +106,19 @@ export const RESOLVER_ROLES_VERDIKT_NEEDS =
   (1n << 0n) | RESOLVER_ROLE_SET_TEXT | (RESOLVER_ROLE_SET_TEXT << 128n);
 
 /**
- * `IPermissionedRegistry.Status`. Read it with `getStatus`, never by inferring
- * from an owner lookup: a name's token id is NOT its labelhash (the low 32 bits
- * are a version counter that changes on re-registration and role updates), so
+ * `IPermissionedRegistry.Status`, indexed by `getState().status`.
+ *
+ * Read state with `getState`, never by inferring it from an owner lookup: a
+ * name's token id is NOT its labelhash (the low 32 bits are a version counter
+ * that changes on re-registration and role updates), so
  * `latestOwnerOf(labelhash)` returns the zero address for a perfectly healthy
- * REGISTERED name and makes it look RESERVED.
+ * REGISTERED name and makes it look RESERVED. `getState` also returns the
+ * token id, which is the only safe way to obtain one.
+ *
+ * One call covers what `getStatus` + `findOwner` + `getExpiry` + `findTokenId`
+ * did, which is how ensdomains/ens-cli reads a v2 name too; its results were
+ * checked against those four on Sepolia for a REGISTERED, a RESERVED and an
+ * AVAILABLE name and agree in every field.
  */
 export const STATUS = ['AVAILABLE', 'RESERVED', 'REGISTERED'];
 
@@ -126,6 +131,21 @@ export const STATUS = ['AVAILABLE', 'RESERVED', 'REGISTERED'];
  * addresses nothing afterwards. The labelhash is stable for the life of the name.
  */
 export const anyId = (label) => BigInt(keccak256(stringToHex(label)));
+
+/**
+ * One `getState` read for a label, with `status` decoded to a STATUS string.
+ * Everything a caller needs to branch on — status, expiry, owner, token id —
+ * comes back together, so two callers cannot see different points in time.
+ */
+export async function readNameState(publicClient, registry, label) {
+  const state = await publicClient.readContract({
+    address: registry,
+    abi: registryAbi,
+    functionName: 'getState',
+    args: [anyId(label)]
+  });
+  return { ...state, status: STATUS[state.status] };
+}
 
 /**
  * VerifiableFactory salt schemes. The proxy address is fully determined by
