@@ -179,6 +179,29 @@ Production CRE enrollment is currently private-beta; `cre workflow
 simulate` is self-serve, and the ETHOnline2026 Chainlink track explicitly
 accepts CLI simulation as sufficient evidence — not a build blocker.
 
+#### Two workflows, not one
+
+Everything above describes the **per-request** workflow — proxy-triggered,
+right after payment settles, and confidential because it's the one touching
+the provider's actual response. The per-request refund path (§6.3) is
+triggered directly from this workflow's own PASS/FAIL result: same run,
+same trust boundary, no hand-off.
+
+The **hourly** reputation/refund-checkpoint run (§6.1, §6.3) is a
+**separate** CRE workflow, on a scheduler/cron trigger rather than a
+per-request one. It never touches a provider response — it only reads
+`VerdictWritten` events that are already public on Arc — so it has no
+confidentiality requirement and doesn't run inside the TEE. It's a plain
+CRE workflow whose job is aggregation: compute the trailing-7-day ratios,
+settle the idempotent shortfall refund via the checkpoint, write to ENS.
+
+The two are deliberately not merged: piggybacking the hourly aggregate onto
+whichever per-request run happens to land within an hour would make the
+aggregate depend on traffic timing (an hour with zero calls would just
+never publish), and would put non-confidential aggregation logic inside the
+one workflow that has to justify running as a TEE. A dedicated
+scheduler-triggered workflow avoids both.
+
 ### 6.3 On-chain registry
 
 - **Permissionless registration**: `register(serviceId)` on a registrar
@@ -335,7 +358,7 @@ On-chain registry (Arc)
    - auto-refund on per-request FAIL
    - auto-suspend at zero deposit
 
-Chainlink CRE Confidential Workflow (TEE) -- hourly run, trailing 7 days
+Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days
    - reads VerdictWritten events from the trailing 7-day window on Arc
    - computes conformance ratio + availability ratio (0-1000 each)
    - refunds only the new shortfall since Arc's "refunded up to" checkpoint
@@ -356,7 +379,9 @@ Dashboard — reads verdict events/deposit from Arc, SLA + ratios from ENS
 ## 8. Target chain & stack
 
 - **Chain**: Arc, Circle's stablecoin-native L1.
-- **Verification compute**: Chainlink CRE Confidential Workflows.
+- **Verification compute**: Chainlink CRE — a Confidential Workflow (TEE)
+  per request, plus a separate plain (non-confidential) scheduled workflow
+  for the hourly reputation aggregate (§6.2).
 - **Storage**: IPFS for SLA JSON blobs.
 - **Payments**: x402, settled in USDC.
 
