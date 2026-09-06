@@ -19,6 +19,9 @@
 //
 // Every step is idempotent: state is read first and anything already correct is
 // skipped, so re-running after a partial failure resumes rather than reverts.
+// That includes dying between a deployProxy and the pointer write after it: the
+// orphaned proxy is found at its predicted CREATE2 address and reused, since a
+// second deployProxy with the same salt can only revert.
 //
 // HOW IT RUNS
 //
@@ -44,10 +47,14 @@
 import { writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  concatHex,
   createPublicClient,
   createWalletClient,
+  encodeAbiParameters,
   encodeFunctionData,
+  getContractAddress,
   http,
+  keccak256,
   namehash,
   parseEventLogs,
   zeroAddress
@@ -137,6 +144,79 @@ async function readState(publicClient, parentLabel, operator) {
 }
 
 /**
+ * The address a VerifiableFactory deployProxy call from `operator` will land
+ * on, computed offline. From the factory's verified source: the CREATE2 salt
+ * is keccak256(abi.encode(msg.sender, salt)), and the creation code is the
+ * EIP-1167 clone stub around the shared `proxyLogic` address with that salt
+ * appended for extcodecopy. The factory is immutable at its pinned address,
+ * so neither constant can drift for it.
+ */
+function predictProxyAddress(proxyLogic, operator, salt) {
+  const outerSalt = keccak256(
+    encodeAbiParameters([{ type: 'address' }, { type: 'uint256' }], [operator, salt])
+  );
+  return getContractAddress({
+    opcode: 'CREATE2',
+    from: SEPOLIA_ENSV2.VerifiableFactory,
+    salt: outerSalt,
+    bytecode: concatHex([
+      '0x3d604d80600a3d3981f3363d3d373d3d3d363d73',
+      proxyLogic,
+      '0x5af43d82803e903d91602b57fd5bf3',
+      outerSalt
+    ])
+  });
+}
+
+/**
+ * Deploy a proxy through the VerifiableFactory — or reuse the one a previous
+ * partial run left behind. Each setup step is two transactions (deployProxy,
+ * then the pointer write), and the branch that decides whether to deploy only
+ * sees the pointer. A run that died between the two leaves a proxy no pointer
+ * knows about, and redeploying with the same deterministic salt reverts on the
+ * CREATE2 collision — forever, wedging the script. So look for code at the
+ * predicted address first, and have the factory itself vouch for what is there
+ * before trusting it. deployProxy initializes atomically, so a recovered proxy
+ * is never half-set-up; only its pointer write is missing.
+ */
+async function deployProxyOrReuse({ publicClient, send, operator, txs }, { title, label, implementation, salt, initData }) {
+  const proxyLogic = await publicClient.readContract({
+    address: SEPOLIA_ENSV2.VerifiableFactory,
+    abi: factoryAbi,
+    functionName: 'proxyLogic'
+  });
+  const predicted = predictProxyAddress(proxyLogic, operator, salt);
+  const code = await publicClient.getCode({ address: predicted });
+  if (code && code !== '0x') {
+    const impl = await publicClient.readContract({
+      address: SEPOLIA_ENSV2.VerifiableFactory,
+      abi: factoryAbi,
+      functionName: 'verifyContract',
+      args: [predicted]
+    });
+    if (impl.toLowerCase() !== implementation) {
+      throw new Error(`${predicted} was deployed with this salt but implements ${impl}, not ${implementation}`);
+    }
+    console.log(`  reuse  ${label} ${predicted} — deployed by an earlier run, never pointed at`);
+    return predicted;
+  }
+  const tx = {
+    title,
+    to: SEPOLIA_ENSV2.VerifiableFactory,
+    data: encodeFunctionData({
+      abi: factoryAbi,
+      functionName: 'deployProxy',
+      args: [implementation, salt, initData]
+    })
+  };
+  const receipt = await send(tx);
+  const [log] = parseEventLogs({ abi: factoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs });
+  txs.push({ ...tx, result: log.args.proxyAddress });
+  console.log(`  done   ${label} ${log.args.proxyAddress}`);
+  return log.args.proxyAddress;
+}
+
+/**
  * Run the setup against whichever chain `send` is bound to, recording each
  * transaction so the caller can print it. Skips anything already in place.
  */
@@ -163,29 +243,20 @@ async function runSetup({ publicClient, send, operator, parentLabel }) {
         `  note   ${state.resolver} is attached but the operator holds none of its root roles`
       );
     }
-    const tx = {
-      title: 'deploy the operator\'s PermissionedResolver',
-      to: SEPOLIA_ENSV2.VerifiableFactory,
-      data: encodeFunctionData({
-        abi: factoryAbi,
-        functionName: 'deployProxy',
-        args: [
-          SEPOLIA_ENSV2.PermissionedResolverImpl,
-          proxySalt('OwnedResolver', 'address', operator),
-          encodeFunctionData({
-            abi: resolverAbi,
-            functionName: 'initialize',
-            args: [operator, ALL_ROLES, []]
-          })
-        ]
-      })
-    };
-    const receipt = await send(tx);
-    const [log] = parseEventLogs({ abi: factoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs });
-    resolverAddress = log.args.proxyAddress;
-    txs.push({ ...tx, result: resolverAddress });
-    console.log(`  done   resolver ${resolverAddress}`);
-
+    resolverAddress = await deployProxyOrReuse(
+      { publicClient, send, operator, txs },
+      {
+        title: 'deploy the operator\'s PermissionedResolver',
+        label: 'resolver',
+        implementation: SEPOLIA_ENSV2.PermissionedResolverImpl,
+        salt: proxySalt('OwnedResolver', 'address', operator),
+        initData: encodeFunctionData({
+          abi: resolverAbi,
+          functionName: 'initialize',
+          args: [operator, ALL_ROLES, []]
+        })
+      }
+    );
     const point = {
       title: `point ${parentName} at that resolver`,
       to: SEPOLIA_ENSV2.ETHRegistry,
@@ -205,29 +276,20 @@ async function runSetup({ publicClient, send, operator, parentLabel }) {
   if (subRegistryAddress !== zeroAddress) {
     console.log(`  skip   subregistry — ${subRegistryAddress} already set`);
   } else {
-    const tx = {
-      title: `deploy the UserRegistry for ${parentName}`,
-      to: SEPOLIA_ENSV2.VerifiableFactory,
-      data: encodeFunctionData({
-        abi: factoryAbi,
-        functionName: 'deployProxy',
-        args: [
-          SEPOLIA_ENSV2.UserRegistryImpl,
-          proxySalt('UserRegistry', 'bytes32', namehash(parentName)),
-          encodeFunctionData({
-            abi: registryAbi,
-            functionName: 'initialize',
-            args: [operator, ALL_ROLES]
-          })
-        ]
-      })
-    };
-    const receipt = await send(tx);
-    const [log] = parseEventLogs({ abi: factoryAbi, eventName: 'ProxyDeployed', logs: receipt.logs });
-    subRegistryAddress = log.args.proxyAddress;
-    txs.push({ ...tx, result: subRegistryAddress });
-    console.log(`  done   subregistry ${subRegistryAddress}`);
-
+    subRegistryAddress = await deployProxyOrReuse(
+      { publicClient, send, operator, txs },
+      {
+        title: `deploy the UserRegistry for ${parentName}`,
+        label: 'subregistry',
+        implementation: SEPOLIA_ENSV2.UserRegistryImpl,
+        salt: proxySalt('UserRegistry', 'bytes32', namehash(parentName)),
+        initData: encodeFunctionData({
+          abi: registryAbi,
+          functionName: 'initialize',
+          args: [operator, ALL_ROLES]
+        })
+      }
+    );
     const point = {
       title: `point ${parentName} at that subregistry`,
       to: SEPOLIA_ENSV2.ETHRegistry,
