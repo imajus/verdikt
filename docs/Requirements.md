@@ -86,25 +86,30 @@ adapted from IBM's WSLA per-guarantee predicate model[^4]:
   (§6.3) — this is the raw, per-call record; nothing per-call is published
   beyond Arc.
 - **Periodic availability score** — computed as a continuous uptime
-  percentage (100% minus percentage downtime) over a rolling window, then
+  percentage (100% minus percentage downtime) over a trailing window, then
   mapped through a published tier table to a refund percentage, following
   the same tiered-credit approach used in commercial cloud SLAs[^5].
 
-Both scores are aggregated over the same rolling window (e.g. weekly) from
-the window's `VerdictWritten` events, rather than published per call:
-- **SLA conformance ratio** — PASS count ÷ total calls in the window,
-  expressed on a **0–1000 scale** (e.g. 987 = 98.7% conformance) rather than
-  a percentage, since ENS text records are strings and an integer avoids
-  decimal-formatting ambiguity.
+Both scores are recomputed **hourly**, each run reading the trailing
+**7-day** window of `VerdictWritten` events (a rolling window, refreshed
+every hour, not a fixed weekly cutoff) rather than published per call:
+- **SLA conformance ratio** — PASS count ÷ total calls in the trailing
+  7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7% conformance)
+  rather than a percentage, since ENS text records are strings and an
+  integer avoids decimal-formatting ambiguity.
 - **Availability ratio** — the same 0–1000 scale applied to the uptime
   percentage above.
 
-Publishing per-call would mean one ENS write per request; aggregating to a
-weekly ratio means one ENS write per service per window regardless of call
-volume — both cheaper and a better fit for a reputation signal, which
-should describe a service's track record, not its latest single call. The
-per-call events remain the ground truth on Arc; the ratios are a derived,
-periodically-refreshed summary (§6.4).
+Publishing per-call would mean one ENS write per request; an hourly
+rolling-window ratio means at most one ENS write per service per hour
+regardless of call volume — still far cheaper than per-call, and a fresher
+reputation signal than a weekly one, while still describing a week-long
+track record rather than a single call. The per-call events remain the
+ground truth on Arc; the ratios are a derived, hourly-refreshed summary
+(§6.4). Because the window is rolling and overlaps between runs, the refund
+side of this (§6.3) has to pay out only the *new* shortfall each hour, not
+re-settle the whole trailing week every run — see §6.3 for how that's kept
+idempotent.
 
 Both mechanisms share one evaluation engine and one SLA schema — this is a
 single verification stack, not a menu of interchangeable approaches. The
@@ -202,12 +207,16 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
   1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
      automatically (the proxy already correlates request↔payment↔verdict).
-  2. *Periodic availability*: at each monitoring window's end, a scheduled
-     CRE run reads the window's `VerdictWritten` events, computes the
-     conformance and availability ratios (§6.1), distributes a pro-rata
-     refund from the tier table if uptime fell below the SLA's advertised
-     availability, and writes both ratios to the provider's ENS subname
-     (§6.4) — one run, one Arc refund check, one ENS update.
+  2. *Periodic availability*: an **hourly** scheduled CRE run reads the
+     trailing 7 days of `VerdictWritten` events, computes the conformance
+     and availability ratios (§6.1), and writes both to the provider's ENS
+     subname (§6.4) — one run, one ENS update. Because the 7-day window
+     rolls forward and overlaps between hourly runs, the refund side tracks
+     a per-service "refunded up to" timestamp on Arc: each run only
+     distributes a pro-rata refund for the *new* shortfall since that
+     checkpoint (not the full trailing week again), then advances the
+     checkpoint — so an hourly cadence can't pay out the same violation
+     more than once.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up — no governance step.
@@ -268,8 +277,8 @@ build, not something to gloss over in the submission.
     with no Arc involvement — the sole copy of the SLA (§6.3).
   - A **`conformance` text record** — the SLA conformance ratio (0–1000,
     §6.1), and an **`availability` text record** — the availability ratio
-    (0–1000, §6.1), both written by the CRE workflow's signer once per
-    monitoring window (e.g. weekly), not per call. This is the same
+    (0–1000, §6.1), both written by the CRE workflow's signer **hourly**,
+    over the trailing 7-day window (§6.1), not per call. This is the same
     scheduled run that checks Arc's periodic refund path (§6.3), so it's
     the only thing that fans out to both chains from one workflow
     execution — the per-call PASS/FAIL verdicts stay Arc-only events
@@ -326,17 +335,18 @@ On-chain registry (Arc)
    - auto-refund on per-request FAIL
    - auto-suspend at zero deposit
 
-Chainlink CRE Confidential Workflow (TEE) -- periodic run (e.g. weekly)
-   - reads the window's VerdictWritten events from Arc
+Chainlink CRE Confidential Workflow (TEE) -- hourly run, trailing 7 days
+   - reads VerdictWritten events from the trailing 7-day window on Arc
    - computes conformance ratio + availability ratio (0-1000 each)
-   - triggers pro-rata refund on Arc if availability under SLA threshold
+   - refunds only the new shortfall since Arc's "refunded up to" checkpoint
+     (avoids re-paying the same violation across overlapping runs)
    - writes both ratios to the ENS subname (Sepolia)
    |
    v
 ENS subname (Sepolia, verdikt.eth, ENSv2 Permissioned Registry/Resolver)
    - `sla` text record (owner-authored, EAC-scoped to owner only)
    - `conformance` / `availability` text records (CRE-authored,
-     EAC-scoped to CRE signer only, updated per window not per call)
+     EAC-scoped to CRE signer only, refreshed hourly not per call)
    - address record (payout wallet)
    |
    v
@@ -401,13 +411,20 @@ multiple tracks count as one slot).
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
   named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
-- Cross-chain delivery on the periodic run (Arc refund check + ENS
-  `conformance`/`availability` records on Sepolia from one CRE run) needs a
-  defined behavior for partial failure — e.g. the Arc write succeeds but
-  the Sepolia write doesn't land — not yet designed. Lower-stakes than in
-  the earlier per-call design, since this now happens once per window, not
-  once per request; the SLA path has no equivalent risk at all, since it's
-  never written by CRE.
+- Cross-chain delivery on the hourly run (Arc refund checkpoint update +
+  ENS `conformance`/`availability` records on Sepolia from one CRE run)
+  needs a defined behavior for partial failure — e.g. the Arc checkpoint
+  advances but the Sepolia write doesn't land — not yet designed. Lower
+  stakes than a per-call design (once an hour, not once a request), but an
+  hourly cadence runs 168x more often than a weekly one, so this failure
+  mode is worth resolving early rather than deferring; the SLA path has no
+  equivalent risk at all, since it's never written by CRE.
+- The "refunded up to" checkpoint on Arc (§6.3) that keeps hourly,
+  overlapping 7-day-window refund runs idempotent is a new piece of state
+  that doesn't exist in a simpler non-overlapping-window design — needs to
+  be implemented and tested for the case where an hourly run is missed or
+  runs late (does the next run correctly catch up the gap without
+  double-refunding?).
 - ENSv2's Permissioned Registry/Resolver are beta: exact deployed
   Sepolia addresses, ABI stability, and tooling support (viem/ethers/ENS
   SDK) not yet verified against the current build. Since the SLA now has no
