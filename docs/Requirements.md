@@ -6,17 +6,15 @@ x402 (HTTP-native pay-per-call payments) has no verification layer. The
 Facilitator settles payment; the Bazaar directory is self-reported discovery.
 Neither checks that a paid-for API call actually delivered what the provider
 advertised. A 2026 security study of 15 major x402 facilitators — covering
-roughly 99% of observed volume, including Coinbase — found that all 15
-violated at least one security rule across 31 distinct vulnerabilities[^1].
-This is live evidence that "payment settled ≠ service delivered correctly"
-is a real, current gap, not a hypothetical.
+roughly 99% of observed volume, including Coinbase — found all 15 violated at
+least one security rule across 31 distinct vulnerabilities[^1]: payment
+settling correctly does not mean the service delivered correctly.
 
-ERC-8004 ("Trustless Agents") already defines an Identity/Reputation/
-Validation registry pattern for agents, and its own spec text admits it
-"cannot cryptographically guarantee that advertised capabilities are
-functional and non-malicious"[^2]. A 2026 study found zero confirmed mainnet
-deployments of its Validation Registry[^3]. The standard exists; nobody has
-built the missing piece.
+ERC-8004 ("Trustless Agents") defines an Identity/Reputation/Validation
+registry pattern for agents; its own spec text acknowledges it cannot
+cryptographically guarantee advertised capabilities are functional and
+non-malicious[^2], and a 2026 study found zero confirmed mainnet deployments
+of its Validation Registry[^3].
 
 ## 2. Product summary
 
@@ -48,12 +46,11 @@ not depend on either party's judgment.
   correct* (e.g. re-deriving a claimed exchange rate). Scope is
   conformance/delivery verification only (schema, latency, price,
   availability), not epistemic correctness.
-- **Dispute/arbitration layer** — no challenge process. A CRE verdict is
-  final and auto-executes a refund; this is a deliberate design choice (see
-  §6.2), not a shortcut.
+- **Dispute/arbitration layer** — no challenge process; a CRE verdict is
+  final and auto-executes a refund (§6.2).
 - **Weighted multi-clause scoring engine** — no single 0–1 compliance score
-  blending every clause. Boolean clauses stay boolean; only availability is
-  graduated (see §6.1 for the reasoning behind this split).
+  blending every clause; boolean clauses stay boolean, only availability is
+  graduated (§6.1).
 - **Reputation-scaled deposit tiers** — deposit is a fixed amount per
   service for MVP.
 - **Deposit-via-x402** — the bond is paid directly to the escrow contract,
@@ -82,46 +79,37 @@ adapted from IBM's WSLA per-guarantee predicate model[^4]:
 - **Per-request boolean verdict (PASS/FAIL)** — schema/input-output
   conformance, latency, and price range are each evaluated as an
   independent true/false predicate against the provider's declared SLA
-  JSON, per call. Each result is emitted as a `VerdictWritten` event on Arc
-  (§6.3) — this is the raw, per-call record; nothing per-call is published
-  beyond Arc.
+  JSON, per call. Each result emits a `VerdictWritten` event on Arc (§6.3);
+  nothing per-call is published beyond Arc.
 - **Periodic availability score** — computed as a continuous uptime
   percentage (100% minus percentage downtime) over a trailing window, then
   mapped through a published tier table to a refund percentage, following
   the same tiered-credit approach used in commercial cloud SLAs[^5].
 
-Both scores are recomputed **hourly**, each run reading the trailing
-**7-day** window of `VerdictWritten` events (a rolling window, refreshed
-every hour, not a fixed weekly cutoff) rather than published per call:
+Both scores recompute **hourly** from a rolling trailing **7-day** window of
+`VerdictWritten` events:
 - **SLA conformance ratio** — PASS count ÷ total calls in the trailing
   7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7% conformance)
-  rather than a percentage, since ENS text records are strings and an
-  integer avoids decimal-formatting ambiguity.
+  rather than a percentage (ENS text records are strings; an integer avoids
+  decimal-formatting ambiguity).
 - **Availability ratio** — the same 0–1000 scale applied to the uptime
   percentage above.
 
-Publishing per-call would mean one ENS write per request; an hourly
-rolling-window ratio means at most one ENS write per service per hour
-regardless of call volume — still far cheaper than per-call, and a fresher
-reputation signal than a weekly one, while still describing a week-long
-track record rather than a single call. The per-call events remain the
-ground truth on Arc; the ratios are a derived, hourly-refreshed summary
-(§6.4). Because the window is rolling and overlaps between runs, the refund
-side of this (§6.3) has to pay out only the *new* shortfall each hour, not
-re-settle the whole trailing week every run — see §6.3 for how that's kept
-idempotent.
+An hourly rolling-window write costs at most one ENS update per service per
+hour, regardless of call volume, and is fresher than a weekly one while
+still reflecting a week of history. Per-call events remain the ground truth
+on Arc; the ratios are a derived summary (§6.4). Because the window
+overlaps between runs, refunds pay only the new shortfall each hour rather
+than re-settling the full week (§6.3).
 
-Both mechanisms share one evaluation engine and one SLA schema — this is a
-single verification stack, not a menu of interchangeable approaches. The
-formal basis for mixing a boolean-per-clause model with a graduated
-aggregate metric inside one agreement, rather than forcing a uniform
-scoring approach across every clause, comes from Rana et al.'s taxonomy of
-SLA violation types (all-or-nothing / partial / weighted-partial)[^6].
+Both mechanisms share one evaluation engine and one SLA schema. Mixing a
+boolean-per-clause model with one graduated aggregate metric follows Rana
+et al.'s taxonomy of SLA violation types (all-or-nothing / partial /
+weighted-partial)[^6].
 
-Other approaches exist in the literature — rule-based SLA engines[^7] and
-zero-knowledge or TEE-attested compliance proofs[^8] — and are cited here
-for reference, but Verdikt commits to the WSLA-predicate plus tiered-credit
-stack above as its single verification model for this build.
+Other approaches exist — rule-based SLA engines[^7], zero-knowledge/
+TEE-attested compliance proofs[^8] — cited for reference; Verdikt uses the
+WSLA-predicate plus tiered-credit stack above.
 
 #### Why a neutral middleman, not caller-side evaluation
 
@@ -135,76 +123,59 @@ party's evaluation is auditable by anyone else.
 Verdikt instead runs the compliance check inside a neutral, deterministic
 middleman. The same SLA JSON evaluated against the same observed response
 produces the same verdict regardless of who is asking; the verifier role is
-code-enforced and held by neither the provider nor the calling agent (see
-§6.3); and the resulting verdict is written on-chain, so any third party can
-trust it without having to trust the agent or the provider individually.
-This is what makes the reputation system judgment-independent: compliance
-is a deterministic function of (SLA, response), evaluated once by an
-unbiased third party, not negotiated or self-reported by either side.
+code-enforced and held by neither the provider nor the calling agent
+(§6.3); and the resulting verdict is written on-chain, so any third party
+can trust it without having to trust the agent or the provider
+individually. This is what makes the reputation system
+judgment-independent: compliance is a deterministic function of (SLA,
+response), evaluated once by an unbiased third party.
 
 ### 6.2 Verification execution — Chainlink CRE Confidential Workflows
 
-Verification runs inside a Chainlink CRE Confidential Workflow (TEE). Critically,
-the **workflow itself makes the outbound HTTP call to the provider's API** —
+Verification runs inside a Chainlink CRE Confidential Workflow (TEE); the
+workflow itself makes the outbound HTTP call to the provider's API, so
 Verdikt's own proxy/backend never receives or terminates the provider's
-response. If Verdikt's infrastructure fetched the response and only then
-handed it to the enclave for diffing, the response would already have been
-exposed to a party outside the enclave and the confidentiality guarantee
-would be void before verification even started. Confidentiality has to be
-enforced at the point of fetch, not after.
+response. If Verdikt's infrastructure fetched the response first, it would
+already be exposed before the enclave got it — confidentiality has to be
+enforced at the point of fetch.
 
-This is essential, not incidental. API responses frequently contain
-proprietary, licensed, or otherwise valuable data — market data feeds,
-proprietary model outputs, personal data — that a provider has a legitimate
-interest in keeping confidential even from the verification layer itself.
-Because the enclave performs the fetch directly, Verdikt itself never gains
-visibility into response content, only the derived boolean/graduated
-verdict: the provider's data stays private through verification, not just
-through settlement.
+API responses often contain proprietary or otherwise valuable data — market
+data feeds, proprietary model outputs, personal data — that a provider has
+a legitimate interest in keeping confidential even from the verification
+layer. Because the enclave fetches directly, Verdikt never sees response
+content, only the derived verdict.
 
-The workflow architecture is: the enclave fetches the provider's API
-response directly (with any request credentials kept encrypted in-enclave),
-evaluates the independent checks described in §6.1, merges the results,
-releases the response payload to the calling agent, and posts only a
-signed verdict on-chain — per
-[Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall),
-where the confidential workflow itself sits directly in front of the
-sensitive call rather than receiving already-exposed data. Verdikt's own
-backend is reduced to a thin coordinator: it handles the x402 protocol
-handshake (relaying the 402 challenge, correlating payment to request) and
-triggers the workflow run, but never decrypts or logs a provider response
+The enclave fetches the provider's response directly (request credentials
+kept encrypted in-enclave), evaluates the checks in §6.1, releases the
+response to the calling agent, and posts a signed verdict on-chain — per
+[Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall).
+Verdikt's backend is a thin coordinator: it handles the x402 handshake
+(relaying the 402 challenge, correlating payment to request) and triggers
+the workflow run, without ever decrypting or logging a provider response
 body.
 
 Production CRE enrollment is currently private-beta; `cre workflow
-simulate` is self-serve, and the ETHOnline2026 Chainlink track explicitly
-accepts CLI simulation as sufficient evidence — not a build blocker.
+simulate` is self-serve, and the ETHOnline2026 Chainlink track accepts CLI
+simulation as sufficient evidence.
 
-#### Two workflows, not one
+#### Two CRE workflows
 
-Everything above describes the **per-request** workflow — proxy-triggered,
-right after payment settles, and confidential because it's the one touching
-the provider's actual response. The per-request refund path (§6.3) is
-triggered directly from this workflow's own PASS/FAIL result: same run,
-same trust boundary, no hand-off.
+The workflow above is per-request: proxy-triggered right after payment
+settles, confidential because it touches the provider's actual response. It
+also triggers the per-request refund (§6.3) directly from its own
+PASS/FAIL result.
 
-The **hourly** reputation/refund-checkpoint run (§6.1, §6.3) is a
-**separate** CRE workflow, on a scheduler/cron trigger rather than a
-per-request one. It never touches a provider response — it only reads
-`VerdictWritten` events that are already public on Arc — so it has no
-confidentiality requirement and doesn't run inside the TEE. It's a plain
-CRE workflow whose job is aggregation: compute the trailing-7-day ratios,
-settle the idempotent shortfall refund via the checkpoint, write to ENS.
-This split is a directly supported CRE pattern, not a workaround:
-confidentiality is an optional, layered feature of a workflow, not a
-property every CRE workflow must have, and the Cron trigger is a first-class
-standard trigger type alongside HTTP and on-chain-event triggers[^10].
+The hourly reputation/refund-checkpoint run (§6.1, §6.3) is a separate CRE
+workflow on a cron trigger. It only reads `VerdictWritten` events already
+public on Arc, so it needs no confidentiality and doesn't run in the TEE:
+it computes the trailing-7-day ratios, settles the idempotent shortfall
+refund via the checkpoint, and writes to ENS. Confidentiality is an
+optional, layered feature of a CRE workflow, and Cron is a first-class
+trigger type alongside HTTP and on-chain events[^10].
 
-The two are deliberately not merged: piggybacking the hourly aggregate onto
-whichever per-request run happens to land within an hour would make the
-aggregate depend on traffic timing (an hour with zero calls would just
-never publish), and would put non-confidential aggregation logic inside the
-one workflow that has to justify running as a TEE. A dedicated
-scheduler-triggered workflow avoids both.
+Merging the two would make the aggregate depend on traffic timing (an hour
+with zero calls would never publish) and put non-confidential logic inside
+the TEE workflow — kept separate instead.
 
 ### 6.3 On-chain registry
 
@@ -212,24 +183,19 @@ scheduler-triggered workflow avoids both.
   contract, posting the required deposit. `serviceId` = `keccak256` of a
   human-chosen slug. The same slug doubles as the `<slug>.verdikt.bond`
   routing subdomain and the `<slug>.verdikt.eth` ENS subname label (§6.4) —
-  one identifier, reused everywhere, rather than a separate mapping table
-  per surface.
+  one identifier, reused across all three surfaces.
 - **Deposit/bond**: held in an escrow contract keyed by `serviceId`, paid in
   USDC, **fixed amount** for MVP (no reputation-scaled tiering). This is the
   pool refunds are paid from. Paid directly to escrow, not through the
   proxy.
-- **No SLA storage on Arc**: the registry struct has no SLA field and there
-  is no `setSLA` function. The SLA lives in exactly one place — the
-  provider's ENS subname (§6.4) — so there is nothing on Arc that could
-  drift out of sync with it. The verification workflow reads the SLA
-  straight from ENS at run time; this is what makes the verification logic
-  generic, since it diffs against whatever the provider committed to on
-  ENS, not a hardcoded per-service check or a second, Arc-side copy.
+- **No SLA storage on Arc**: the registry struct has no SLA field and no
+  `setSLA` function. The SLA lives only on the provider's ENS subname
+  (§6.4); the verification workflow reads it from ENS at run time, diffing
+  against whatever the provider published there.
 - **One role per service**: verifier only (the CRE workflow's callback
   signer, can `setVerdict`). Neither the provider nor Verdikt itself can
-  write a verdict — enforced at the contract level, not by convention. The
-  provider has no write role on Arc at all; their authorship happens
-  entirely on the ENS side (§6.4).
+  write a verdict — enforced at the contract level. The provider has no
+  write role on Arc — their authorship happens on the ENS side (§6.4).
 - **Two refund paths, both auto-executed, no dispute step**:
   1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
@@ -237,56 +203,42 @@ scheduler-triggered workflow avoids both.
   2. *Periodic availability*: an **hourly** scheduled CRE run reads the
      trailing 7 days of `VerdictWritten` events, computes the conformance
      and availability ratios (§6.1), and writes both to the provider's ENS
-     subname (§6.4) — one run, one ENS update. Because the 7-day window
-     rolls forward and overlaps between hourly runs, the refund side tracks
-     a per-service "refunded up to" timestamp on Arc: each run only
-     distributes a pro-rata refund for the *new* shortfall since that
-     checkpoint (not the full trailing week again), then advances the
-     checkpoint — so an hourly cadence can't pay out the same violation
-     more than once.
+     subname (§6.4). A per-service "refunded up to" checkpoint on Arc
+     tracks how far refunds have been settled, so each run pays only the
+     new shortfall since that checkpoint and advances it — the overlapping
+     rolling window can't pay the same violation twice.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
-  payments to it until topped up — no governance step.
+  payments to it until topped up.
 - **Reading**: any agent or dApp checks a service's verdict/deposit via view
   functions (`getVerdict`, `getDeposit`) on Arc, and its SLA by resolving
-  the ENS subname directly (§6.4) — there's no `getSLA` on Arc, since Arc
-  never held it. A minimal JS SDK (or thin REST wrapper) should ship
-  alongside the contract to keep integration cost low, and should wrap both
+  the ENS subname directly (§6.4) — no `getSLA` on Arc. A minimal JS SDK
+  (or thin REST wrapper) should ship alongside the contract to wrap both
   lookups so callers don't need to know two chains are involved.
 - **History**: a standard `VerdictWritten` event on Arc for verdict history,
   replayable directly off an RPC node with no subgraph dependency. SLA edit
-  history is likewise free — ENS's own `TextChanged` event on the
-  Permissioned Resolver (Sepolia) already covers it; no custom event
-  needed.
+  history is covered by ENS's own `TextChanged` event on the Permissioned
+  Resolver (Sepolia); no custom event needed.
 
 ### 6.4 ENS integration — the SLA source of truth
 
-Verdikt targets **ENSv2 exclusively** — the Permissioned Registry and
-Permissioned Resolver — not ENSv1. This is a deliberate narrowing, not an
-oversight: ENSv2's Enhanced Access Control (EAC) lets a resolver scope write
-permission down to a single text-record key via
-`authorizeTextRoles(name, key, account, grant)`, so an address can be
-granted the right to write *only* the `sla` key, or *only* the `conformance`/
-`availability` keys, with any other key reverting for that address. ENSv1's
-PublicResolver has no equivalent — any approved operator on a name can write
-any text key — so it cannot make the guarantee this design depends on: the
-provider can write their own SLA, the CRE verifier can write the reputation
-ratios, and neither can touch the other's key, enforced by the resolver
-contract itself rather than by convention.
+Verdikt targets ENSv2's Permissioned Registry and Permissioned Resolver,
+not ENSv1. ENSv2's Enhanced Access Control (EAC) scopes write permission to
+a single text-record key via `authorizeTextRoles(name, key, account,
+grant)`: an address can be granted rights to write only the `sla` key, or
+only the `conformance`/`availability` keys, with any other key reverting.
+ENSv1's PublicResolver has no equivalent — any approved operator can write
+any text key — so it can't enforce that the provider writes only the SLA
+and the CRE verifier writes only the reputation ratios.
 
-That per-key ACL is why the SLA now lives **only** on ENS, with no second
-copy anywhere. Earlier drafts had the provider write the SLA to Arc's
-registry and mirror it to ENS; that's a two-copy design with nothing
-enforcing they stay identical. With EAC scoping the SLA text record, Arc's
-registry doesn't need to store the SLA at all (§6.3) — the ENS record simply
-*is* the SLA, and the CRE workflow reads it from there directly at
-verification time.
+That per-key ACL is why the SLA lives only on ENS, not duplicated on Arc
+(§6.3) — the ENS record is the SLA, and the CRE workflow reads it directly
+at verification time.
 
-The trade-off, stated plainly: ENSv2 has no mainnet deployment, so this
-namespace runs on **Sepolia**, not mainnet. Verdikt's identity/SLA layer is
-therefore a testnet component alongside Arc's own testnet, not a
-`verdikt.eth` mainnet name — an accepted scope decision for a two-week
-build, not something to gloss over in the submission.
+Trade-off: ENSv2 has no mainnet deployment, so this namespace runs on
+**Sepolia** — Verdikt's identity/SLA layer is a testnet component alongside
+Arc's own testnet, not a `verdikt.eth` mainnet name. An accepted scope
+decision for a two-week build.
 
 - Each API provider registers a **subname** under `verdikt.eth` on the
   ENSv2 Permissioned Registry (Sepolia), e.g. `provider-name.verdikt.eth`.
@@ -297,38 +249,33 @@ build, not something to gloss over in the submission.
 - At mint time, the resolver's EAC roles are set: the provider's address
   gets a role scoped to the `sla` key only; the CRE workflow's signer
   address gets a role scoped to the `conformance` and `availability` keys
-  only. This is a one-time authorization at registration, not a per-write
-  step.
+  only, granted once at registration.
 - The subname carries four records:
   - An **`sla` text record**, written directly by the provider, any time,
     with no Arc involvement — the sole copy of the SLA (§6.3).
   - A **`conformance` text record** — the SLA conformance ratio (0–1000,
     §6.1), and an **`availability` text record** — the availability ratio
-    (0–1000, §6.1), both written by the CRE workflow's signer **hourly**,
-    over the trailing 7-day window (§6.1), not per call. This is the same
-    scheduled run that checks Arc's periodic refund path (§6.3), so it's
-    the only thing that fans out to both chains from one workflow
-    execution — the per-call PASS/FAIL verdicts stay Arc-only events
-    (§6.1) and never touch ENS individually.
+    (0–1000, §6.1), both written by the CRE workflow's signer hourly over
+    the trailing 7-day window (§6.1), not per call. This is the same
+    scheduled run that checks Arc's periodic refund path (§6.3); per-call
+    PASS/FAIL verdicts stay Arc-only events (§6.1) and never touch ENS
+    individually.
   - An **address record**, owner-controlled, set to the provider's
     payout wallet.
 - At payment time, the CRE workflow resolves the subname's address record
   and compares it against the `payTo` address in the live x402 402
-  response. A mismatch blocks payment before it is sent — this must be a
-  pre-payment gate, not a post-hoc verdict like the checks in §6.1, because
-  once an agent pays a spoofed address there is no bonded deposit to
-  reclaim it from.
+  response. A mismatch blocks payment before it is sent — checked
+  pre-payment, not post-hoc like §6.1's checks, since a spoofed payTo
+  address leaves no bonded deposit to reclaim funds from.
 - The CRE workflow reads the live `sla` text record straight from the
-  Permissioned Resolver (Sepolia) as its verification input — there is no
-  IPFS pointer or Arc-side field to go stale or drift out of sync with what
-  the provider actually published on ENS.
+  Permissioned Resolver (Sepolia) as its verification input, with no IPFS
+  pointer or Arc-side copy to drift out of sync.
 
 ### 6.5 Product / dashboard
 
 - **MVP**: a platform dashboard (own web UI) showing aggregate stats —
   services registered, verdict breakdown (PASS/FAIL), deposits held,
-  refunds paid out over time. This is the primary demo surface, not just
-  backend contracts.
+  refunds paid out over time. The primary demo surface.
 - **Stretch, in priority order**:
   1. Provider self-serve dashboard (own verdict history, deposit balance,
      SLA-JSON editor).
@@ -389,12 +336,12 @@ Dashboard — reads verdict events/deposit from Arc, SLA + ratios from ENS
 - **Storage**: IPFS for SLA JSON blobs.
 - **Payments**: x402, settled in USDC.
 
-Verdikt is a natural fit for Arc's agent-commerce ecosystem specifically:
-Circle's own [agent marketplace](https://agents.circle.com/sell) lets
-providers list x402 endpoints for agents to discover and pay, and scores an
-endpoint's "agent-readiness" before it goes live (e.g.
+Verdikt is a natural fit for Arc's agent-commerce ecosystem: Circle's own
+[agent marketplace](https://agents.circle.com/sell) lets providers list
+x402 endpoints for agents to discover and pay, and scores an endpoint's
+"agent-readiness" before it goes live (e.g.
 [agents.circle.com/sell/score?url=nano.blockrun.ai](https://agents.circle.com/sell/score?url=nano.blockrun.ai)).
-That scoring step checks whether an endpoint is *structurally* ready to be
+That scoring step checks whether an endpoint is structurally ready to be
 listed — it does not check whether a listed endpoint keeps delivering what
 it promised after it's live and being paid per call. Verdikt is the missing
 piece downstream of listing: ongoing, automatic verification of delivery
@@ -410,8 +357,7 @@ multiple tracks count as one slot).
 - **Arc** — confirmed. Chain the registry and demo API run on.
 - **ENS** — confirmed. `verdikt.eth` subnames on ENSv2's Permissioned
   Registry/Resolver are the SLA source of truth and reputation-interface
-  layer (§6.4), using Enhanced Access Control's per-key role scoping —
-  not an optional add-on, and not just a naming convenience.
+  layer (§6.4), using Enhanced Access Control's per-key role scoping.
 
 ## 10. Competitive landscape
 
@@ -425,10 +371,9 @@ multiple tracks count as one slot).
 - **x402disputes.com** and **x402r.org** — both address x402 refunds, but
   via manual dispute/arbitration: a party files a dispute with evidence
   (x402disputes.com) or an escrow with a pluggable arbiter resolves a claim
-  (x402r.org). Verdikt's core distinction from both is that it never
-  invokes a human or third-party arbiter — the verdict is a deterministic,
-  automatic function of the SLA and the observed response (§6.1), with no
-  dispute step at all.
+  (x402r.org). Verdikt never invokes a human or third-party arbiter — the
+  verdict is a deterministic, automatic function of the SLA and the
+  observed response (§6.1).
 - **Edge & Node's ampersend** — an agent-payment dashboard on x402 + A2A +
   ERC-8004 covering budget limits and allowlists; a human-configured
   spend-management tool, not an automated verification/reputation proxy.
@@ -440,32 +385,25 @@ multiple tracks count as one slot).
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
   named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
-- Cross-chain delivery on the hourly run (Arc refund checkpoint update +
-  ENS `conformance`/`availability` records on Sepolia from one CRE run)
-  needs a defined behavior for partial failure — e.g. the Arc checkpoint
-  advances but the Sepolia write doesn't land — not yet designed. Lower
-  stakes than a per-call design (once an hour, not once a request), but an
-  hourly cadence runs 168x more often than a weekly one, so this failure
-  mode is worth resolving early rather than deferring; the SLA path has no
-  equivalent risk at all, since it's never written by CRE.
-- The "refunded up to" checkpoint on Arc (§6.3) that keeps hourly,
-  overlapping 7-day-window refund runs idempotent is a new piece of state
-  that doesn't exist in a simpler non-overlapping-window design — needs to
-  be implemented and tested for the case where an hourly run is missed or
-  runs late (does the next run correctly catch up the gap without
-  double-refunding?).
-- ENSv2's Permissioned Registry/Resolver are beta: exact deployed
-  Sepolia addresses, ABI stability, and tooling support (viem/ethers/ENS
-  SDK) not yet verified against the current build. Since the SLA now has no
-  Arc-side fallback, this dependency needs to be confirmed early, not
-  discovered mid-build.
-- Verdikt's identity/SLA layer runs on Sepolia (ENSv2 has no mainnet
-  deployment), separate from Arc's own network — should be stated
-  explicitly in the submission as a scope decision, not left implicit.
+- Cross-chain delivery on the hourly run (Arc checkpoint update + ENS
+  `conformance`/`availability` write) has no defined behavior for partial
+  failure — e.g. checkpoint advances but the Sepolia write doesn't land.
+  Runs 168x more often than the earlier weekly design, so worth resolving
+  early. The SLA path has no equivalent risk since it's never written by
+  CRE.
+- The "refunded up to" checkpoint on Arc (§6.3) needs testing for missed or
+  late runs — does the next run catch up the gap without double-refunding?
+- ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
+  ABI stability, and tooling support (viem/ethers/ENS SDK) not yet
+  verified. The SLA has no Arc-side fallback, so this needs confirming
+  early.
+- Identity/SLA layer runs on Sepolia (ENSv2 has no mainnet deployment),
+  separate from Arc's own network — a scope decision to state explicitly
+  in the submission.
 - verdikt.bond domain not yet purchased — price/listing legitimacy
   unverified.
-- No dispute layer is a deliberate design choice, and should be stated
-  explicitly and confidently in the submission, not hedged.
+- No dispute layer is a deliberate design choice — state it confidently in
+  the submission.
 
 [^1]: A 2026 security study (reported via CryptoSlate) tested 15 major x402
     facilitators, including Coinbase, and found all 15 violated at least
