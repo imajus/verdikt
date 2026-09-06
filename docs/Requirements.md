@@ -168,17 +168,18 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
   USDC, **fixed amount** for MVP (no reputation-scaled tiering). This is the
   pool refunds are paid from. Paid directly to escrow, not through the
   proxy.
-- **SLA record**: provider writes one JSON blob (schema, max latency, min
-  availability, cost, refund policy) to IPFS, pointed to by a string field
-  on the registry struct. Mutable any time by the owner. This is what makes
-  the verification logic generic — it diffs against whatever the provider
-  committed to, not a hardcoded per-service check.
-- **Two roles per service**: owner (can `setSLA`) and verifier (the CRE
-  workflow's callback signer, can `setVerdict`). Neither the provider nor
-  Verdikt itself can write a verdict — enforced at the contract level, not
-  by convention. Both writes also fan out to the provider's ENS subname
-  (§6.4), since the registry and the ENS record are two different chains,
-  not two calls on one contract.
+- **No SLA storage on Arc**: the registry struct has no SLA field and there
+  is no `setSLA` function. The SLA lives in exactly one place — the
+  provider's ENS subname (§6.4) — so there is nothing on Arc that could
+  drift out of sync with it. The verification workflow reads the SLA
+  straight from ENS at run time; this is what makes the verification logic
+  generic, since it diffs against whatever the provider committed to on
+  ENS, not a hardcoded per-service check or a second, Arc-side copy.
+- **One role per service**: verifier only (the CRE workflow's callback
+  signer, can `setVerdict`). Neither the provider nor Verdikt itself can
+  write a verdict — enforced at the contract level, not by convention. The
+  provider has no write role on Arc at all; their authorship happens
+  entirely on the ENS side (§6.4).
 - **Two refund paths, both auto-executed, no dispute step**:
   1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
@@ -190,59 +191,76 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up — no governance step.
-- **Reading**: any agent or dApp checks a service's SLA/reputation via view
-  functions (`getSLA`, `getVerdict`, `getDeposit`). A minimal JS SDK (or
-  thin REST wrapper) should ship alongside the contract to keep integration
-  cost low.
-- **History**: standard events (`SLAUpdated`, `VerdictWritten`) on every
-  write — verdict history is replayable directly off an RPC node, no
-  subgraph dependency.
+- **Reading**: any agent or dApp checks a service's verdict/deposit via view
+  functions (`getVerdict`, `getDeposit`) on Arc, and its SLA by resolving
+  the ENS subname directly (§6.4) — there's no `getSLA` on Arc, since Arc
+  never held it. A minimal JS SDK (or thin REST wrapper) should ship
+  alongside the contract to keep integration cost low, and should wrap both
+  lookups so callers don't need to know two chains are involved.
+- **History**: a standard `VerdictWritten` event on Arc for verdict history,
+  replayable directly off an RPC node with no subgraph dependency. SLA edit
+  history is likewise free — ENS's own `TextChanged` event on the
+  Permissioned Resolver (Sepolia) already covers it; no custom event
+  needed.
 
-### 6.4 ENS integration
+### 6.4 ENS integration — the SLA source of truth
 
-Verdikt uses `verdikt.eth` as a namespace for provider identity. This is not
-a side-channel bolted onto the registry — it's the human/agent-facing
-interface layer that any ENS-aware wallet, explorer, or agent framework can
-read directly, without knowing Verdikt's own contract ABI.
+Verdikt targets **ENSv2 exclusively** — the Permissioned Registry and
+Permissioned Resolver — not ENSv1. This is a deliberate narrowing, not an
+oversight: ENSv2's Enhanced Access Control (EAC) lets a resolver scope write
+permission down to a single text-record key via
+`authorizeTextRoles(name, key, account, grant)`, so an address can be
+granted the right to write *only* the `sla` key, or *only* the `verdict`
+key, with any other key reverting for that address. ENSv1's PublicResolver
+has no equivalent — any approved operator on a name can write any text
+key — so it cannot make the guarantee this design depends on: the provider
+can write their own SLA, the CRE verifier can write the reputation record,
+and neither can touch the other's key, enforced by the resolver contract
+itself rather than by convention.
 
-ENS names resolve on Ethereum, not on Arc, which is Verdikt's registry
-chain. There is no single contract that can hold both an ENS subname's
-records and Arc-side USDC deposits — these are necessarily two contracts on
-two chains, kept in sync by CRE rather than merged. This also settles which
-ENS generation to build on: ENSv2's Permissioned Registry is a purpose-built
-naming/permission contract (ERC1155-based, role-gated subname lifecycle),
-not designed to be extended with custom escrow logic, and it is currently
-beta and live only on Sepolia with no mainnet deployment. Verdikt uses the
-standard, live ENSv1 `.eth` registrar and PublicResolver instead.
+That per-key ACL is why the SLA now lives **only** on ENS, with no second
+copy anywhere. Earlier drafts had the provider write the SLA to Arc's
+registry and mirror it to ENS; that's a two-copy design with nothing
+enforcing they stay identical. With EAC scoping the SLA text record, Arc's
+registry doesn't need to store the SLA at all (§6.3) — the ENS record simply
+*is* the SLA, and the CRE workflow reads it from there directly at
+verification time.
 
-- Each API provider registers a **subname** under `verdikt.eth` (e.g.
-  `provider-name.verdikt.eth`) to represent their listed service. The label
-  is the same human-chosen slug used for the on-chain `serviceId` (§6.3),
-  so `provider-name.verdikt.bond/<path>` — the URL agents actually
+The trade-off, stated plainly: ENSv2 has no mainnet deployment, so this
+namespace runs on **Sepolia**, not mainnet. Verdikt's identity/SLA layer is
+therefore a testnet component alongside Arc's own testnet, not a
+`verdikt.eth` mainnet name — an accepted scope decision for a two-week
+build, not something to gloss over in the submission.
+
+- Each API provider registers a **subname** under `verdikt.eth` on the
+  ENSv2 Permissioned Registry (Sepolia), e.g. `provider-name.verdikt.eth`.
+  The label is the same human-chosen slug used for the on-chain `serviceId`
+  (§6.3), so `provider-name.verdikt.bond/<path>` — the URL agents actually
   call — maps directly to `provider-name.verdikt.eth` with no separate
-  lookup table: wildcard routing on `*.verdikt.bond` resolves the
-  subdomain label straight to both the registry entry and the ENS subname.
-- Registering the subname (part of `register()`, §6.3) also grants a
-  CRE-controlled Ethereum-side writer operator approval on that subname, so
-  later verdict/SLA updates don't need a fresh per-write authorization step.
+  lookup table.
+- At mint time, the resolver's EAC roles are set: the provider's address
+  gets a role scoped to the `sla` key only; the CRE workflow's signer
+  address gets a role scoped to the `verdict` key only. This is a one-time
+  authorization at registration, not a per-write step.
 - The subname carries three records:
-  - A **custom text record** holding (or pointing to, e.g. via an IPFS
-    hash) the provider's SLA JSON, kept in sync with `setSLA` (§6.3).
-  - A **reputation text record** mirroring the latest verdict/compliance
-    status, kept in sync with `setVerdict` (§6.3) — so a provider's
-    standing is visible to any tool that resolves `provider-name.verdikt.eth`,
-    not just to Verdikt's own dashboard.
-  - An **address record** set to the API provider's owner/payout wallet.
+  - An **`sla` text record**, written directly by the provider, any time,
+    with no Arc involvement — the sole copy of the SLA (§6.3).
+  - A **`verdict` text record**, written by the CRE workflow's signer after
+    each verification run — the same run that also triggers the Arc-side
+    refund logic (§6.3), so this write (not the SLA) is what fans out to
+    both chains from one workflow execution.
+  - An **address record**, owner-controlled, set to the provider's
+    payout wallet.
 - At payment time, the CRE workflow resolves the subname's address record
   and compares it against the `payTo` address in the live x402 402
   response. A mismatch blocks payment before it is sent — this must be a
   pre-payment gate, not a post-hoc verdict like the checks in §6.1, because
   once an agent pays a spoofed address there is no bonded deposit to
   reclaim it from.
-- Each CRE run that produces a verdict fans out to both chains in the same
-  workflow: the refund-triggering write to the Arc registry, and the
-  reputation text-record update on Ethereum — one verification event, two
-  destinations, rather than a separate sync service that could drift or lag.
+- The CRE workflow reads the live `sla` text record straight from the
+  Permissioned Resolver (Sepolia) as its verification input — there is no
+  IPFS pointer or Arc-side field to go stale or drift out of sync with what
+  the provider actually published on ENS.
 
 ### 6.5 Product / dashboard
 
@@ -270,23 +288,24 @@ correlation only; never decrypts or logs a provider response)
    v
 Chainlink CRE Confidential Workflow (TEE)
    - fetches the provider's API response directly, inside the enclave
-   - resolves provider's SLA JSON (IPFS / verdikt.eth text record)
+   - resolves provider's live SLA from the ENS Permissioned Resolver
+     (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
    - diffs observed response vs SLA -> PASS/FAIL + availability score
    - releases the response payload to the calling agent
-   - posts the signed verdict to both chains below
+   - writes the verdict: Arc (refund trigger) + ENS `verdict` key (Sepolia)
    |
    +-----------------------------+
    v                             v
-On-chain registry (Arc)     ENS subname (Ethereum, verdikt.eth)
-   - SLA record, verdict,      - SLA text record
-     deposit balance, roles    - reputation/verdict text record
-   - auto-refund on FAIL /     - address record (payout wallet)
-     low availability
-   - auto-suspend at zero
-     deposit
+On-chain registry (Arc)     ENS subname (Sepolia, verdikt.eth,
+   - verdict, deposit          ENSv2 Permissioned Registry/Resolver)
+     balance -- no SLA field     - `sla` text record (owner-authored,
+   - auto-refund on FAIL /        EAC-scoped to owner only)
+     low availability            - `verdict` text record (CRE-authored,
+   - auto-suspend at zero          EAC-scoped to CRE signer only)
+     deposit                     - address record (payout wallet)
    |
    v
-Dashboard — reads registry via SDK/view functions
+Dashboard — reads verdict/deposit from Arc, SLA from ENS
 ```
 
 ## 8. Target chain & stack
@@ -315,8 +334,10 @@ multiple tracks count as one slot).
 
 - **Chainlink** — confirmed. CRE is the verification engine itself.
 - **Arc** — confirmed. Chain the registry and demo API run on.
-- **ENS** — confirmed. `verdikt.eth` subnames are the provider-identity and
-  reputation-interface layer (§6.4), not an optional add-on.
+- **ENS** — confirmed. `verdikt.eth` subnames on ENSv2's Permissioned
+  Registry/Resolver are the SLA source of truth and reputation-interface
+  layer (§6.4), using Enhanced Access Control's per-key role scoping —
+  not an optional add-on, and not just a naming convenience.
 
 ## 10. Competitive landscape
 
@@ -345,9 +366,19 @@ multiple tracks count as one slot).
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
   named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
-- Cross-chain verdict delivery (Arc registry + Ethereum ENS record from one
-  CRE run) needs a defined behavior for partial failure — e.g. the Arc
-  write succeeds but the Ethereum write doesn't land — not yet designed.
+- Cross-chain verdict delivery (Arc registry + ENS `verdict` record on
+  Sepolia from one CRE run) needs a defined behavior for partial failure —
+  e.g. the Arc write succeeds but the Sepolia write doesn't land — not yet
+  designed. The SLA path has no equivalent risk, since it's never written
+  by CRE at all.
+- ENSv2's Permissioned Registry/Resolver are beta: exact deployed
+  Sepolia addresses, ABI stability, and tooling support (viem/ethers/ENS
+  SDK) not yet verified against the current build. Since the SLA now has no
+  Arc-side fallback, this dependency needs to be confirmed early, not
+  discovered mid-build.
+- Verdikt's identity/SLA layer runs on Sepolia (ENSv2 has no mainnet
+  deployment), separate from Arc's own network — should be stated
+  explicitly in the submission as a scope decision, not left implicit.
 - verdikt.bond domain not yet purchased — price/listing legitimacy
   unverified.
 - No dispute layer is a deliberate design choice, and should be stated
