@@ -14,9 +14,15 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 
 ## Current state
 
-Wave 0 (seams) only. Every JS function throws `NOT_IMPLEMENTED` and `IVerdiktRegistry.sol` is an interface with no bodies. The exceptions are the enum mappings in `packages/sdk/registry.js`, which are implemented because they *are* the seam.
+Wave 0 (seams) plus the three spikes. Most JS functions still throw `NOT_IMPLEMENTED` and `IVerdiktRegistry.sol` is an interface with no bodies. What is real: the enum mappings in `packages/sdk/registry.js` (they *are* the seam), all of `packages/sdk/payment.js` plus `fixtures/x402.js`, and `cre/spike/` (Spike B's workflow, a spike and not the shipping one).
 
-Three spikes in `docs/Tasks.md` §0.2–0.4 gate everything downstream. Spike A (ENSv2 on Sepolia) has run and passed — `pnpm spike:ens`, findings in `docs/spikes/A-ens-sepolia.md`. CRE simulate and `X-PAYMENT` decoding have not; don't build on assumptions they're meant to resolve.
+All three spikes in `docs/Tasks.md` §0.2–0.4 have run and their gates passed: Spike A (ENSv2 on Sepolia) — `pnpm spike:ens`, `docs/spikes/A-ens-sepolia.md` — Spike B (Chainlink CRE) — `cre/spike/`, `docs/spikes/cre.md`, with `cre workflow simulate` still unrun because it needs a browser login — and Spike C (`X-PAYMENT` decoding) — `pnpm spike:payment`, `docs/spikes/C-x402-payment.md`.
+
+Three results from Spike C change what downstream code must do:
+
+- The payer and amount **are** cryptographically bound (fields of the signed EIP-3009 struct), so the settlement-receipt fallback is not needed for identity. `decodePayment` recovers the signer and returns nothing on mismatch.
+- A signed authorization is an **intent to pay, not a payment**, and stays valid ~7 days. The enclave must confirm the settlement receipt before writing any verdict — including a `DOWN`, which is otherwise the exact shape of a refund farm. Not built yet; Phase 3 owes it.
+- `GatewayWalletBatched` is an EIP-712 domain name, not a scheme. The scheme string is `exact`, and one decoder handles vanilla x402 too.
 
 ## Commands
 
@@ -26,7 +32,12 @@ pnpm typecheck                   # tsc --noEmit against jsconfig.json
 pnpm test                        # vitest run
 pnpm vitest run path/to.test.js  # single test file
 pnpm vitest run -t "name"        # single test by name
+pnpm spike:ens                   # Spike A's evidence (forked Sepolia)
+pnpm spike:payment               # Spike C's evidence; --live also hits Arc RPC
 ```
+
+`pnpm spike:payment` regenerates `fixtures/x402.js`. It is deterministic, so a
+dirty tree after running it means something drifted.
 
 ```bash
 cd contracts
@@ -39,7 +50,7 @@ forge test --match-contract Registry   # single contract
 
 Foundry installs to `~/.foundry/bin` and its installer writes the `PATH` line to `~/.profile`, which zsh does not read. Use the absolute path or add it to `~/.zshrc`.
 
-`passWithNoTests` is set in `vitest.config.js` because Wave 0 ships no tests. Remove it with the first real test — left in, it silently tolerates a suite that has vanished.
+`vitest.config.js` no longer sets `passWithNoTests` — Spike C landed the first real tests, so an empty suite is a failure again.
 
 ## Architecture
 
@@ -73,12 +84,15 @@ A verdict is final with no dispute layer, so these are correctness, not style:
 - **An empty aggregation window yields 1000, not 0.** A service with no traffic is presumed healthy. Getting this backwards brands every new listing as broken.
 - **`evaluate` is pure.** No I/O, no clock, no network, no floating point. Latency is an input, never measured inside. Price comparison in integer minor units.
 - **Outcome ordinals are mirrored** in `IVerdiktRegistry.Outcome` and `OUTCOME_ORDINAL` in `packages/sdk/registry.js`. Changing one without the other silently reclassifies a FAIL as a PASS.
-- **`paidAmount` is a `bigint` in minor units** everywhere past `decodePayment`. That boundary is what keeps the engine independent of whatever Spike C finds in the header.
+- **`paidAmount` is a `bigint` in minor units** everywhere past `decodePayment`. That boundary is what keeps the engine independent of the header's wire format.
+- **The paid amount is not in the deposit's units.** x402 pays the USDC ERC-20 (6 decimals); the bond, refunds and `owed` are Arc native USDC (18). Anything comparing the two goes through `toArcNativeUnits` first — unscaled, `paidAmount` wins `min(FIXED_REFUND, paidAmount, deposit)` every time and refunds a trillionth of the payment.
+- **A verdict requires a confirmed settlement.** `decodePayment` succeeding only means the agent signed; it does not mean money moved.
 
 ## Package boundaries
 
 These are load-bearing, not organizational:
 
+- **`packages/sdk/payment.js` is the only file that decodes x402.** It is also the only place the payer/amount binding is checked, so nothing downstream should re-read `authorization.from` off a header itself. `fixtures/x402.js` is generated by `scripts/spike-payment.mjs`; edit the script, re-run it, commit both.
 - **`packages/sdk/ens.js` is the only file that knows ENS exists.** Every read and write goes through it, returning one `ServiceRecord`. This exists so the unresolved ENSv2→v1 question touches one file instead of rippling through the CRE workflow, proxy, and dashboard. Do not import an ENS library anywhere else, and do not make two calls where one returns all four records.
 - **`resolveServiceRecord` returns `sla` raw and unparsed.** Parsing belongs to `packages/sla`, so the ENS layer carries no SLA-schema knowledge.
 - **`packages/sla` has no dependencies and must keep none** — it bundles into the CRE workflow. Hand-roll the JSON Schema subset rather than pulling ajv.

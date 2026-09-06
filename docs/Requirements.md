@@ -196,13 +196,29 @@ the architecture diagram live in [Specification.md](./Specification.md).
 
 ## 9. Open risks / unresolved
 
-- Payment settlement uses Circle Gateway's batched scheme
-  (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
-  balance (a `direct` on-chain deposit into the Gateway wallet) rather than
-  paying from the wallet's plain token balance. The escrow contract's refund
+- Payment settlement uses Circle Gateway's batched flow
+  (`GatewayWalletBatched` is its EIP-712 domain, not a scheme name), which
+  requires the caller to pre-fund a Gateway balance (a `direct` on-chain
+  deposit into the Gateway wallet) rather than paying from the wallet's plain
+  token balance. The escrow contract's refund
   side is not yet wired to the payment leg: a FAIL or DOWN verdict must credit the
   paying agent on Arc from the bond, and that registrar→refund path still
   needs building and testing.
+- **A signed payment is not a settled payment** — Spike C
+  ([Tasks §0.4](./Tasks.md), [findings](./spikes/C-x402-payment.md)). The payer
+  and amount are cryptographically bound to the agent's signature, which closes
+  the "anyone names a different payer" risk outright. What the header cannot
+  show is that Gateway moved the money: an authorization is valid for about
+  seven days and can be presented after failing to settle. Unaddressed, that is
+  a refund farm — sign a real authorization, ensure it fails to settle, collect
+  on the DOWN verdict. The enclave therefore confirms the settlement receipt
+  before writing any verdict. Not yet built, and the receipt fixture it will be
+  built against is the one artefact still invented rather than captured.
+- **Unit mismatch between the paid amount and the bond.** x402 pays in the
+  USDC ERC-20 (6 decimals); the deposit, refund and `owed` balances are Arc's
+  native USDC (18). The refund cap compares the two, so the paid amount is
+  scaled first — getting this wrong refunds a trillionth of the payment, and
+  there is no dispute step to catch it.
 - **Induced-failure griefing.** With no dispute layer, an agent can craft
   requests designed to push a service into violating its own SLA — a query
   hitting a slow path, or one that trips a schema edge case — and collect a

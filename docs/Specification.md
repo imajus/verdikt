@@ -95,6 +95,21 @@ agent's behalf. Payer address and paid amount are both recoverable from the
 payment payload, so a refund needs no session state correlating request to
 payment — the verdict carries everything the registrar needs.
 
+Recoverable, and *bound*: both are fields of the EIP-3009
+`TransferWithAuthorization` struct the agent signs, so the enclave recovers the
+signer and refuses to name a payer the signature does not cover — naming someone
+else's address would mean forging their signature (Spike C, Tasks §0.4).
+
+**A signed payload is an intent to pay, not a payment.** It stays valid for about
+seven days and says nothing about whether Gateway moved the money, so the enclave
+confirms the settlement receipt on the paid response before writing anything: no
+settlement, no verdict — not even a `DOWN`, which is otherwise exactly the shape
+a payer would use to farm refunds against authorizations it made sure would never
+settle. The receipt is unsigned, so it is evidence of settlement only; the refund
+target stays the recovered signer. The authorization's `nonce` is the `requestId`
+the registry records (§3) — inside the signed struct, and already enforced
+single-use by the facilitator.
+
 ### Two CRE workflows
 
 The per-request workflow above is confidential (it touches the provider's real
@@ -127,8 +142,12 @@ non-confidential logic in the TEE.
 - **Refund, auto-executed, no dispute** — a `FAIL` or `DOWN` on a paid request
   credits a refund from that service's deposit to the payer. The verdict carries
   payer and paid amount out of the payment payload (§2), so the registrar needs
-  no correlation table; it records the `requestId` so a second refund against the
-  same request reverts. Refund and payment are the same asset on the same chain
+  no correlation table; it records the `requestId` — the payment authorization's
+  own nonce, which the facilitator already enforces single-use — so a second
+  refund against the same request reverts. The paid amount arrives in the payment
+  asset's minor units (USDC: 6 decimals) while the deposit is native USDC (18),
+  so it is scaled before the cap below compares the two; unscaled, `paidAmount`
+  wins every comparison and refunds a trillionth of what was paid. Refund and payment are the same asset on the same chain
   (§6) — no cross-chain correlation between the two legs. The availability
   *score* never moves a deposit (§1, §5); a `DOWN` refunds because that one call
   took payment and delivered nothing, not because a score crossed a threshold.
@@ -220,8 +239,10 @@ Two chains, each chosen for what only it provides:
   refund are one asset on one chain: the agent pays on Arc and, on a `FAIL` or
   `DOWN` verdict, is refunded on Arc from the same-asset bond, with no
   cross-chain correlation between the two legs. x402 settles via **Circle
-  Gateway** (batched `GatewayWalletBatched` scheme), which debits a pre-funded
-  Gateway balance; the bond is held as native USDC, so a refunded agent receives
+  Gateway**'s batched flow, which debits a pre-funded Gateway balance
+  (`GatewayWalletBatched` is the EIP-712 domain that flow signs under, not a
+  scheme name — the x402 scheme string is `exact`, the same one vanilla x402
+  uses, so one decoder covers both); the bond is held as native USDC, so a refunded agent receives
   native USDC rather than Gateway credit.
 - **Identity / SLA: Ethereum Sepolia** — the only network with an ENSv2
   Permissioned Registry/Resolver deployment, which the SLA and reputation layer
@@ -267,6 +288,8 @@ response-body retention or logging)
 Chainlink CRE Confidential Workflow (TEE) -- per-request run
    - replays the agent's payment against the provider from inside the
      enclave (x402 settles on Arc via Circle Gateway -- §6)
+   - recovers payer + paid amount from the signed authorization, and
+     confirms the settlement receipt -- no settlement, no verdict (§2)
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
    - classifies the paid call -> PASS / FAIL / DOWN (diffs the observed
@@ -281,7 +304,9 @@ On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
    - auto-refund on per-request FAIL or DOWN: min(fixedRefund, paidAmount), paid
      in native USDC from the bond, same chain the call was paid on
-   - requestId recorded; a second refund on the same request reverts
+     (paidAmount scaled from the asset's 6 decimals to Arc's native 18)
+   - requestId = the payment authorization's nonce; a second refund on the
+     same request reverts
    - auto-suspend at zero deposit
 
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days
