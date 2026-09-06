@@ -89,11 +89,17 @@ response to the calling agent, and posts a signed verdict on-chain — per
 Verdikt's backend is a thin coordinator: it handles the x402 handshake
 (relaying the 402 challenge, correlating payment to request) and triggers
 the workflow run, without ever decrypting or logging a provider response
-body. The handshake and the USDC payment settle on the provider's own
-settlement chain — Base Sepolia for the demo provider ([Blockrun](https://blockrun.ai/docs/x402/endpoints)) —
-independent of the Arc chain where the verdict and refund land (§3); the
-proxy is what ties a Base Sepolia payment to an Arc verdict via the
-request↔payment↔verdict correlation.
+body. The handshake and the USDC payment settle on **Arc** — the same chain
+the verdict and refund land on (§3) — so payment and refund share one chain
+and one asset. The demo provider is a [Proceeds](https://myproceeds.xyz)
+paywall wrapping a real upstream API (Open-Meteo) and accepting x402 on Arc
+Testnet; payment settles via **Circle Gateway** (the batched
+`GatewayWalletBatched` scheme), proven end-to-end on Arc Testnet — a paid
+call returned the provider's real JSON with a `success` receipt on
+`eip155:5042002`. Verdikt does not require providers to use Proceeds; the
+proxy relays whatever chain and scheme the provider's 402 challenge
+advertises, but settling on Arc is the default that keeps the payment and
+refund legs unified.
 
 Production CRE enrollment is currently private-beta; `cre workflow
 simulate` is self-serve, and the ETHOnline2026 Chainlink track accepts CLI
@@ -144,10 +150,10 @@ the TEE workflow — kept separate instead.
   is scored (§1, §5) but never refunded: if the service was down, it
   couldn't have collected payment for that window in the first place, so
   there's nothing to refund. The refund is paid on Arc from the bonded
-  deposit, even though the original x402 call was paid on the provider's
-  settlement chain (Base Sepolia for the demo provider, §2) — both legs are
-  USDC, and decoupling them is what lets Verdikt bond and refund on Arc
-  while verifying providers that settle payments elsewhere.
+  deposit, in the same asset (USDC) and on the same chain the x402 call was
+  paid on (§2) — payment and refund share one chain, so there is no
+  cross-chain correlation between the leg the agent paid on and the leg it is
+  refunded on.
 - **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
   the registrar flips status to SUSPENDED and the proxy stops routing new
   payments to it until topped up.
@@ -241,8 +247,9 @@ Verdikt proxy (thin coordinator — handshake + payment/request
 correlation only; never decrypts or logs a provider response)
    |
    | relays 402 challenge; checks verdikt.eth payTo record before
-   | payment; x402 payment settles on the provider's chain
-   | (Base Sepolia for the demo provider); triggers a workflow run
+   | payment; x402 payment settles on Arc via Circle Gateway
+   | (Proceeds paywall wrapping Open-Meteo as the demo provider);
+   | triggers a workflow run
    v
 Chainlink CRE Confidential Workflow (TEE) -- per-request run
    - fetches the provider's API response directly, inside the enclave
@@ -256,8 +263,8 @@ Chainlink CRE Confidential Workflow (TEE) -- per-request run
    v
 On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
-   - auto-refund on per-request FAIL (paid on Arc from the bond, even
-     though the call was paid on Base Sepolia -- both legs USDC)
+   - auto-refund on per-request FAIL (paid on Arc from the bond, same
+     chain and asset the call was paid on -- both legs USDC on Arc)
    - auto-suspend at zero deposit
 
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days

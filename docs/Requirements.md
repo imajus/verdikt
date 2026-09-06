@@ -135,9 +135,9 @@ the architecture diagram live in [Specification.md](./Specification.md).
 - **On-chain registry** — a registrar/escrow contract on Arc holds each
   provider's bonded deposit, records verdicts, and auto-executes refunds
   with no dispute step ([spec §3](./Specification.md#3-on-chain-registry)).
-  The x402 call itself is paid on the provider's own settlement chain
-  (Base Sepolia for the demo provider); the deposit and refund live on Arc,
-  so payment and refund are on separate chains by design (§8).
+  The x402 call itself is also paid on Arc, so payment, bonded deposit, and
+  refund all settle on the same chain in the same asset (USDC) — no
+  cross-chain correlation between the payment leg and the refund leg (§8).
 - **ENS integration** — each provider's SLA and derived reputation ratios
   live on an ENSv2 subname (`<slug>.verdikt.eth`), the sole source of truth
   the CRE workflow reads at verification time
@@ -149,23 +149,33 @@ the architecture diagram live in [Specification.md](./Specification.md).
 
 ## 8. Target chain & stack
 
-Verdikt spans three chains, each chosen for what only it provides:
+Verdikt spans two chains, each chosen for what only it provides:
 
-- **Registry/escrow chain**: **Arc**, Circle's stablecoin-native L1. The
-  registrar, escrow deposits, verdicts, and refunds
-  ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here — USDC
-  is Arc's native gas token, so the bond and refunds are denominated in the
-  same asset that secures them.
-- **Payment/settlement chain**: **Base Sepolia** — where the demo x402
-  provider ([Blockrun](https://blockrun.ai/docs/x402/endpoints), via
-  `testnet.blockrun.ai`) actually settles pay-per-call USDC. Verdikt's proxy
-  relays the x402 handshake on whatever chain the provider accepts; it does
-  not require providers to settle on Arc. This keeps the payment leg and the
-  bond/refund leg on separate chains by design — a deliberate trade to
-  verify a real, independently-operated service instead of a self-hosted
-  stub. Blockrun keeps the same endpoint paths across environments, so the
-  mainnet switch is a hostname change (`testnet.blockrun.ai` →
-  `blockrun.ai`) with no integration rewrite.
+- **Registry/escrow/payment chain**: **Arc**, Circle's stablecoin-native L1.
+  The registrar, escrow deposits, verdicts, and refunds
+  ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here — and
+  the x402 call is paid on Arc too. USDC is Arc's native gas token, so the
+  payment, the bond, and the refund are all denominated in the same asset
+  that secures them, on one chain. This collapses what would otherwise be a
+  cross-chain correlation problem: the paying agent pays on Arc and, on a
+  FAIL verdict, is refunded on Arc from the same-asset bond. The x402
+  payment settles via **Circle Gateway** (batched `GatewayWalletBatched`
+  scheme) — validated end-to-end on Arc Testnet: a paid call returned the
+  provider's real JSON response, with the payment debited from the caller's
+  Gateway balance and a `success` receipt on `eip155:5042002`.
+- **Demo x402 provider**: **[Proceeds](https://myproceeds.xyz)** paywalls,
+  which wrap an arbitrary upstream API behind an x402 gate and accept payment
+  on **Arc Testnet** (among other networks). The demo service wraps
+  [Open-Meteo](https://open-meteo.com) (free, no-auth, stable JSON schema),
+  giving the verifier a real, well-schematized response to check against a
+  declared SLA. Because we control the paywall, we can also stand up a
+  second service that deliberately violates its SLA to demo the FAIL →
+  refund path on cue. Verdikt does not require a provider to use Proceeds or
+  to settle on Arc — the proxy relays the x402 handshake on whatever the
+  provider's 402 challenge advertises — but settling on Arc is the default
+  that keeps the payment and refund legs unified; independently-operated
+  mainnet providers (e.g. [Blockrun](https://blockrun.ai/docs/x402/endpoints))
+  remain the production target once live.
 - **Identity/SLA chain**: **Ethereum Sepolia** — the only network with an
   ENSv2 Permissioned Registry/Resolver deployment, which the SLA and
   reputation layer requires
@@ -218,12 +228,15 @@ short.
 
 ## 10. Open risks / unresolved
 
-- Cross-chain payment/refund: the x402 call is paid on Base Sepolia but the
-  refund is released from the Arc escrow, so the paying agent is refunded on
-  a different chain than it paid on. Both legs are USDC and the proxy
-  correlates them off-chain, but the two-chain settlement path needs
-  end-to-end testing (does an Arc refund reliably fire off a Base Sepolia
-  payment's FAIL verdict?).
+- Payment settlement uses Circle Gateway's batched scheme
+  (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
+  balance (a `direct` on-chain deposit into the Gateway wallet) rather than
+  paying from the wallet's plain token balance. The paid x402 leg is proven
+  on Arc Testnet, but the escrow contract's refund side is not yet wired to
+  the payment: the refund must credit the paying agent on Arc off a FAIL
+  verdict, and that registrar→refund path still needs building and
+  end-to-end testing. (Keeping payment and refund on Arc removes the earlier
+  cross-chain settlement risk — both legs are now same-chain, same-asset.)
 - Availability tier boundaries/percentages may need tuning during build.
 - ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
   ABI stability, and tooling support (viem/ethers/ENS SDK) not yet
