@@ -14,7 +14,11 @@ export default [
       '**/dist/**',
       'contracts/out/**',
       'contracts/cache/**',
-      'cre/spike/**'
+      // Bun/CRE islands with their own toolchain (docs/spikes/cre.md, CRE-5),
+      // plus the bundler's own build artefacts, which are vendored code.
+      'cre/spike/**',
+      'cre/workflows/**/.tmp/**',
+      'cre/workflows/**/.cre_build_tmp.js'
     ]
   },
   js.configs.recommended,

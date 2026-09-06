@@ -470,22 +470,45 @@ store.
 
 ### 4.3 Verified branch
 
-- [ ] `decodePayment(header)` → payer, amount
-- [ ] Refuse if the service is SUSPENDED, **before** the agent's payment is
-      spent
-- [ ] Trigger the workflow; await payload + verdict
-- [ ] Relay the payload; attach `X-Verdikt-Verdict`, `X-Verdikt-Request-Id`,
-      `X-Verdikt-Tx` response headers
-- [ ] Never log or persist a response body (spec §2)
+- [x] `decodePayment(header)` → payer, amount — and **refuse to verify at all**
+      if it cannot decode, since every refund targets the payer it returns
+- [x] Refuse if the service is SUSPENDED, **before** the agent's payment is
+      spent (checked on the unpaid leg too)
+- [x] Trigger the workflow; await payload + verdict
+- [x] Relay the payload; attach `X-Verdikt-Verdict`, `X-Verdikt-Request-Id`,
+      `X-Verdikt-Tx`, plus `X-Verdikt-Mode` and `X-Verdikt-Fallback-Reason`
+- [x] Never log or persist a response body (spec §2)
+- [x] Refuse a paid call when no workflow is configured, rather than relaying
+      one unverified
+
+> **Decision — trigger, then block on the execution result.** Forced by Spike
+> B's CRE-3: the trigger response does not carry the handler's return value. The
+> alternative — the proxy makes the paid call and the enclave verifies after —
+> was rejected twice over. It moves the reading of the provider's response out
+> of the enclave, which is the argument §2 is built on; and it is not available
+> anyway, because an x402 payment settles once, so the enclave's call *is* the
+> call and its response is the only copy of what the agent bought.
+>
+> **Consequence worth stating rather than discovering.** The payload therefore
+> crosses the DON boundary in the workflow's return value. It is no longer only
+> ever inside the enclave. What attestation still buys is that the code
+> *judging* it is fixed and published — which is §2's actual claim — but a
+> provider should be told this plainly. The DON consensus observation is also
+> capped, so a response over ~20kB comes back truncated and flagged with
+> `X-Verdikt-Body-Truncated` rather than silently cut.
 
 ### 4.4 Failure modes
 
-- [ ] Enclave got the response but the Arc write failed → **still relay the
-      payload** (the agent paid for it) and retry the write asynchronously
-- [ ] Workflow timeout → surface a distinct error; the agent has paid, so
-      this must be visible, not swallowed
-- [ ] Provider 5xx → that is an SLA failure, not a proxy error; it must
-      reach `evaluate` rather than short-circuiting
+- [x] Enclave got the response but the Arc write failed → **still relays the
+      payload** (the agent paid for it) and flags
+      `X-Verdikt-Verdict-Unwritten`. The workflow does not throw on a failed
+      write for the same reason: the verdict can be rewritten, the response
+      cannot be refetched
+- [x] Workflow timeout → 504 with `paid: true` and the `requestId`; the agent
+      has paid, so this is visible, never swallowed
+- [x] Provider 5xx → relayed as a 5xx with its verdict attached. It is an SLA
+      failure the engine judged, not a proxy error, and rewriting it would hide
+      from the agent what it actually bought
 
 ### 4.5 SDK
 

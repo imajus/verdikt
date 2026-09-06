@@ -8,11 +8,13 @@
 // if it ever needs the engine, something has moved to the wrong side of the
 // enclave boundary.
 
+import { randomBytes } from 'node:crypto';
 import Fastify from 'fastify';
-import { createRegistryReader, resolveServiceRecord } from '@verdikt/sdk';
+import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkChallenge } from './challenge.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
+import { VERIFICATION_FAILURE, VerificationError } from './verification.js';
 
 /** Mirrors `VerdiktRegistry._assertValidSlug`. */
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -51,6 +53,9 @@ export function buildApp(deps = {}) {
   const resolve = deps.resolveServiceRecord ?? resolveServiceRecord;
   const registry = deps.registry ?? createRegistryReader(config.arc);
   const doFetch = deps.fetch ?? fetch;
+  const decode = deps.decodePayment ?? decodePayment;
+  const workflow = deps.workflow ?? null;
+  const newRequestId = deps.newRequestId ?? (() => `0x${randomBytes(32).toString('hex')}`);
 
   const app = Fastify({ logger: deps.logger ?? false });
 
@@ -118,13 +123,9 @@ export function buildApp(deps = {}) {
       return reply.code(502).send({ error: 'bad_upstream', detail: /** @type {Error} */ (error).message });
     }
 
-    if (request.headers['x-payment']) {
-      // Tasks.md 4.3 / issue #11. Distinct from a 404 so an agent that has
-      // already paid is never told its service does not exist.
-      return reply.code(501).send({
-        error: 'verified_branch_not_implemented',
-        detail: 'the paid leg lands with the confidential workflow'
-      });
+    const paymentHeader = request.headers['x-payment'];
+    if (typeof paymentHeader === 'string' && paymentHeader.length > 0) {
+      return verified({ request, reply, record, upstream, paymentHeader, decode, workflow, newRequestId });
     }
 
     return passthrough({ request, reply, record, upstream, doFetch, config });
@@ -188,4 +189,97 @@ async function passthrough({ request, reply, record, upstream, doFetch, config }
     .code(402)
     .headers({ ...headers, 'x-verdikt-pay-to-verified': 'true' })
     .send(body);
+}
+
+/**
+ * The paid leg (Specification.md §2, Tasks.md 4.3).
+ *
+ * The proxy relays and never evaluates. It hands the enclave everything the
+ * judgement needs — including the raw `sla` record, because
+ * `packages/sdk/ens.js` is the only file that knows ENS exists and the enclave
+ * is not an exception — and waits for the result.
+ *
+ * Every failure path here is shaped by one fact: **the agent has already paid.**
+ * Nothing may silently swallow what they bought.
+ *
+ * @param {{
+ *   request: import('fastify').FastifyRequest,
+ *   reply: import('fastify').FastifyReply,
+ *   record: ServiceRecord,
+ *   upstream: URL,
+ *   paymentHeader: string,
+ *   decode: (header: string) => Promise<DecodedPayment>,
+ *   workflow: WorkflowClient|null,
+ *   newRequestId: () => string
+ * }} args
+ */
+async function verified({ request, reply, record, upstream, paymentHeader, decode, workflow, newRequestId }) {
+  if (!workflow) {
+    return reply.code(503).send({
+      error: 'verification_unavailable',
+      detail: 'the proxy is not configured with a workflow endpoint, so no paid call can be verified'
+    });
+  }
+
+  /** @type {DecodedPayment} */
+  let payment;
+  try {
+    payment = await decode(paymentHeader);
+  } catch (error) {
+    // Refused before the workflow is triggered: every refund targets the payer
+    // this returns, so a proxy that cannot decode a payment must not verify one.
+    return reply.code(500).send({ error: 'payment_undecodable', detail: /** @type {Error} */ (error).message });
+  }
+
+  const requestId = newRequestId();
+  /** @type {VerificationResult} */
+  let result;
+  try {
+    result = await workflow.verify({
+      serviceId: record.serviceId,
+      requestId,
+      providerUrl: upstream.toString(),
+      method: request.method,
+      paymentHeader,
+      payer: payment.payer,
+      paidAmountMinorUnits: payment.amount.toString(),
+      sla: record.sla
+    });
+  } catch (error) {
+    const failure = error instanceof VerificationError ? error.failure : VERIFICATION_FAILURE.RUN_FAILED;
+    // Deliberately visible, and deliberately not a 502-that-looks-like-the-
+    // provider's-fault. The agent has paid; a swallowed error here is
+    // indistinguishable from a service that took the money and returned nothing.
+    return reply
+      .code(failure === VERIFICATION_FAILURE.TIMEOUT ? 504 : 502)
+      .headers({ 'x-verdikt-request-id': requestId })
+      .send({
+        error: failure,
+        detail: /** @type {Error} */ (error).message,
+        requestId,
+        paid: true,
+        advice: 'the payment settled; the response could not be delivered. Keep this requestId.'
+      });
+  }
+
+  const headers = {
+    'x-verdikt-verdict': result.outcome ?? 'NONE',
+    'x-verdikt-mode': result.mode,
+    'x-verdikt-request-id': requestId,
+    ...(result.tx ? { 'x-verdikt-tx': result.tx } : {}),
+    // The Arc write missed but the enclave still has the response. Relaying it
+    // and flagging the miss beats destroying a paid-for payload over
+    // bookkeeping (Tasks.md 4.4).
+    ...(result.outcome && !result.tx ? { 'x-verdikt-verdict-unwritten': 'true' } : {}),
+    ...(result.reason ? { 'x-verdikt-fallback-reason': result.reason } : {}),
+    ...(result.bodyTruncated ? { 'x-verdikt-body-truncated': 'true' } : {})
+  };
+
+  // The provider's own status is relayed, not rewritten. A provider 5xx is an
+  // SLA failure that `evaluate` has already judged — turning it into a proxy
+  // error would hide from the agent what it actually bought.
+  return reply
+    .code(result.status ?? 502)
+    .headers({ ...result.headers, ...headers })
+    .send(result.body);
 }

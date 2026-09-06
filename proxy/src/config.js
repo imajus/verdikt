@@ -29,6 +29,18 @@ export function loadConfig(env = process.env) {
      * reach. Only turn it on for a demo provider on localhost.
      */
     allowPrivateUpstream: env.PROXY_ALLOW_PRIVATE_UPSTREAM === 'true',
+    /**
+     * Unset means the proxy refuses paid calls outright. Relaying one
+     * unverified would take an agent's money for a call nothing judged.
+     */
+    workflow:
+      env.CRE_TRIGGER_URL && env.CRE_EXECUTION_STATUS_URL
+        ? {
+            triggerUrl: env.CRE_TRIGGER_URL,
+            statusUrl: env.CRE_EXECUTION_STATUS_URL,
+            authToken: env.CRE_TRIGGER_AUTH_TOKEN
+          }
+        : null,
     arc: {
       rpcUrl: env.ARC_RPC_URL,
       address: env.VERDIKT_REGISTRY_ADDRESS,

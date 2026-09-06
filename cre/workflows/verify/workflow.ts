@@ -122,15 +122,43 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
     })
   );
 
+  // The payload has to travel back through this return value.
+  //
+  // The trigger response does not carry it (Spike B, CRE-3), and the proxy
+  // cannot fetch it itself — an x402 payment settles once, so the call made
+  // above IS the call, and its response is the only copy of what the agent
+  // bought. Two consequences worth stating rather than discovering:
+  //
+  //   - the body crosses the DON boundary, so it is no longer only ever inside
+  //     the enclave. What attestation still buys is that the code *judging* it
+  //     is fixed and published — which is §2's actual claim — but a provider
+  //     should be told this plainly rather than left to assume otherwise;
+  //   - the DON consensus observation is capped (25kb in simulation). A larger
+  //     response cannot come back whole, so it is truncated and flagged rather
+  //     than silently cut: the agent paid for it and has to be able to tell.
+  const MAX_BODY_BYTES = 20_000;
+  const fullBody = bodyText ?? '';
+  const body = fullBody.length > MAX_BODY_BYTES ? fullBody.slice(0, MAX_BODY_BYTES) : fullBody;
+  const relay = { status, body, bodyTruncated: body.length !== fullBody.length };
+
   // A 4xx under the status-only fallback writes nothing at all. `onReport` has
   // no way to express that — every report it accepts writes a verdict — so the
-  // skip has to happen before a report is built.
+  // skip has to happen before a report is built. The payload still comes back:
+  // no verdict is not the same as no delivery.
   if (!shouldWriteVerdict(judgement)) {
-    return JSON.stringify({ outcome: null, mode: judgement.mode, reason: judgement.fallbackReason, tx: null });
+    return JSON.stringify({
+      ...relay,
+      outcome: null,
+      mode: judgement.mode,
+      reason: judgement.fallbackReason,
+      clauses: judgement.clauses,
+      tx: null
+    });
   }
 
-  // Cross back to the DON. Only the outcome ordinal and the payment facts go
-  // over — never the response body, never the payment header.
+  // Cross back to the DON to have the verdict signed into a report. The payment
+  // header never crosses — only the payer address and the amount, which are what
+  // the registrar needs and nothing more.
   const donRuntime = runtime.usingTheDons();
 
   const encodedVerdict = encodeAbiParameters(VERDICT_REPORT_PARAMS, [
@@ -151,19 +179,20 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
     })
     .result();
 
-  if (txResult.txStatus !== TxStatus.SUCCESS) {
-    // The proxy has to relay the payload anyway — the agent paid for it — so
-    // this surfaces as a distinct failure rather than swallowing the response
-    // (Tasks.md 4.4).
-    throw new Error(`verdict write failed: ${txResult.errorMessage || txResult.txStatus}`);
-  }
+  // A failed Arc write must NOT throw. The agent has paid and the enclave holds
+  // the only copy of what it bought, so throwing here would destroy the payload
+  // to report a bookkeeping failure. The proxy relays the response and surfaces
+  // the miss (Tasks.md 4.4); the verdict can be rewritten, the response cannot.
+  const wrote = txResult.txStatus === TxStatus.SUCCESS;
 
   return JSON.stringify({
+    ...relay,
     outcome: judgement.outcome,
     mode: judgement.mode,
     reason: judgement.fallbackReason,
     clauses: judgement.clauses,
-    tx: bytesToHex(txResult.txHash ?? new Uint8Array(32))
+    tx: wrote ? bytesToHex(txResult.txHash ?? new Uint8Array(32)) : null,
+    writeError: wrote ? null : txResult.errorMessage || String(txResult.txStatus)
   });
 };
 

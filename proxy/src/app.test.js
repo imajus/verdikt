@@ -221,10 +221,15 @@ describe('refusals before any upstream call', () => {
 });
 
 describe('the paid leg', () => {
-  it('is a distinct answer from "no such service" — the agent may already have paid', async () => {
-    const { app } = harness();
+  // The branch itself is covered in verified.test.js. What matters here is that
+  // an unconfigured proxy refuses rather than relaying a paid call unverified —
+  // and that the answer is distinct from "no such service", since the agent may
+  // already have paid.
+  it('refuses when no workflow is configured, rather than falling through to passthrough', async () => {
+    const { app, upstreamFetch } = harness();
     const response = await call(app, { headers: { host: 'proxy.local', 'x-payment': 'abc' } });
-    expect(response.statusCode).toBe(501);
-    expect(response.json().error).toBe('verified_branch_not_implemented');
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toBe('verification_unavailable');
+    expect(upstreamFetch).not.toHaveBeenCalled();
   });
 });
