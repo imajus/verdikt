@@ -69,10 +69,10 @@ based on its actual track record instead of a provider's own claims.
   protocol's payment flow is itself defined against plain HTTP
   request/response semantics, not an arbitrary cut Verdikt is adding.
 - **Dispute/arbitration layer** — no challenge process; a CRE verdict is
-  final and auto-executes a refund ([spec §2](./specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
+  final and auto-executes a refund ([spec §2](./Specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
 - **Weighted multi-clause scoring engine** — no single 0–1 compliance score
   blending every clause; boolean clauses stay boolean, only availability is
-  graduated ([spec §1](./specification.md#1-sla-verification-model)).
+  graduated ([spec §1](./Specification.md#1-sla-verification-model)).
 - **Reputation-scaled deposit tiers** — deposit is a fixed amount per
   service for MVP.
 - **Deposit-via-x402** — the bond is paid directly to the escrow contract,
@@ -83,7 +83,7 @@ based on its actual track record instead of a provider's own claims.
 - **Availability-triggered refunds** — downtime affects a service's
   marketplace score, not its deposit. If a service was down, it couldn't
   have collected payment for that window either, so there's nothing to
-  refund ([spec §3](./specification.md#3-on-chain-registry)).
+  refund ([spec §3](./Specification.md#3-on-chain-registry)).
 
 ## 5. Users
 
@@ -100,8 +100,8 @@ based on its actual track record instead of a provider's own claims.
 - **Service provider**
   1. Register a service: pick a slug, post the required USDC deposit, and
      get a `<slug>.verdikt.bond` endpoint plus a `<slug>.verdikt.eth` ENS
-     subname ([spec §3](./specification.md#3-on-chain-registry),
-     [spec §4](./specification.md#4-ens-integration--the-sla-source-of-truth)).
+     subname ([spec §3](./Specification.md#3-on-chain-registry),
+     [spec §4](./Specification.md#4-ens-integration--the-sla-source-of-truth)).
   2. Publish or update the SLA any time by writing the `sla` ENS text
      record directly — no approval step, no Verdikt backend involved.
   3. Deregister when done, withdrawing the remaining deposit once any
@@ -121,28 +121,28 @@ based on its actual track record instead of a provider's own claims.
 ## 7. System overview
 
 Verdikt is four subsystems working together; full mechanics, data flow, and
-the architecture diagram live in [specification.md](./specification.md).
+the architecture diagram live in [Specification.md](./Specification.md).
 
 - **SLA verification** — a per-request boolean verdict for discrete
   conformance clauses (schema, latency, price) that triggers an automatic
   refund, plus a periodic graduated availability score used only for
   marketplace ranking, both evaluated against the provider's own declared
-  SLA ([spec §1](./specification.md#1-sla-verification-model)).
+  SLA ([spec §1](./Specification.md#1-sla-verification-model)).
 - **Verification execution** — a Chainlink CRE Confidential Workflow (TEE)
   fetches the provider's response directly and evaluates it, so Verdikt's
   own infrastructure never sees response content
-  ([spec §2](./specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
+  ([spec §2](./Specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
 - **On-chain registry** — a registrar/escrow contract on Arc holds each
   provider's bonded deposit, records verdicts, and auto-executes refunds
-  with no dispute step ([spec §3](./specification.md#3-on-chain-registry)).
+  with no dispute step ([spec §3](./Specification.md#3-on-chain-registry)).
 - **ENS integration** — each provider's SLA and derived reputation ratios
   live on an ENSv2 subname (`<slug>.verdikt.eth`), the sole source of truth
   the CRE workflow reads at verification time
-  ([spec §4](./specification.md#4-ens-integration--the-sla-source-of-truth)).
+  ([spec §4](./Specification.md#4-ens-integration--the-sla-source-of-truth)).
 - **Marketplace & dashboard** — a web UI listing registered services with
   their live metrics so consumers can compare and choose, plus aggregate
   platform stats, as the primary demo surface
-  ([spec §5](./specification.md#5-product--dashboard)).
+  ([spec §5](./Specification.md#5-product--dashboard)).
 
 ## 8. Target chain & stack
 
@@ -150,10 +150,10 @@ the architecture diagram live in [specification.md](./specification.md).
 - **Verification compute**: Chainlink CRE — a Confidential Workflow (TEE)
   per request, plus a separate plain (non-confidential) scheduled workflow
   for the hourly reputation aggregate
-  ([spec §2](./specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
+  ([spec §2](./Specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
 - **Storage**: no separate storage layer for the SLA — it's written directly
   as the ENS `sla` text record
-  ([spec §4](./specification.md#4-ens-integration--the-sla-source-of-truth)),
+  ([spec §4](./Specification.md#4-ens-integration--the-sla-source-of-truth)),
   an arbitrary UTF-8 string per ENSIP-5[^4], not an IPFS-pointed blob.
   Simpler to implement than an IPFS-plus-hash-record design, and the write
   is infrequent (registration and occasional edits, not per call), so
@@ -188,7 +188,7 @@ short.
   (x402disputes.com) or an escrow with a pluggable arbiter resolves a claim
   (x402r.org). Verdikt never invokes a human or third-party arbiter — the
   verdict is a deterministic, automatic function of the SLA and the
-  observed response ([spec §1](./specification.md#1-sla-verification-model)).
+  observed response ([spec §1](./Specification.md#1-sla-verification-model)).
 - **Edge & Node's ampersend** — an agent-payment dashboard on x402 + A2A +
   ERC-8004 covering budget limits and allowlists; a human-configured
   spend-management tool, not an automated verification/reputation proxy.
