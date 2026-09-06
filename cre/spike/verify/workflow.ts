@@ -105,7 +105,7 @@ export const onVerifyRequest = (
   // capability and has no TeeRuntime overload — using it here would not compile.
   //
   // A transport failure throws rather than returning a status, and that throw
-  // is the only source of FAIL_UNREACHABLE: "payment settled and nothing
+  // is the only source of DOWN: "payment settled and nothing
   // usable came back" (Specification.md §1). Swallowing it would turn a dead
   // provider into a silent no-verdict and cost the agent its refund, so it is
   // caught here and turned into `status: null`, not left to propagate.

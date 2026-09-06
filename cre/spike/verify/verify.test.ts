@@ -156,11 +156,11 @@ test('evaluate: outcomes by status and latency', () => {
     evaluateSpikeOrSkip({ status, body: '{"ok":true}', latencyMs, latencyBudgetMs: 2000 });
 
   expect(at(200, 10)).toBe('PASS');
-  expect(at(503, 10)).toBe('FAIL_CONFORMANCE');
-  expect(at(null, 10)).toBe('FAIL_UNREACHABLE');
+  expect(at(503, 10)).toBe('FAIL');
+  expect(at(null, 10)).toBe('DOWN');
   // Exactly at the limit passes; one millisecond over does not.
   expect(at(200, 2000)).toBe('PASS');
-  expect(at(200, 2001)).toBe('FAIL_CONFORMANCE');
+  expect(at(200, 2001)).toBe('FAIL');
 });
 
 // ------------------------------------------------------------- the workflow
@@ -179,11 +179,11 @@ test('a conforming response writes a PASS verdict to Arc Testnet', () => {
   expect(written.paidAmount).toBe(2500n);
 });
 
-test('a 5xx response writes FAIL_CONFORMANCE', () => {
+test('a 5xx response writes FAIL', () => {
   expect(runHandler({ statusCode: 503, body: 'upstream down' }).outcome).toBe(1);
 });
 
-test('a transport failure writes FAIL_UNREACHABLE, not nothing', () => {
+test('a transport failure writes DOWN, not nothing', () => {
   // The agent paid and got nothing. If the handler let the capability error
   // propagate, the run would die before the write and the refund would never
   // be credited — so this asserts a verdict is still written.
