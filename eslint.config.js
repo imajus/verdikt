@@ -20,7 +20,9 @@ export default [
   js.configs.recommended,
   {
     languageOptions: {
-      ecmaVersion: 2023,
+      // `latest`, not a pinned year: @verdikt/sla imports schema.json with an
+      // import attribute (`with { type: 'json' }`), which 2023 cannot parse.
+      ecmaVersion: 'latest',
       sourceType: 'module',
       globals: { ...globals.node }
     },

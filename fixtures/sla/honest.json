@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "clauses": [
+    {
+      "id": "current-weather-shape",
+      "description": "Every response carries a current reading with a numeric temperature and wind speed.",
+      "type": "schema",
+      "schema": {
+        "type": "object",
+        "required": ["latitude", "longitude", "current"],
+        "properties": {
+          "latitude": { "type": "number" },
+          "longitude": { "type": "number" },
+          "current": {
+            "type": "object",
+            "required": ["time", "temperature_2m", "wind_speed_10m"],
+            "properties": {
+              "time": { "type": "string", "minLength": 1 },
+              "interval": { "type": "integer", "minimum": 0 },
+              "temperature_2m": { "type": "number" },
+              "wind_speed_10m": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "responds-within-5s",
+      "description": "Upstream is a cached forecast, so five seconds is generous.",
+      "type": "latency",
+      "maxMs": 5000
+    },
+    {
+      "id": "price-band",
+      "description": "$0.001 to $0.01 per call, in USDC minor units.",
+      "type": "priceRange",
+      "minMinorUnits": "1000",
+      "maxMinorUnits": "10000",
+      "asset": "USDC"
+    }
+  ]
+}

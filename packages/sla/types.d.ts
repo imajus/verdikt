@@ -42,13 +42,28 @@ interface SlaObservation {
   transportError?: string;
 }
 
+/**
+ * Clause types as they appear in a *result*. `delivery` is the implicit
+ * predicate `evaluate` prepends to every evaluation — no provider declares it
+ * and `id: 'delivery'` is rejected at validation time.
+ */
+type SlaClauseResultType = SlaClauseType | 'delivery';
+
 interface SlaClauseResult {
   id: string;
-  type: SlaClauseType;
+  type: SlaClauseResultType;
   pass: boolean;
   /** Human-readable bound from the SLA, for the dashboard's per-verdict detail. */
   expected: string;
   /** Human-readable observed value. */
+  actual: string;
+}
+
+/** First failure found by the JSON Schema subset, in a fixed traversal order. */
+interface SchemaFailure {
+  /** JSON pointer into the observed value; `''` is the root. */
+  pointer: string;
+  expected: string;
   actual: string;
 }
 

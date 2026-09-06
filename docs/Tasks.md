@@ -148,44 +148,86 @@ fixture test.
 The core IP, and the one component that must behave identically in tests
 and in the enclave.
 
+**Done** — `packages/sla`, 75 tests green. Two decisions are recorded below
+because neither is derivable from the spec text.
+
 ### 1.1 Schema
 
-- [ ] `packages/sla/schema.json`: `version`, `clauses[]`
-- [ ] Clause types: `schema`, `latency`, `priceRange` (spec §1)
-- [ ] Two example SLAs in `fixtures/`: one the demo service honours, one its
-      twin deliberately violates
+- [x] `packages/sla/schema.json`: `version`, `clauses[]`
+- [x] Clause types: `schema`, `latency`, `priceRange` (spec §1)
+- [x] Two example SLAs in `fixtures/sla/`: `honest.json`, which the demo
+      service satisfies, and `violating.json`, whose schema and latency
+      clauses the same upstream cannot meet
+
+`schema.json` is executable, not documentation: the engine validates every
+incoming SLA against it using its own JSON Schema subset, so there is no
+second copy of "what a valid SLA is" to drift.
+
+> **Decision — an empty `clauses` array is invalid.** `minItems: 1`. A
+> zero-clause SLA would make `evaluate` return PASS for everything including a
+> 500, which is a free spotless conformance ratio for any provider that
+> publishes one. Rejecting it routes that provider to the status-only fallback,
+> where a 5xx is correctly a FAIL.
 
 ### 1.2 `evaluate()`
 
-- [ ] `evaluate(sla, observation) → { outcome, clauses: [{ id, type, pass,
+- [x] `evaluate(sla, observation) → { outcome, clauses: [{ id, type, pass,
       expected, actual }] }` where `outcome` is `PASS`, `FAIL`,
       or `DOWN`
-- [ ] `observation = { status, headers, body, latencyMs, paidAmount }`
-- [ ] Pure — no I/O, no clock, no network
-- [ ] **No heavy dependencies.** It has to bundle into the CRE workflow;
+- [x] `observation = { status, headers, body, latencyMs, paidAmount }`
+- [x] Pure — no I/O, no clock, no network
+- [x] **No heavy dependencies.** It has to bundle into the CRE workflow;
       hand-roll the JSON Schema subset rather than pulling ajv
-- [ ] Per-clause failure detail in the return value — the dashboard shows
+- [x] Per-clause failure detail in the return value — the dashboard shows
       *why* a call failed, not just that it did
+
+> **Decision — an implicit `delivery` clause, and where the 4xx carve-out
+> stops.** Spec §1 scopes "4xx → no verdict" to the status-only fallback and
+> says nothing about status handling when the SLA *is* readable. Read literally
+> that leaves a hole: an SLA declaring only a latency bound would collect a PASS
+> for a 500 returned in 5ms, making the full path more lenient than the
+> fallback. So every evaluation now carries an implicit first clause, id
+> `delivery`, that fails on 5xx and on no-response; the id is reserved and an
+> SLA declaring it is rejected.
+>
+> A **4xx deliberately passes** that clause and is left to the declared clauses.
+> The fallback's carve-out exists because Verdikt is guessing with no SLA to
+> read; with a readable SLA the provider holds the pen (§4) and can declare what
+> its own rejections look like, and the refund cap (spec §3) already keeps
+> garbage-request farming at break-even-minus-gas.
+
+`pattern` is deliberately absent from the JSON Schema subset — it is the one
+keyword whose evaluation cost is unbounded in the input, and the SLA is
+authored by the party whose bond is at stake. Unsupported keywords **throw**
+rather than being ignored, and `assertSchema` walks the whole schema up front
+so an unsupported keyword in a branch no response reaches still throws.
 
 ### 1.3 Determinism
 
 A verdict is final with no dispute (Requirements §4), so non-determinism
 here is unrecoverable — it burns a real bond.
 
-- [ ] Latency is an input, never measured inside `evaluate`
-- [ ] Price comparison in integer minor units; no floating point
-- [ ] No key-order or locale dependence
-- [ ] Fixture round-trip test: same input → same output, asserted
+- [x] Latency is an input, never measured inside `evaluate`
+- [x] Price comparison in integer minor units; no floating point
+- [x] No key-order or locale dependence — object members are visited in
+      sorted key order, so two bodies differing only in key order produce
+      identical failure reports
+- [x] Fixture round-trip test: same input → same output, asserted
+- [x] `packages/sla/vectors.json` — language-neutral conformance vectors.
+      Spike B chose TypeScript so no port is needed, but if one is ever forced
+      these are what make it verifiable rather than taken on trust
 
 ### 1.4 Tests (TDD)
 
-- [ ] Table-driven per clause type
-- [ ] Boundary cases: latency exactly at limit, price exactly at bounds
-- [ ] Malformed SLA, missing fields, unknown clause type → **throws**, so
+- [x] Table-driven per clause type
+- [x] Boundary cases: latency exactly at limit, price exactly at bounds,
+      price either side of 2^53 to prove the bigint path
+- [x] Malformed SLA, missing fields, unknown clause type → **throws**, so
       the caller takes the status-only fallback rather than silently
       producing a FAIL (spec §1)
-- [ ] Status-only fallback path: 2xx PASS, 5xx `FAIL`, 4xx
-      returns no verdict at all
+- [x] Status-only fallback path: 2xx PASS, 5xx `FAIL`, 4xx
+      returns no verdict at all — as does anything else outside those bands,
+      since a 1xx or 3xx is no more a delivered payload than a 4xx is
 
 ---
 

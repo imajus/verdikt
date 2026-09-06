@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "clauses": [
+    {
+      "id": "current-weather-shape",
+      "description": "Promises a humidity reading the upstream free tier does not return — the schema clause fails on every call.",
+      "type": "schema",
+      "schema": {
+        "type": "object",
+        "required": ["current"],
+        "properties": {
+          "current": {
+            "type": "object",
+            "required": ["temperature_2m", "relative_humidity_2m"],
+            "properties": {
+              "temperature_2m": { "type": "number" },
+              "relative_humidity_2m": { "type": "number" }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "responds-within-5ms",
+      "description": "Below any achievable round trip to the upstream — the latency clause fails on every call.",
+      "type": "latency",
+      "maxMs": 5
+    },
+    {
+      "id": "price-band",
+      "type": "priceRange",
+      "minMinorUnits": "1000",
+      "maxMinorUnits": "10000",
+      "asset": "USDC"
+    }
+  ]
+}
