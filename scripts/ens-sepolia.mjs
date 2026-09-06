@@ -83,6 +83,7 @@ export const resolverAbi = parseAbi([
 
 export const factoryAbi = parseAbi([
   'function deployProxy(address implementation, uint256 salt, bytes data) returns (address)',
+  'function proxyLogic() view returns (address)',
   'function verifyContract(address proxy) view returns (address)',
   'event ProxyDeployed(address indexed sender, address indexed proxyAddress, uint256 salt, address implementation)'
 ]);
