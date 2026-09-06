@@ -82,10 +82,17 @@ based on its actual track record instead of a provider's own claims.
 - **Re-derivation/challenge of a CRE verdict** — x402 responses are
   pay-gated, so there is no free, public source of truth a challenger could
   use to re-check a claim. The bond substitutes for re-derivation.
-- **Availability-triggered refunds** — downtime affects a service's
-  marketplace score, not its deposit. If a service was down, it couldn't
-  have collected payment for that window either, so there's nothing to
-  refund ([spec §3](./Specification.md#3-on-chain-registry)).
+- **Availability-triggered refunds** — the aggregate availability *score*
+  never moves a deposit; it only ranks services in the marketplace
+  ([spec §3](./Specification.md#3-on-chain-registry)). An individual call
+  that settled payment and returned nothing usable is still refunded, but
+  as a per-request delivery failure like any other, not because a score
+  crossed a threshold.
+- **Uptime probing** — availability is derived from paid calls only: a
+  service counts as up unless a paid call reported it down, so a service
+  with no traffic scores a full 1000. Verdikt measures what agents actually
+  bought, not what a synthetic prober would have seen
+  ([spec §1](./Specification.md#1-sla-verification-model)).
 
 ## 5. Users
 

@@ -9,28 +9,36 @@ problem, product summary, goals, scope, and user flows.
 Verdikt verifies two categories of guarantee using one evaluation stack,
 adapted from IBM's WSLA per-guarantee predicate model[^1]:
 
-- **Per-request boolean verdict (PASS/FAIL)** — schema/input-output
-  conformance, latency, and price range are each evaluated as an
-  independent true/false predicate against the provider's declared SLA
-  JSON, per call. Each result emits a `VerdictWritten` event on Arc (§3);
-  nothing per-call is published beyond Arc.
-- **Periodic availability score** — computed as a continuous uptime
-  percentage (100% minus percentage downtime) over a trailing window, then
-  mapped through a published tier table to a score shown in the marketplace
-  listing (§5), following the same tiered-banding approach used in
-  commercial cloud SLA credit tables[^2]. Availability never triggers a
-  refund (§3): if a service was down, it couldn't have collected payment
-  for that window either, so there is nothing to refund — the score exists
-  purely to help consumers rank services.
+- **Per-request boolean verdict** — schema/input-output conformance,
+  latency, and price range are each evaluated as an independent true/false
+  predicate against the provider's declared SLA JSON, per call. The call's
+  outcome is one of three: `PASS`, `FAIL_CONFORMANCE` (a response arrived
+  and broke a clause), or `FAIL_UNREACHABLE` (payment settled and no usable
+  response came back). Each result emits a `VerdictWritten` event on Arc
+  (§3); nothing per-call is published beyond Arc.
+- **Periodic availability score** — derived from those same verdicts rather
+  than from a separate probe: **a service counts as up unless a paid call
+  reported it down.** Availability is the share of settled calls that
+  produced any usable response, mapped through a published tier table to
+  the score shown in the marketplace listing (§5), following the
+  tiered-banding approach used in commercial cloud SLA credit tables[^2].
+  **A service with no traffic scores 1000** — an accepted consequence.
+  Verdikt observes only what agents actually paid for, and synthesising
+  uptime from unpaid probes would measure something other than the thing
+  consumers are buying.
 
-Both scores recompute **hourly** from a rolling trailing **7-day** window of
-`VerdictWritten` events:
-- **SLA conformance ratio** — PASS count ÷ total calls in the trailing
-  7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7% conformance)
-  rather than a percentage (ENS text records are strings; an integer avoids
-  decimal-formatting ambiguity).
-- **Availability ratio** — the same 0–1000 scale applied to the uptime
-  percentage above.
+The two metrics stay distinct because the outcome enum separates them:
+conformance measures the quality of responses that *arrived*, availability
+measures whether they arrived at all. Both recompute **hourly** from a
+rolling trailing **7-day** window of `VerdictWritten` events:
+- **SLA conformance ratio** — `PASS ÷ (PASS + FAIL_CONFORMANCE)` over the
+  trailing 7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7%
+  conformance) rather than a percentage (ENS text records are strings; an
+  integer avoids decimal-formatting ambiguity). Unreachable calls are
+  excluded from the denominator — they say nothing about whether the
+  response body would have conformed.
+- **Availability ratio** — `(PASS + FAIL_CONFORMANCE) ÷ all verdicts` on
+  the same 0–1000 scale. An empty window yields 1000.
 
 An hourly rolling-window write costs at most one ENS update per service per
 hour, regardless of call volume, and is fresher than a weekly one while
@@ -47,6 +55,19 @@ weighted-partial)[^3].
 Other approaches exist — rule-based SLA engines[^4], zero-knowledge/
 TEE-attested compliance proofs[^5] — cited for reference; Verdikt uses the
 WSLA-predicate plus tiered-credit stack above.
+
+### Fallback when the SLA can't be read
+
+If the ENS record is unreachable or won't parse, the workflow does not skip
+the call. It falls back to a status-only default: **2xx → PASS, 5xx →
+`FAIL_CONFORMANCE`, and a 4xx writes no verdict at all.**
+
+The 4xx carve-out matters. A 4xx is usually the provider correctly
+rejecting a malformed request, so treating it as a failure would let an
+agent farm refunds by sending deliberate garbage — the caller wasted its
+own payment and the provider behaved exactly as it should. Excluding 4xx
+keeps a Verdikt-side outage from silently suspending verification without
+letting the fallback manufacture refunds out of provider bonds.
 
 ### Why a neutral middleman, not caller-side evaluation
 
@@ -173,19 +194,28 @@ the TEE workflow — kept separate instead.
   signer, can `setVerdict`). Neither the provider nor Verdikt itself can
   write a verdict — enforced at the contract level. The provider has no
   write role on Arc — their authorship happens on the ENS side (§4).
-- **Refund, auto-executed, no dispute step**: a FAIL verdict for a specific
-  paid request releases a refund from that service's deposit to the paying
-  agent automatically. The verdict carries the payer address and the paid
-  amount, both read out of the payment payload (§2), so the registrar needs
-  no correlation table; it records the `requestId` to make a second refund
-  against the same request revert. This is the only refund trigger —
-  availability is scored (§1, §5) but never refunded: if the service was
-  down, it couldn't have collected payment for that window in the first
-  place, so there's nothing to refund. The refund is paid on Arc from the
-  bonded deposit, in the same asset (USDC) and on the same chain the x402
-  call was paid on (§2) — payment and refund share one chain, so there is no
-  cross-chain correlation between the leg the agent paid on and the leg it is
-  refunded on.
+- **Refund, auto-executed, no dispute step**: either FAIL outcome for a
+  specific paid request credits a refund from that service's deposit to the
+  paying agent automatically. The verdict carries the payer address and the
+  paid amount, both read out of the payment payload (§2), so the registrar
+  needs no correlation table; it records the `requestId` to make a second
+  refund against the same request revert. The refund is booked on Arc
+  against the bonded deposit, in the same asset (USDC) and on the same chain
+  the x402 call was paid on (§2) — payment and refund share one chain, so
+  there is no cross-chain correlation between the leg the agent paid on and
+  the leg it is refunded on. The aggregate availability *score* still never
+  moves a deposit (§1, §5); an unreachable call refunds because that one
+  call took payment and delivered nothing, not because a score crossed a
+  threshold.
+- **Pull payments, never push**: `setVerdict` books `owed[payer] += amount`
+  and the agent calls `withdraw()` to collect. The registrar sends no value
+  while writing a verdict. If it pushed, a payer address that rejects
+  incoming transfers would revert the whole transaction and erase its own
+  FAIL verdict — which a provider farming its own service through a
+  reverting contract could use to keep a spotless conformance ratio while
+  failing real calls. Booking a credit decouples whether a verdict can be
+  recorded from whether anyone can be paid, and removes the reentrancy
+  surface that an external call inside `setVerdict` would open.
 - **Refund capped at the amount paid**: the payout is
   `min(fixedRefund, paidAmount)`, never a penalty on top. Without a dispute
   layer there is no way to contest a refund, so a refund larger than the
