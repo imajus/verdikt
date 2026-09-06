@@ -98,8 +98,8 @@ books `owed[payer]` and sends nothing; the refund cap is unchanged; the payer
 and amount still ride in the report. It is the entry point that changes, not
 the accounting. The `Outcome` ordinals stay ABI surface — the spike encodes
 them through `@verdikt/sdk`'s `OUTCOME_ORDINAL`, which is exactly the mirroring
-CLAUDE.md warns about, and `verify.test.ts` asserts PASS = 0 and
-FAIL_CONFORMANCE = 1 on the decoded report.
+CLAUDE.md warns about, and `verify.test.ts` asserts PASS = 0 and FAIL = 1 on
+the decoded report.
 
 `onReport` returns nothing and the forwarder does not surface reverts usefully,
 so a rejected verdict is silent. Phase 2 should emit on every path, including
@@ -179,13 +179,20 @@ CLAUDE.md's conventions require — and both survive the whole pipeline:
 
 - the CRE typechecker resolves them and their ambient types;
 - `cre-compile` bundles their bodies into the WASM binary. Verified by grepping
-  the intermediate bundle for `outcomeToOrdinal`'s error string and the
-  `FAIL_CONFORMANCE` ordinal, both of which are present.
+  the intermediate bundle for `outcomeToOrdinal`'s error string and the `FAIL`
+  ordinal, both of which are present.
 
-So the Go alternative's cost is real and avoidable: `evaluate()` would exist
-twice, and for a final undisputable verdict two copies that can drift are a
-correctness risk, not duplication. **Choose TS.** No reason found to revisit
-`cre/package.json`'s existing bet.
+The seam then proved itself by accident. Rebasing this branch onto `main` after
+`FAIL_CONFORMANCE`/`FAIL_UNREACHABLE` were renamed to `FAIL`/`DOWN` merged
+cleanly as text and immediately failed `bun run compile`: `SlaOutcome` no longer
+admitted the old strings. A Go port would have rebased just as cleanly and kept
+compiling, with the two enums silently disagreeing — and disagreeing about
+outcome *names* is how a FAIL gets recorded as a PASS.
+
+So the Go alternative's cost is real, avoidable, and now observed rather than
+argued: `evaluate()` would exist twice, and for a final undisputable verdict two
+copies that can drift are a correctness risk, not duplication. **Choose TS.** No
+reason found to revisit `cre/package.json`'s existing bet.
 
 Two frictions came with it, neither disqualifying:
 

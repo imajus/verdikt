@@ -31,11 +31,11 @@ export type SpikeObservation = {
  * sending deliberate garbage (Specification.md §1).
  */
 export const evaluateSpikeOrSkip = (observation: SpikeObservation): SlaOutcome | null => {
-  if (observation.status === null) return OUTCOME.FAIL_UNREACHABLE;
+  if (observation.status === null) return OUTCOME.DOWN;
   if (observation.status >= 400 && observation.status < 500) return null;
-  if (observation.status >= 500) return OUTCOME.FAIL_CONFORMANCE;
-  if (observation.latencyMs > observation.latencyBudgetMs) return OUTCOME.FAIL_CONFORMANCE;
-  if (observation.body.length === 0) return OUTCOME.FAIL_CONFORMANCE;
+  if (observation.status >= 500) return OUTCOME.FAIL;
+  if (observation.latencyMs > observation.latencyBudgetMs) return OUTCOME.FAIL;
+  if (observation.body.length === 0) return OUTCOME.FAIL;
   return OUTCOME.PASS;
 };
 
