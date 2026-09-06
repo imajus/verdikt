@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "ens": {
+      "type": "http",
+      "url": "https://ens-mcp.namespace.ninja/mcp"
+    },
+    "ethereum": {
+      "type": "http",
+      "url": "https://ethereum-mcp.gregskril.workers.dev/mcp"
+    }
+  }
+}
