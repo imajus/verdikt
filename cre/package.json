@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Two Chainlink CRE workflows: per-request confidential verification, and the hourly aggregate",
-  "comment": "Shaped for the TypeScript/JS CRE SDK so @verdikt/sla can be imported directly. If Spike B (Tasks.md 0.3) forces Go, the evaluation engine gets written twice and the two copies can drift — a correctness risk for a final, undisputable verdict, so revisit this manifest rather than quietly duplicating.",
+  "comment": "Shaped for the TypeScript/JS CRE SDK so @verdikt/sla can be imported directly. If Spike B (Tasks.md 0.3) forces Go, the evaluation engine gets written twice and the two copies can drift \u2014 a correctness risk for a final, undisputable verdict, so revisit this manifest rather than quietly duplicating.",
   "scripts": {
     "simulate": "cre workflow simulate"
   },
@@ -12,5 +12,10 @@
     "@verdikt/fixtures": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "@verdikt/sla": "workspace:*"
+  },
+  "main": "lib/judge.js",
+  "exports": {
+    "./judge": "./lib/judge.js",
+    "./reputation": "./lib/reputation.js"
   }
 }

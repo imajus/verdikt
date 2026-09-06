@@ -23,12 +23,24 @@ in Phase 3:
   `IVerdiktRegistry.sol` declares it. Writes arrive via the KeystoneForwarder
   as `onReport(metadata, report)`. Phase 2's contract shape changes.
 - **CRE-3** — whether the proxy gets the workflow's return value back on the
-  same HTTP call is **unresolved**, and Chainlink's own docs contradict each
-  other on it. `Specification.md` §2's request path depends on the answer.
+  same HTTP call was **unresolved**, with Chainlink's own docs contradicting
+  each other. **Now settled by observation, restrictively:** it does not. The
+  proxy triggers and then blocks on the execution result.
 
 ## Findings
 
-### CRE-1 — `cre workflow simulate` requires a logged-in CRE account
+### CRE-1 — `cre workflow simulate` requires a logged-in CRE account — **RESOLVED**
+
+> **Update, 2026-09-07.** The one-time human step has been taken, and
+> `cre workflow simulate` now runs from this checkout. Both workflows in
+> `cre/workflows/` execute end to end, and **confidential mode simulates** — the
+> run prints the TEE banner ("Trigger requested TEE Execution … AWS Nitro in
+> us-west-2") and the handler completes inside it. The two unchecked boxes in
+> `Tasks.md` §0.3 are closed.
+>
+> The finding below stands for anyone starting from a clean machine, and for CI:
+> simulation still cannot be an unattended check, because the login is
+> interactive.
 
 The spike's headline deliverable ("`cre/spike/` green under `simulate`") cannot
 be produced unattended. Every `cre` subcommand that touches a workflow,
@@ -105,7 +117,46 @@ the decoded report.
 so a rejected verdict is silent. Phase 2 should emit on every path, including
 the ones that decline to write.
 
-### CRE-3 — whether the trigger response carries the payload back is unresolved
+### CRE-3 — the trigger response does **not** carry the payload back
+
+> **Update, 2026-09-07 — settled by observation, in the restrictive direction.**
+>
+> `cre workflow simulate verify --listen`, driven by a real POST to the local
+> trigger server:
+>
+> ```
+> $ curl -s -w '%{http_code} in %{time_total}s' -X POST http://localhost:2000/trigger \
+>        -H 'Content-Type: application/json' -d '{"input":{…}}'
+> 200 in 0.000344s          # empty body
+> ```
+>
+> and roughly a second later, in the simulator's own output:
+>
+> ```
+> ✓ Workflow Simulation Result:
+> "{\"outcome\":\"PASS\",\"mode\":\"status-only\",…}"
+> ```
+>
+> The handler's return value exists and is well-formed, but it reaches the
+> *simulator*, not the HTTP caller. The trigger POST is acknowledged
+> immediately with no body — the fire-and-forget shape from "Triggering deployed
+> workflows", not the "sent back as the HTTP response" shape from
+> "Configuration & handler".
+>
+> **Caveat on how far this generalises.** This is the simulator's local trigger
+> server, which the CLI presents as a debugging harness, not the production
+> gateway. It is the strongest evidence available without a deployed workflow,
+> and it agrees with one of the two contradicting doc pages, so **Verdikt is
+> built on the restrictive reading**: the proxy must not assume it gets the
+> payload back on the same request. Re-check against a deployed workflow if
+> production enrollment ever opens.
+>
+> **Consequence for Phase 4.** Option 2 below is taken — the proxy triggers and
+> then blocks on the execution result — because option 1 moves the reading of
+> the provider's response out of the enclave and weakens the argument §2 is
+> built on. See `proxy/src/verification.js`.
+
+The original finding, for the record:
 
 **This is the one that can invalidate a design, and the docs disagree with
 themselves.**
@@ -238,21 +289,35 @@ Checked off from `Tasks.md` §0.3:
       decoded report tuple
 - [x] **HTTP trigger** — wired and typechecked, with the authorization model
       understood (CRE-4)
-- [ ] **`cre workflow simulate` green** — blocked on CRE-1, needs a human to
-      `cre login` once
-- [ ] **Confidential mode simulates** — same blocker
+- [x] **`cre workflow simulate` green** — both workflows run; the login has
+      been done once (CRE-1)
+- [x] **Confidential mode simulates** — the `verify` run prints the TEE banner
+      and completes the handler inside it
 
-The last two are the same one-time human step. Everything else has evidence
-that reruns from a clean checkout with `bun run test` and `bun run compile`.
+Everything except the two above reruns from a clean checkout with
+`bun run compile`; simulation needs the one-time interactive login, so it still
+cannot be a CI check.
 
 ## Follow-ups this opens
 
-1. **Settle CRE-3** with one logged-in `--listen` simulate. Highest priority:
-   it decides the proxy's shape and it is quick.
-2. **Amend `Specification.md` §3 and `IVerdiktRegistry.sol`** for the
-   forwarder/`onReport` entry point (CRE-2) before Phase 2 starts on the
-   contract.
-3. **Amend `Specification.md` §2** once CRE-3 is settled, and add the proxy's
-   trigger-signing key (CRE-4) to it and to `.env.example`.
+1. ~~**Settle CRE-3**~~ — done, see the update above. The proxy blocks on the
+   execution result.
+2. ~~**Amend `Specification.md` §3 and `IVerdiktRegistry.sol`**~~ — done. The
+   registry implements `IReceiver` through `ReportReceiver`.
+3. ~~**Amend `Specification.md` §2**~~ — done, along with the proxy's
+   trigger-signing key (CRE-4) in `.env.example`.
 4. **Nothing here blocks Phases 1 or 2's tests.** The evaluation engine and the
    registry's accounting are untouched by all of the above.
+
+### CRE-7 — an EVM log carries no timestamp
+
+`FilterLogsReply.logs[]` has `blockNumber` but no `blockTimestamp`, and there is
+no batch header read. A literal trailing-7-day window would need one
+`headerByNumber` per block, which is thousands of calls an hour.
+
+The aggregate reads the head once and dates each log from
+`headTimestamp - (headNumber - logBlock) * blockTimeSeconds`. The approximation
+is acceptable *here specifically*: both ratios are display-only, recomputed
+hourly, and have no refund state behind them (`Specification.md` §1), so a
+verdict landing on the wrong side of the boundary costs a slightly stale number
+for one hour. It would not be acceptable anywhere a refund depended on it.

@@ -126,3 +126,12 @@ interface SlaPriceRangeClause extends SlaClauseBase {
   maxMinorUnits: string;
   asset: string;
 }
+
+/** The two marketplace ratios plus the tallies they came from (Specification.md §1). */
+interface ReputationScores {
+  /** 0–1000. `PASS / (PASS + FAIL)`, floored. 1000 when nothing arrived. */
+  conformance: number;
+  /** 0–1000. `(PASS + FAIL) / all`, floored. 1000 for an empty window. */
+  availability: number;
+  counts: { pass: number; fail: number; down: number; total: number };
+}

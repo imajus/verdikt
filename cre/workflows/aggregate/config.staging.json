@@ -1,0 +1,9 @@
+{
+  "schedule": "0 0 * * * *",
+  "arcChainSelectorName": "arc-testnet",
+  "sepoliaChainSelectorName": "ethereum-testnet-sepolia",
+  "registryAddress": "0x0000000000000000000000000000000000000001",
+  "scoreWriterAddress": "0x0000000000000000000000000000000000000002",
+  "registryDeployBlock": "0",
+  "gasLimit": "1000000"
+}

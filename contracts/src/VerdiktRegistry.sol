@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IERC165, IReceiver, ReportMetadata} from "./IReceiver.sol";
 import {IVerdiktRegistry} from "./IVerdiktRegistry.sol";
+import {ReportReceiver} from "./ReportReceiver.sol";
 
 /// @title VerdiktRegistry
 /// @notice Registrar and escrow for Verdikt, on Arc (Specification.md §3).
@@ -21,16 +21,7 @@ import {IVerdiktRegistry} from "./IVerdiktRegistry.sol";
 ///         hold a spotless conformance ratio while failing real calls.
 ///      3. **A provider cannot walk away from an obligation.** `deregister`
 ///         reverts while SUSPENDED.
-contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
-    using ReportMetadata for bytes;
-
-    /// @dev The ABI tuple the CRE workflow encodes into its report. Mirrored in
-    ///      `cre/verify/workflow.ts`; the two must change together.
-    ///      (bytes32 serviceId, bytes32 requestId, uint8 outcome, address payer, uint256 paidAmount)
-    address public immutable FORWARDER;
-    address public immutable WORKFLOW_OWNER;
-    bytes10 public immutable WORKFLOW_NAME;
-
+contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     /// @notice Bond and refund, in Arc's 18-decimal native view (`msg.value`).
     uint256 public immutable DEPOSIT_AMOUNT;
     uint256 public immutable FIXED_REFUND;
@@ -82,17 +73,12 @@ contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
         bytes10 workflowName,
         uint256 depositAmount,
         uint256 fixedRefund
-    ) {
-        require(forwarder != address(0), "forwarder=0");
-        require(workflowOwner != address(0), "workflowOwner=0");
+    ) ReportReceiver(forwarder, workflowOwner, workflowName) {
         require(depositAmount > 0, "deposit=0");
         require(fixedRefund > 0, "refund=0");
         // A per-call refund larger than the whole bond would suspend a service
         // on its first failure, which is a configuration mistake, not a policy.
         require(fixedRefund <= depositAmount, "refund>deposit");
-        FORWARDER = forwarder;
-        WORKFLOW_OWNER = workflowOwner;
-        WORKFLOW_NAME = workflowName;
         DEPOSIT_AMOUNT = depositAmount;
         FIXED_REFUND = fixedRefund;
     }
@@ -155,21 +141,15 @@ contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
 
     // ----------------------------------------------------------- verdict entry
 
-    /// @inheritdoc IReceiver
-    /// @dev The only way a verdict is ever written. Authentication failures
+    /// @notice The only way a verdict is ever written.
+    /// @dev  Authentication failures
     ///      revert; business declines emit `VerdictRejected` instead, because
     ///      the forwarder does not surface a revert usefully and a silently
     ///      dropped report would be invisible (Spike B, CRE-2).
+    /// @dev The ABI tuple the CRE workflow encodes into its report is mirrored
+    ///      in `cre/workflows/verify/workflow.ts`; the two must change together.
     function onReport(bytes calldata metadata, bytes calldata report) external {
-        if (msg.sender != FORWARDER) revert NotForwarder(msg.sender);
-        if (metadata.length < ReportMetadata.LENGTH) revert MalformedReportMetadata(metadata.length);
-
-        address owner = metadata.workflowOwner();
-        if (owner != WORKFLOW_OWNER) revert UnexpectedWorkflowOwner(owner);
-        if (WORKFLOW_NAME != bytes10(0)) {
-            bytes10 name = metadata.workflowName();
-            if (name != WORKFLOW_NAME) revert UnexpectedWorkflowName(name);
-        }
+        _authenticateReport(metadata);
 
         (bytes32 serviceId, bytes32 requestId, uint8 outcomeOrdinal, address payer, uint256 paidAmount) =
             abi.decode(report, (bytes32, bytes32, uint8, address, uint256));
@@ -274,12 +254,6 @@ contract VerdiktRegistry is IVerdiktRegistry, IReceiver {
 
     function getOwed(address payer) external view returns (uint256) {
         return _owed[payer];
-    }
-
-    /// @inheritdoc IERC165
-    /// @dev The forwarder probes this before delivering a report.
-    function supportsInterface(bytes4 interfaceId) external pure returns (bool) {
-        return interfaceId == type(IReceiver).interfaceId || interfaceId == type(IERC165).interfaceId;
     }
 
     // ---------------------------------------------------------------- internal

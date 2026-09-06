@@ -1,0 +1,13 @@
+# CRE project settings for Verdikt's two workflows (Specification.md §2).
+#
+# Two EVM entries because Verdikt straddles two chains. The per-request workflow
+# writes verdicts to Arc; the hourly aggregate reads Arc's VerdictWritten events
+# and writes reputation scores to Sepolia, where ENSv2 lives (§4).
+staging-settings:
+  rpcs:
+    # Arc Testnet. eip155:5042002, selector 3034092155422581607 — verified
+    # against the live RPC's eth_chainId in Spike B, not from a table.
+    - chain-name: "arc-testnet"
+      url: "https://rpc.testnet.arc.network"
+    - chain-name: "ethereum-testnet-sepolia"
+      url: "https://ethereum-sepolia-rpc.publicnode.com"

@@ -7,6 +7,7 @@
 //   2. Dependency-free. This bundles into the CRE workflow.
 
 import { DELIVERY_CLAUSE_ID, evaluateClause, evaluateDelivery } from './clauses.js';
+export { NO_DATA_SCORE, SCORE_SCALE, aggregateWindow } from './aggregate.js';
 import { assertSchema, validate } from './jsonschema.js';
 import META_SCHEMA from './schema.json' with { type: 'json' };
 

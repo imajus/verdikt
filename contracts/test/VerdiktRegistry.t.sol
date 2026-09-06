@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IERC165, IReceiver, ReportMetadata} from "../src/IReceiver.sol";
+import {ReportReceiver} from "../src/ReportReceiver.sol";
 import {IVerdiktRegistry} from "../src/IVerdiktRegistry.sol";
 import {VerdiktRegistry} from "../src/VerdiktRegistry.sol";
 
@@ -166,12 +167,12 @@ contract VerdiktRegistryTest is Test {
         bytes memory report = _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500);
 
         vm.prank(stranger);
-        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.NotForwarder.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.NotForwarder.selector, stranger));
         registry.onReport(meta, report);
 
         // Including the provider: no role anywhere lets it grade its own service.
         vm.prank(provider);
-        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.NotForwarder.selector, provider));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.NotForwarder.selector, provider));
         registry.onReport(meta, report);
     }
 
@@ -180,7 +181,7 @@ contract VerdiktRegistryTest is Test {
     function test_onReportRejectsAnotherWorkflowOwnerOnTheSameForwarder() public {
         _register();
         vm.prank(FORWARDER);
-        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.UnexpectedWorkflowOwner.selector, stranger));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.UnexpectedWorkflowOwner.selector, stranger));
         registry.onReport(
             _metadata(stranger, WORKFLOW_NAME), _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500)
         );
@@ -189,7 +190,7 @@ contract VerdiktRegistryTest is Test {
     function test_onReportRejectsAnotherWorkflowNameFromTheSameOwner() public {
         _register();
         vm.prank(FORWARDER);
-        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.UnexpectedWorkflowName.selector, bytes10("other-wf")));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.UnexpectedWorkflowName.selector, bytes10("other-wf")));
         registry.onReport(
             _metadata(WORKFLOW_OWNER, bytes10("other-wf")),
             _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500)
@@ -199,7 +200,7 @@ contract VerdiktRegistryTest is Test {
     function test_onReportRejectsATruncatedHeader() public {
         _register();
         vm.prank(FORWARDER);
-        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.MalformedReportMetadata.selector, uint256(64)));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.MalformedReportMetadata.selector, uint256(64)));
         registry.onReport(new bytes(64), _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500));
     }
 

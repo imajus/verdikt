@@ -107,11 +107,8 @@ interface IVerdiktRegistry {
     error TransferFailed(address to, uint256 amount);
     error Reentrancy();
 
-    // -- report authentication (Spike B, CRE-2)
-    error NotForwarder(address caller);
-    error MalformedReportMetadata(uint256 length);
-    error UnexpectedWorkflowOwner(address owner);
-    error UnexpectedWorkflowName(bytes10 name);
+    // -- report payload validity. The forwarder/workflow-owner checks live in
+    // `ReportReceiver`, shared with VerdiktScoreWriter on Sepolia.
     error InvalidOutcome(uint8 ordinal);
     error ZeroPayer();
 
@@ -150,13 +147,6 @@ interface IVerdiktRegistry {
     function getStatus(bytes32 serviceId) external view returns (Status);
     function getProvider(bytes32 serviceId) external view returns (address);
     function getOwed(address payer) external view returns (uint256);
-
-    /// @notice The KeystoneForwarder allowed to deliver reports.
-    function FORWARDER() external view returns (address);
-    /// @notice The CRE account whose workflow may write verdicts here.
-    function WORKFLOW_OWNER() external view returns (address);
-    /// @notice Optional extra pin on the workflow name; zero disables the check.
-    function WORKFLOW_NAME() external view returns (bytes10);
 
     function DEPOSIT_AMOUNT() external view returns (uint256);
     function FIXED_REFUND() external view returns (uint256);

@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowJs": true,
+    // @verdikt/sla, @verdikt/sdk and @verdikt/cre are plain ESM JS whose types
+    // live in JSDoc, and they resolve through node_modules symlinks. Without
+    // this TS stops at the package boundary and every import degrades to `any`.
+    "maxNodeModuleJsDepth": 2
+  },
+  // Ambient globals (SlaOutcome, Judgement, …) are declared with no `export`, a
+  // repo convention (CLAUDE.md). An import does not carry them across a package
+  // boundary, so the files have to be named here explicitly.
+  "include": ["./**/*.ts", "../../../packages/sla/types.d.ts", "../../../packages/sdk/types.d.ts", "../../types.d.ts"],
+  "exclude": ["node_modules", ".tmp"]
+}
