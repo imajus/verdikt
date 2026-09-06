@@ -3,7 +3,6 @@ pragma solidity ^0.8.24;
 
 /// @title IVerdiktRegistry
 /// @notice Registrar + escrow ABI for Verdikt (Specification.md §3, Tasks.md Phase 2.1).
-///         Signatures and events only — Phase 2 supplies the implementation.
 ///
 /// @dev Value moves as `msg.value`, not ERC-20 transfers: USDC is Arc's native
 ///      gas token, so escrow holds value directly — no `approve`/`transferFrom`
@@ -11,10 +10,11 @@ pragma solidity ^0.8.24;
 ///      payment, the bond and the refund are therefore the same asset on the
 ///      same chain, and a refund needs no cross-chain correlation.
 ///
-///      Roles: `verifier` — the CRE workflow's callback signer — is the only
-///      address that may write a verdict, and is fixed at construction. Neither
-///      a provider nor Verdikt itself holds a verdict-write role, and there is
-///      no admin able to grant one (Specification.md §3, "one role per service").
+///      Roles: verdicts arrive only through `IReceiver.onReport`, from the
+///      KeystoneForwarder, carrying a report the CRE DON signed on behalf of a
+///      pinned `workflowOwner`. There is no `setVerdict` an EOA can call, no
+///      verdict-write role a provider could hold, and no admin able to grant
+///      one (Specification.md §3, "one role per service"; Spike B, CRE-2).
 interface IVerdiktRegistry {
     /// @notice Per-call outcome (Specification.md §1).
     /// @dev These ordinals are ABI surface. `packages/sdk/registry.js` mirrors
@@ -32,6 +32,16 @@ interface IVerdiktRegistry {
         DEREGISTERED // 3
     }
 
+    /// @notice Why a report that authenticated correctly still wrote no verdict.
+    /// @dev `onReport` returns nothing and the forwarder does not surface a
+    ///      revert usefully (Spike B, CRE-2), so a business-level decline is
+    ///      emitted rather than reverted. Reverting would make it invisible.
+    enum RejectionReason {
+        DUPLICATE_REQUEST, // 0 — a verdict already exists for this requestId
+        UNKNOWN_SERVICE, // 1 — never registered
+        SERVICE_DEREGISTERED // 2 — delisted; its bond has already gone home
+    }
+
     /// @dev `writtenAt == 0` means no verdict is recorded for that requestId.
     struct Verdict {
         bytes32 serviceId;
@@ -40,6 +50,15 @@ interface IVerdiktRegistry {
         uint256 paidAmount;
         uint256 refundCredited;
         uint64 writtenAt;
+    }
+
+    /// @dev One read for the dashboard's service list (Specification.md §5).
+    ///      The slug is not stored — `ServiceRegistered` carries it, and
+    ///      keccak256 is one-way, so the event is the only mapping back.
+    struct Service {
+        address provider;
+        Status status;
+        uint256 deposit;
     }
 
     // ------------------------------------------------------------------ events
@@ -60,24 +79,41 @@ interface IVerdiktRegistry {
         bytes32 indexed serviceId, bytes32 indexed requestId, Outcome outcome, address payer, uint256 paidAmount
     );
 
+    /// @dev Emitted instead of reverting, so a declined report is visible
+    ///      on-chain rather than swallowed by the forwarder.
+    event VerdictRejected(bytes32 indexed serviceId, bytes32 indexed requestId, RejectionReason reason);
+
     event RefundCredited(bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount);
 
     event RefundWithdrawn(address indexed payer, uint256 amount);
     event ServiceSuspended(bytes32 indexed serviceId);
+    event ServiceReinstated(bytes32 indexed serviceId, uint256 deposit);
     event ServiceDeregistered(bytes32 indexed serviceId, address indexed provider, uint256 returnedDeposit);
 
     // ------------------------------------------------------------------ errors
 
     error EmptySlug();
+    /// @dev The slug is reused verbatim as a DNS label and an ENS label, so one
+    ///      that cannot be either is rejected at registration rather than
+    ///      producing a service with no reachable route and no subname.
+    error InvalidSlug(string slug);
     error UnknownService(bytes32 serviceId);
     error ServiceAlreadyRegistered(bytes32 serviceId);
     error IncorrectDeposit(uint256 expected, uint256 provided);
     error NotProvider(bytes32 serviceId, address caller);
-    error NotVerifier(address caller);
     error ServiceIsSuspended(bytes32 serviceId);
     error ServiceIsInactive(bytes32 serviceId, Status status);
-    error DuplicateRequest(bytes32 requestId);
     error NothingOwed(address payer);
+    error TransferFailed(address to, uint256 amount);
+    error Reentrancy();
+
+    // -- report authentication (Spike B, CRE-2)
+    error NotForwarder(address caller);
+    error MalformedReportMetadata(uint256 length);
+    error UnexpectedWorkflowOwner(address owner);
+    error UnexpectedWorkflowName(bytes10 name);
+    error InvalidOutcome(uint8 ordinal);
+    error ZeroPayer();
 
     // --------------------------------------------------------- provider writes
 
@@ -88,31 +124,14 @@ interface IVerdiktRegistry {
     /// @return serviceId keccak256(bytes(slug))
     function register(string calldata slug) external payable returns (bytes32 serviceId);
 
+    /// @notice Adds to a service's bond. Reinstates a SUSPENDED service once the
+    ///         balance is back at DEPOSIT_AMOUNT().
     function topUp(bytes32 serviceId) external payable;
 
     /// @notice Provider-only. Delists and returns the remaining deposit.
     /// @dev Reverts while SUSPENDED, so a provider cannot deregister to dodge an
     ///      outstanding refund obligation.
     function deregister(bytes32 serviceId) external;
-
-    // --------------------------------------------------------- verifier writes
-
-    /// @notice Records a per-call verdict and, on either FAIL or DOWN, credits a refund.
-    /// @dev Verifier-only. Credit is `min(FIXED_REFUND(), paidAmount, remaining
-    ///      deposit)` — never a penalty on top of the payment, which is what
-    ///      keeps induced-failure griefing at break-even-minus-gas with no
-    ///      dispute layer to fall back on (Specification.md §3).
-    ///
-    ///      Books `owed[payer] += amount` and sends nothing: pushing value here
-    ///      would let a payer address that rejects transfers revert the whole
-    ///      call and erase its own FAIL verdict. `requestId` is recorded so a
-    ///      second refund against the same request reverts.
-    ///
-    ///      `payer` and `paidAmount` are recovered from the x402 payment payload
-    ///      by the enclave (Specification.md §2), so no correlation table is
-    ///      needed between the payment leg and the refund leg.
-    function setVerdict(bytes32 serviceId, bytes32 requestId, Outcome outcome, address payer, uint256 paidAmount)
-        external;
 
     // ------------------------------------------------------------ payer writes
 
@@ -121,16 +140,23 @@ interface IVerdiktRegistry {
 
     // ------------------------------------------------------------------- views
 
-    /// @dev Canonical slug → serviceId derivation. `packages/sdk` mirrors it in
-    ///      JS; Phase 2 tests should assert the two agree.
+    /// @dev Canonical slug → serviceId derivation. `packages/sdk/registry.js`
+    ///      mirrors it in JS and both sides assert the same vector.
     function serviceIdOf(string calldata slug) external pure returns (bytes32);
 
     function getVerdict(bytes32 requestId) external view returns (Verdict memory);
+    function getService(bytes32 serviceId) external view returns (Service memory);
     function getDeposit(bytes32 serviceId) external view returns (uint256);
     function getStatus(bytes32 serviceId) external view returns (Status);
     function getProvider(bytes32 serviceId) external view returns (address);
     function getOwed(address payer) external view returns (uint256);
-    function verifier() external view returns (address);
+
+    /// @notice The KeystoneForwarder allowed to deliver reports.
+    function FORWARDER() external view returns (address);
+    /// @notice The CRE account whose workflow may write verdicts here.
+    function WORKFLOW_OWNER() external view returns (address);
+    /// @notice Optional extra pin on the workflow name; zero disables the check.
+    function WORKFLOW_NAME() external view returns (bytes10);
 
     function DEPOSIT_AMOUNT() external view returns (uint256);
     function FIXED_REFUND() external view returns (uint256);

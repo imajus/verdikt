@@ -115,37 +115,61 @@ non-confidential logic in the TEE.
 - **Permissionless registration** — `register(slug)` posts the required deposit.
   `serviceId = keccak256(slug)`, a human-chosen slug reused verbatim as the
   `<slug>.verdikt.bond` route and the `<slug>.verdikt.eth` ENS subname (§4).
+  Because one string is three identifiers, the registry validates it as a label
+  both DNS and ENS accept (lowercase alphanumeric and hyphen, no leading or
+  trailing hyphen, ≤63 bytes), and never lets a deregistered slug be
+  re-registered — verdict history is keyed by `serviceId`, so reuse would hand a
+  new provider the previous one's record.
 - **Deposit/bond** — held in escrow keyed by `serviceId`, in **native USDC**
   (Arc's gas token, so escrow holds value directly — no `approve`/`transferFrom`,
   no token address), a **fixed amount** for MVP. Paid directly to escrow, not
   through the proxy. This is the pool refunds draw from.
 - **No SLA on Arc** — the registry struct has no SLA field and no `setSLA`. The
   SLA lives only on the ENS subname (§4); the workflow reads it at run time.
-- **One role per service** — verifier only (the CRE callback signer, may
-  `setVerdict`). Neither provider nor Verdikt can write a verdict, enforced at
-  the contract level; the provider's authorship happens on the ENS side (§4).
+- **One role per service, and it is not an address Verdikt holds** — a CRE
+  workflow holds no key and sends no transaction. It ABI-encodes a payload, has
+  the DON sign it into a *report*, and the Chainlink KeystoneForwarder calls
+  `onReport(metadata, report)` on the registry, which implements `IReceiver`.
+  There is no `setVerdict` an EOA can call. The forwarder is shared
+  infrastructure, so `msg.sender == forwarder` is not access control on its own:
+  the registry also pins the `workflowOwner` carried in the report header, which
+  is what restricts verdict-writing to Verdikt's own workflow. Neither provider
+  nor Verdikt can write a verdict, and there is no admin able to grant that
+  power; the provider's authorship happens on the ENS side (§4). Upstream of the
+  chain, the workflow's HTTP trigger is itself signature-gated (a JWT signed by
+  a key listed in `authorizedKeys`), so an unauthorised caller cannot even
+  produce a report to deliver.
 - **Refund, auto-executed, no dispute** — a `FAIL` or `DOWN` on a paid request
   credits a refund from that service's deposit to the payer. The verdict carries
   payer and paid amount out of the payment payload (§2), so the registrar needs
-  no correlation table; it records the `requestId` so a second refund against the
-  same request reverts. Refund and payment are the same asset on the same chain
-  (§6) — no cross-chain correlation between the two legs. The availability
-  *score* never moves a deposit (§1, §5); a `DOWN` refunds because that one call
-  took payment and delivered nothing, not because a score crossed a threshold.
-- **Pull payments, never push** — `setVerdict` books `owed[payer] += amount`; the
+  no correlation table; it records the `requestId`, and a second report against
+  the same request writes nothing and pays nothing. Refund and payment are the
+  same asset on the same chain (§6) — no cross-chain correlation between the two
+  legs. The availability *score* never moves a deposit (§1, §5); a `DOWN`
+  refunds because that one call took payment and delivered nothing, not because
+  a score crossed a threshold.
+- **A declined report is emitted, not reverted** — `onReport` returns nothing
+  and the forwarder does not surface a revert usefully, so a report that
+  authenticates but has nothing to record (duplicate `requestId`, unknown or
+  deregistered service) emits `VerdictRejected` and returns. Reverting would
+  make the decline invisible. Authentication failures and malformed reports
+  still revert: those are bugs, not outcomes.
+- **Pull payments, never push** — `onReport` books `owed[payer] += amount`; the
   agent calls `withdraw()` to collect. Pushing value here would let a payer
   address that rejects transfers revert the whole call and erase its own `FAIL` —
   which a provider farming its own service through a reverting contract could use
   to hold a spotless conformance ratio while failing real calls. Booking a credit
   decouples recording a verdict from paying anyone, and removes the reentrancy
-  surface an external call inside `setVerdict` would open.
+  surface an external call inside the verdict path would open.
 - **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
   penalty on top. With no dispute layer, a refund larger than the payment would
   make induced failure profitable; capping at the payment makes griefing
   break-even-minus-gas — the griefer recovers only what it spent.
 - **Auto-suspend at zero** — when refunds drain a service's deposit to 0, status
-  flips to SUSPENDED and the proxy stops routing new payments to it until topped
-  up.
+  flips to SUSPENDED and the proxy stops routing new payments to it. Topping up
+  reinstates it only once the bond is back at the full required deposit: waking
+  a service on dust would leave it listed while every refund it then owed was
+  capped at that dust, which is the bond meaning nothing.
 - **Deregistration** — `deregister(serviceId)`, provider-only; delists and
   returns the remaining deposit. Blocked while SUSPENDED, so a provider can't
   deregister to dodge an outstanding refund obligation.

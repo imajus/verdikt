@@ -233,37 +233,76 @@ here is unrecoverable — it burns a real bond.
 
 ## Phase 2 — Registry and escrow on Arc (days 3–5)
 
+**Done except deployment** — `contracts/`, 35 Foundry tests green.
+Spike B's finding CRE-2 reshaped the entry point before any of this was
+written; §2.1 below reflects the shape actually built.
+
 ### 2.1 `contracts/src/VerdiktRegistry.sol`
 
 Registrar and escrow in one contract for MVP.
 
-- [ ] `register(bytes32 serviceId) payable` — `msg.value == DEPOSIT`
-- [ ] `topUp(bytes32 serviceId) payable`
-- [ ] `deregister(bytes32 serviceId)` — provider only, reverts while
+- [x] `register(string calldata slug) payable` — `msg.value == DEPOSIT_AMOUNT`,
+      returns `keccak256(bytes(slug))`
+- [x] Slug validated as a label both DNS and ENS accept, and a deregistered
+      slug is never re-registerable — verdict history is keyed by `serviceId`,
+      so reuse would hand a new provider the previous one's record
+- [x] `topUp(bytes32 serviceId) payable`
+- [x] `deregister(bytes32 serviceId)` — provider only, reverts while
       SUSPENDED
-- [ ] `enum Outcome { PASS, FAIL, DOWN }`
-- [ ] `setVerdict(bytes32 serviceId, bytes32 requestId, Outcome outcome,
-      address payer, uint256 paidAmount)` — verifier role only
-- [ ] Refund on either FAIL or DOWN: `min(fixedRefund, paidAmount, remainingDeposit)`
-- [ ] `requestId` recorded; a second refund on the same request reverts
-- [ ] Auto-suspend when the deposit hits zero
-- [ ] `withdraw()` — agent collects credited refunds
-- [ ] Events: `ServiceRegistered`, `VerdictWritten` (carrying `outcome`),
-      `RefundCredited`, `RefundWithdrawn`, `ServiceSuspended`,
-      `ServiceDeregistered`
-- [ ] Views: `getVerdict`, `getDeposit`, `getStatus`, `getOwed`
+- [x] `enum Outcome { PASS, FAIL, DOWN }`
+- [x] ~~`setVerdict(...)` — verifier role only~~ → **`onReport(metadata,
+      report)`**, see the decision below
+- [x] Refund on either FAIL or DOWN: `min(FIXED_REFUND, paidAmount, remainingDeposit)`
+- [x] `requestId` recorded; a second report on the same request writes nothing
+      and pays nothing
+- [x] Auto-suspend when the deposit hits zero
+- [x] `withdraw()` — agent collects credited refunds
+- [x] Events: `ServiceRegistered`, `VerdictWritten` (carrying `outcome`),
+      `VerdictRejected`, `RefundCredited`, `RefundWithdrawn`,
+      `ServiceSuspended`, `ServiceReinstated`, `ServiceDeregistered`
+- [x] Views: `getVerdict`, `getService`, `getDeposit`, `getStatus`,
+      `getProvider`, `getOwed`
+
+> **Decision — the verdict entry point is `onReport`, not `setVerdict`.**
+> Absorbed from Spike B (CRE-2). A CRE workflow holds no key and sends no
+> transaction, so no `verifier` EOA can exist. The registry implements
+> `IReceiver`; the KeystoneForwarder delivers a DON-signed report. Because the
+> forwarder is shared infrastructure, `msg.sender` alone would let *any* CRE
+> user on Arc write Verdikt verdicts — so the pinned `workflowOwner` from the
+> report header is the real access control, with an optional `workflowName`
+> pin on top. §3 invariants are untouched: the credit is still booked and never
+> pushed, and the refund cap is unchanged.
+>
+> **Corollary — a declined report emits rather than reverts.** `onReport`
+> returns nothing and the forwarder does not surface a revert usefully, so a
+> duplicate `requestId`, an unknown service or a deregistered one emits
+> `VerdictRejected` and returns. This is a deliberate departure from spec §3's
+> "a second refund against the same request reverts": the invariant that
+> matters is that it is not paid twice, and reverting would make the reason
+> invisible. Authentication failures and malformed reports still revert.
+
+> **Decision — reinstatement requires the full bond, not merely a non-zero
+> one.** Suspension is at zero (spec §3), but `topUp` only returns a service to
+> ACTIVE once its deposit is back at `DEPOSIT_AMOUNT`. Waking it on dust would
+> leave it listed while every refund it owed was capped at that dust.
+
+> **Unverified — the 109-byte report header layout.** `ReportMetadata`'s
+> offsets come from the KeystoneForwarder's documented header and are
+> cross-checked against the 109-byte total the spike recorded, but have not been
+> observed against a live forwarder call. A wrong `workflowOwner` offset rejects
+> every verdict. Confirming it is an explicit step in 2.4.
 
 ### 2.2 Payout safety — pull payments
 
-`setVerdict` books `owed[payer] += amount` and sends nothing. The agent
+The verdict path books `owed[payer] += amount` and sends nothing. The agent
 calls `withdraw()` to collect.
 
-- [ ] No external call anywhere in `setVerdict`
-- [ ] `withdraw()` zeroes the balance before transferring (checks-effects-
+- [x] No external call anywhere in the verdict path
+- [x] `withdraw()` zeroes the balance before transferring (checks-effects-
       interactions); a guard is then belt-and-braces
 
-Rationale: pushing value during `setVerdict` would let a payer address that
-rejects transfers revert the whole transaction and erase its own FAIL
+Rationale: pushing value while recording a verdict would let a payer address
+that rejects transfers revert the whole transaction and erase its own FAIL
 verdict — a provider farming its own service through a reverting contract
 could hold a spotless conformance ratio while failing real calls. It is
 also strictly less code than a push-with-fallback.
@@ -275,27 +314,40 @@ the dashboard still shows an end-to-end refund without a manual step.
 
 State machine, table-driven:
 
-- [ ] `register` → ACTIVE
-- [ ] Either FAIL or DOWN → refund credited, deposit decremented, `RefundCredited`
+- [x] `register` → ACTIVE
+- [x] Either FAIL or DOWN → refund credited, deposit decremented, `RefundCredited`
       emitted
-- [ ] `PASS` → no credit, deposit untouched
-- [ ] `paidAmount < fixedRefund` → credit equals `paidAmount`
-- [ ] Credit larger than the remaining deposit → books the remainder,
+- [x] `PASS` → no credit, deposit untouched
+- [x] `paidAmount < fixedRefund` → credit equals `paidAmount`
+- [x] Credit larger than the remaining deposit → books the remainder,
       SUSPENDED
-- [ ] SUSPENDED → `deregister` reverts
-- [ ] `topUp` → ACTIVE again
-- [ ] Same `requestId` twice → reverts
-- [ ] Non-verifier `setVerdict` → reverts
-- [ ] Provider calling `setVerdict` → reverts (spec §3, one role per service)
-- [ ] Reverting payer → verdict still written, credit still booked
-- [ ] Reentrant `withdraw` → no double payout
-- [ ] `withdraw` with nothing owed → reverts or no-ops, never underflows
+- [x] SUSPENDED → `deregister` reverts
+- [x] `topUp` → ACTIVE again (only back at the full deposit; dust does not wake it)
+- [x] Same `requestId` twice → `VerdictRejected`, nothing paid twice
+- [x] A report from any caller but the forwarder → reverts
+- [x] A report from another `workflowOwner` on the same forwarder → reverts
+- [x] Provider writing a verdict → reverts (spec §3, one role per service)
+- [x] Reverting payer → verdict still written, credit still booked
+- [x] Reentrant `withdraw` → no double payout
+- [x] `withdraw` with nothing owed → reverts, never underflows
+- [x] Fuzz: credit is simultaneously ≤ `paidAmount`, ≤ `FIXED_REFUND` and
+      ≤ the remaining deposit, for every outcome
+- [x] Solvency: contract balance always equals bonds plus credits
+- [x] `serviceIdOf` agrees with `packages/sdk/registry.js` on shared vectors —
+      both sides assert the same two hashes
 
 ### 2.4 Deploy
 
-- [ ] Deploy to Arc Testnet
+- [x] `contracts/script/Deploy.s.sol`, parameterised by forwarder, workflow
+      owner, deposit and refund
+- [ ] **BLOCKED** — deploy to Arc Testnet. `ARC_RPC_URL` and a funded
+      `DEPLOYER_PRIVATE_KEY` are both empty in `.env`; nothing in the repo can
+      supply either. Everything downstream that needs a deployed address is
+      blocked with it (2.4's remaining boxes, 3.x's live writes, Phase 6)
 - [ ] Record addresses in `deployments/arc-testnet.json`
-- [ ] Grant the verifier role to the CRE workflow signer from 0.3
+- [ ] Confirm the `ReportMetadata` offsets against a real forwarder delivery
+      before trusting a live verdict — a wrong offset rejects every one of them
+      and the forwarder will not say why
 
 ---
 
