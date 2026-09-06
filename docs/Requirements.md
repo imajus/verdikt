@@ -1,40 +1,34 @@
-# Verdikt — Project Requirements Document
-
-**Domain**: verdikt.bond (pending purchase)
-**Event**: ETHOnline 2026, solo build, 2-week window (started Sep 2, 2026)
-**Status**: MVP scope locked Sep 6, 2026. Not yet built.
-
----
+# Verdikt
 
 ## 1. Problem
 
 x402 (HTTP-native pay-per-call payments) has no verification layer. The
 Facilitator settles payment; the Bazaar directory is self-reported discovery.
 Neither checks that a paid-for API call actually delivered what the provider
-advertised. A USENIX Security '26 study of 15 major x402 facilitators
-(covering ~99% of observed volume, including Coinbase) found **all 15**
-violated at least one security rule across 31 distinct vulnerabilities — live
-evidence that "payment settled ≠ service delivered correctly" is a real,
-current gap, not a hypothetical.
+advertised. A 2026 security study of 15 major x402 facilitators — covering
+roughly 99% of observed volume, including Coinbase — found that all 15
+violated at least one security rule across 31 distinct vulnerabilities[^1].
+This is live evidence that "payment settled ≠ service delivered correctly"
+is a real, current gap, not a hypothetical.
 
 ERC-8004 ("Trustless Agents") already defines an Identity/Reputation/
 Validation registry pattern for agents, and its own spec text admits it
 "cannot cryptographically guarantee that advertised capabilities are
-functional and non-malicious." As of a May 2026 study, **zero confirmed
-mainnet deployments** of its Validation Registry exist. The standard exists;
-nobody has built the missing piece.
+functional and non-malicious"[^2]. A 2026 study found zero confirmed mainnet
+deployments of its Validation Registry[^3]. The standard exists; nobody has
+built the missing piece.
 
 ## 2. Product summary
 
 Verdikt is an automated, judgment-independent reputation and refund system
-for x402-gated APIs. A proxy sits between a paying agent and an x402 service,
-verifies the response against the provider's own declared SLA inside a
-Chainlink CRE Confidential Workflow (TEE), writes a verdict to an on-chain
-registry, and auto-refunds the paying agent from the provider's bonded
-deposit when the SLA isn't met — with no dispute or arbitration step.
+for x402-gated APIs. A proxy sits between a paying agent and an x402
+service, verifies the response against the provider's own declared SLA
+inside a Chainlink CRE Confidential Workflow (TEE), writes a verdict to an
+on-chain registry, and auto-refunds the paying agent from the provider's
+bonded deposit when the SLA isn't met — with no dispute or arbitration step.
 
-Denis's framing: a reputation system "not dependent on the agent's
-judgement." Verification and refund are both code-enforced.
+Verification and refund are both code-enforced, so trust in the result does
+not depend on either party's judgment.
 
 ## 3. Goals
 
@@ -54,27 +48,25 @@ judgement." Verification and refund are both code-enforced.
   correct* (e.g. re-deriving a claimed exchange rate). Scope is
   conformance/delivery verification only (schema, latency, price,
   availability), not epistemic correctness.
-- **Dispute/arbitration layer** — no Kleros-style challenge process. A CRE
-  verdict is final and auto-executes a refund; this is a deliberate
-  design choice (see §6.4), not a shortcut.
+- **Dispute/arbitration layer** — no challenge process. A CRE verdict is
+  final and auto-executes a refund; this is a deliberate design choice (see
+  §6.2), not a shortcut.
 - **Weighted multi-clause scoring engine** — no single 0–1 compliance score
   blending every clause. Boolean clauses stay boolean; only availability is
-  graduated (see §6.1 for the precedent justifying this split).
+  graduated (see §6.1 for the reasoning behind this split).
 - **Reputation-scaled deposit tiers** — deposit is a fixed amount per
   service for MVP.
 - **Deposit-via-x402** — the bond is paid directly to the escrow contract,
   not routed through the x402 proxy.
-- **Re-derivation/challenge of a CRE verdict** — unlike comparable ENS-track
-  projects (Immunity, Assay) that let a challenger re-check a claim for
-  free via on-chain state, x402 responses are pay-gated; there's no free
-  source to fund a re-check. The bond substitutes for re-derivation.
+- **Re-derivation/challenge of a CRE verdict** — x402 responses are
+  pay-gated, so there is no free, public source of truth a challenger could
+  use to re-check a claim. The bond substitutes for re-derivation.
 
 ## 5. Users
 
 1. **API providers** — register an x402-gated service, post a bond, publish
    an SLA. Want a way to prove trustworthiness beyond a self-reported
-   listing (validated by x402-list.com's existing paid "verified badge"
-   product — proof that providers already pay for this).
+   listing.
 2. **Paying agents** — call registered services, get auto-refunded on
    SLA violations without filing a claim.
 3. **Anyone doing due diligence** — a human or agent checking a service's
@@ -84,44 +76,74 @@ judgement." Verification and refund are both code-enforced.
 
 ### 6.1 SLA verification model
 
-Two verdict types, decided after a research pass into SLA-verification prior
-art (WSLA, RBSLA, AWS SLA credits, an ICSOC 2025 TEE+zkVM paper, an Ericsson
-ZK-SLA patent, and Rana et al.'s 2008 SLA-violation taxonomy):
+Verdikt verifies two categories of guarantee using one evaluation stack,
+adapted from IBM's WSLA per-guarantee predicate model[^4]:
 
-- **Per-request boolean verdict (ALLOW/DENY)** — schema/input-output
-  conformance, latency, and price range, evaluated per call against the
-  provider's SLA JSON. Same per-guarantee true/false predicate model as
-  IBM's WSLA (a real, deployed SLA-monitoring framework — "SLA Compliance
-  Monitor," shipped in IBM's Web Services Toolkit), not an invented
-  shortcut.
-- **Periodic availability score** — a continuous, AWS-Monthly-Uptime-
-  Percentage-style metric (100% − % downtime) computed over a rolling
-  window, mapped through a small published tier table (mirrors AWS's own
-  graduated Region-Level SLA credit bands, e.g. 99.0–99.99%→10% credit,
-  95.0–98.99%→30%, <95.0%→100%) to a refund percentage, rather than a
-  second boolean.
-- Justification for mixing verdict types in one agreement: Rana, Warnier,
-  Quillinan, Brazier & Cojocarasu, "Managing Violations in Service Level
-  Agreements" (Springer, 2008, DOI 10.1007/978-0-387-78446-5_23) formally
-  classifies violations into all-or-nothing / partial / weighted-partial
-  *within the same agreement* — directly supports boolean-for-discrete-
-  clauses + graduated-for-aggregate rather than one scoring model for
-  everything.
+- **Per-request boolean verdict (PASS/FAIL)** — schema/input-output
+  conformance, latency, and price range are each evaluated as an
+  independent true/false predicate against the provider's declared SLA
+  JSON, per call.
+- **Periodic availability score** — computed as a continuous uptime
+  percentage (100% minus percentage downtime) over a rolling window, then
+  mapped through a published tier table to a refund percentage, following
+  the same tiered-credit approach used in commercial cloud SLAs[^5].
+
+Both mechanisms share one evaluation engine and one SLA schema — this is a
+single verification stack, not a menu of interchangeable approaches. The
+formal basis for mixing a boolean-per-clause model with a graduated
+aggregate metric inside one agreement, rather than forcing a uniform
+scoring approach across every clause, comes from Rana et al.'s taxonomy of
+SLA violation types (all-or-nothing / partial / weighted-partial)[^6].
+
+Other approaches exist in the literature — rule-based SLA engines[^7] and
+zero-knowledge or TEE-attested compliance proofs[^8] — and are cited here
+for reference, but Verdikt commits to the WSLA-predicate plus tiered-credit
+stack above as its single verification model for this build.
+
+#### Why a neutral middleman, not caller-side evaluation
+
+An alternative design would let the paying agent evaluate compliance itself
+and decide whether to claim a refund. This is simpler to build but
+structurally weak: the agent has a direct financial incentive to claim
+non-compliance regardless of the actual response, the provider has no way
+to contest a false claim without an arbitration process, and neither
+party's evaluation is auditable by anyone else.
+
+Verdikt instead runs the compliance check inside a neutral, deterministic
+middleman. The same SLA JSON evaluated against the same observed response
+produces the same verdict regardless of who is asking; the verifier role is
+code-enforced and held by neither the provider nor the calling agent (see
+§6.3); and the resulting verdict is written on-chain, so any third party can
+trust it without having to trust the agent or the provider individually.
+This is what makes the reputation system judgment-independent: compliance
+is a deterministic function of (SLA, response), evaluated once by an
+unbiased third party, not negotiated or self-reported by either side.
 
 ### 6.2 Verification execution — Chainlink CRE Confidential Workflows
 
-- CRE (TEE) runs the actual diff between observed response and the
-  provider's SLA JSON, so raw request/response payloads never leave the
-  enclave — only the non-sensitive verdict crosses back out.
-- Modeled on Chainlink's own reference template, "AI Audit Firewall"
-  (docs.chain.link/cre-templates/ai-audit-firewall): fetch external data
-  with in-enclave credentials, run independent checks, merge via simple
-  logic, post a signed verdict on-chain.
-- Production CRE enrollment is private-beta; `cre workflow simulate` is
-  self-serve and the ETHOnline2026 Chainlink track explicitly accepts CLI
-  simulation as sufficient evidence — not a hackathon blocker.
+Verification runs inside a Chainlink CRE Confidential Workflow (TEE), so
+raw request/response payloads never leave the enclave — only the derived
+verdict crosses back out.
 
-### 6.3 On-chain registry (custom contract, not ENS — see §9)
+This is essential, not incidental. API responses frequently contain
+proprietary, licensed, or otherwise valuable data — market data feeds,
+proprietary model outputs, personal data — that a provider has a legitimate
+interest in keeping confidential even from the verification layer itself.
+Running the diff inside a TEE means Verdikt itself never gains visibility
+into response content, only the derived boolean/graduated verdict: the
+provider's data stays private through verification, not just through
+settlement.
+
+The workflow architecture is: fetch external data with credentials kept
+encrypted in-enclave, evaluate the independent checks described in §6.1,
+merge the results, and post only a signed verdict on-chain, per
+[Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall).
+
+Production CRE enrollment is currently private-beta; `cre workflow
+simulate` is self-serve, and the ETHOnline2026 Chainlink track explicitly
+accepts CLI simulation as sufficient evidence — not a build blocker.
+
+### 6.3 On-chain registry
 
 - **Permissionless registration**: `register(serviceId)` on a registrar
   contract, posting the required deposit. `serviceId` = `keccak256` of a
@@ -133,17 +155,16 @@ ZK-SLA patent, and Rana et al.'s 2008 SLA-violation taxonomy):
 - **SLA record**: provider writes one JSON blob (schema, max latency, min
   availability, cost, refund policy) to IPFS, pointed to by a string field
   on the registry struct. Mutable any time by the owner. This is what makes
-  CRE's verification logic generic — it diffs against whatever the provider
+  the verification logic generic — it diffs against whatever the provider
   committed to, not a hardcoded per-service check.
 - **Two roles per service**: owner (can `setSLA`) and verifier (the CRE
   workflow's callback signer, can `setVerdict`). Neither the provider nor
   Verdikt itself can write a verdict — enforced at the contract level, not
-  by convention. This is what makes "independent reputation" literally
-  true.
+  by convention.
 - **Two refund paths, both auto-executed, no dispute step**:
-  1. *Per-request*: a DENY verdict for a specific paid request releases a
+  1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
-     automatically (proxy already correlates request↔payment↔verdict).
+     automatically (the proxy already correlates request↔payment↔verdict).
   2. *Periodic availability*: at each monitoring window's end, if computed
      uptime falls below the SLA's advertised availability, a refund
      percentage from the tier table (§6.1) is distributed pro-rata from
@@ -153,36 +174,41 @@ ZK-SLA patent, and Rana et al.'s 2008 SLA-violation taxonomy):
   payments to it until topped up — no governance step.
 - **Reading**: any agent or dApp checks a service's SLA/reputation via view
   functions (`getSLA`, `getVerdict`, `getDeposit`). A minimal JS SDK (or
-  thin REST wrapper) should ship alongside the contract so integration cost
-  stays low without ENS-style free resolution.
+  thin REST wrapper) should ship alongside the contract to keep integration
+  cost low.
 - **History**: standard events (`SLAUpdated`, `VerdictWritten`) on every
   write — verdict history is replayable directly off an RPC node, no
   subgraph dependency.
 
-### 6.4 ENS payout-address integrity check (stretch goal)
+### 6.4 ENS integration (stretch goal)
 
-Reuses `api.eth` (registered by Denis on Sepolia). Distinct from, and not a
-reversal of, the decision to keep ENS out of the core registry.
+Verdikt uses `api.eth` as a namespace for provider identity:
 
-- Provider publishes its payout address as an ENS record on its own name.
-- At payment time, CRE resolves that record and compares it against the
-  `payTo` address in the live x402 402 response.
-- Match → proceed. Mismatch → **block payment outright** — this must be a
-  pre-payment gate, not a post-hoc verdict like §6.1's checks, because once
-  an agent pays a spoofed address there is no deposit to reclaim it from.
-- Build the core (6.1–6.3) first; attempt this only if time remains.
+- Each API provider registers a **subname** under `api.eth` (e.g.
+  `provider-name.api.eth`) to represent their listed service.
+- The subname carries two records:
+  - A **custom text record** holding (or pointing to, e.g. via an IPFS
+    hash) the provider's SLA JSON.
+  - An **address record** set to the API provider's owner/payout wallet.
+- At payment time, the CRE workflow resolves the subname's address record
+  and compares it against the `payTo` address in the live x402 402
+  response. A mismatch blocks payment before it is sent — this must be a
+  pre-payment gate, not a post-hoc verdict like the checks in §6.1, because
+  once an agent pays a spoofed address there is no bonded deposit to
+  reclaim it from.
+- Build the core (§6.1–§6.3) first; attempt this only if time remains.
 
 ### 6.5 Product / dashboard
 
 - **MVP**: a platform dashboard (own web UI) showing aggregate stats —
-  services registered, verdict breakdown (ALLOW/DENY), deposits held,
+  services registered, verdict breakdown (PASS/FAIL), deposits held,
   refunds paid out over time. This is the primary demo surface, not just
   backend contracts.
 - **Stretch, in priority order**:
   1. Provider self-serve dashboard (own verdict history, deposit balance,
      SLA-JSON editor).
-  2. Discovery UI/API — human browse/search + machine-facing discovery API
-     for agents filtering by cost/latency/availability.
+  2. Discovery UI/API — human browse/search plus a machine-facing discovery
+     API for agents filtering by cost/latency/availability.
 
 ## 7. Architecture summary
 
@@ -195,14 +221,14 @@ Verdikt proxy  <--- intercepts x402 request/response
    v
 Chainlink CRE Confidential Workflow (TEE)
    - resolves provider's SLA JSON (IPFS)
-   - diffs observed response vs SLA
-   - [stretch] resolves ENS payout address, compares vs payTo
-   - emits signed verdict (ALLOW/DENY + availability score)
+   - diffs observed response vs SLA -> PASS/FAIL + availability score
+   - [stretch] resolves provider's api.eth subname address record,
+     compares vs payTo, blocks payment on mismatch
    |
    v
 On-chain registry (Arc)
    - SLA record, verdict, deposit balance, roles
-   - auto-refund on DENY / low availability
+   - auto-refund on FAIL / low availability
    - auto-suspend at zero deposit
    |
    v
@@ -211,98 +237,98 @@ Dashboard — reads registry via SDK/view functions
 
 ## 8. Target chain & stack
 
-- **Chain**: Arc (Circle's stablecoin-native L1), decided Sep 5 — replaced
-  Hedera same day. Reasons: Arc already has a live x402 services
-  marketplace (natural place for the proxy to sit and rate existing
-  listings); plain EVM L1 (no chain-specific primitives to learn under time
-  pressure); an x402-capable wallet CLI already exists for Arc; **Blockrun**
-  (blockrun.ai) already runs an x402-gated API on Arc — a real candidate
-  demo target to wrap rather than standing up a bespoke API; USDC-native
-  settlement matches the fixed-USDC deposit design.
+- **Chain**: Arc, Circle's stablecoin-native L1.
 - **Verification compute**: Chainlink CRE Confidential Workflows.
 - **Storage**: IPFS for SLA JSON blobs.
 - **Payments**: x402, settled in USDC.
+
+Verdikt is a natural fit for Arc's agent-commerce ecosystem specifically:
+Circle's own [agent marketplace](https://agents.circle.com/sell) lets
+providers list x402 endpoints for agents to discover and pay, and scores an
+endpoint's "agent-readiness" before it goes live (e.g.
+[agents.circle.com/sell/score?url=nano.blockrun.ai](https://agents.circle.com/sell/score?url=nano.blockrun.ai)).
+That scoring step checks whether an endpoint is *structurally* ready to be
+listed — it does not check whether a listed endpoint keeps delivering what
+it promised after it's live and being paid per call. Verdikt is the missing
+piece downstream of listing: ongoing, automatic verification of delivery
+against a provider's own SLA, with code-enforced refunds when it falls
+short.
 
 ## 9. Prize track fit
 
 Submission constraint: max 3 Partner Prizes selectable (a partner's
 multiple tracks count as one slot).
 
-- **Chainlink** — confirmed core (CRE is the verification engine itself).
-- **Arc** — confirmed core (chain + demo API target).
-- **Open** — 1 slot unfilled. ENS is a candidate for this slot *only if*
-  the §6.4 stretch goal ships; otherwise leave open or fill with whatever
-  else fits by submission time.
-- **Explicitly excluded**: The Graph (no match), Ledger (no device-spend
-  action to gate — fits Concept A instead), Bazantic (its facilitator
-  doesn't support Arc).
-- **ENS as a core pillar** — dropped Sep 4: the original design never
-  resolved a name to an address, and the two-role write-separation pattern
-  isn't ENS-specific (a generic access-control pattern), so a bespoke
-  contract avoids ENSv2 Sepolia-beta limitations without losing anything
-  load-bearing.
+- **Chainlink** — confirmed. CRE is the verification engine itself.
+- **Arc** — confirmed. Chain the registry and demo API run on.
+- **Open** — one slot unfilled. ENS is a candidate for this slot only if
+  the §6.4 stretch goal ships.
 
 ## 10. Competitive landscape
 
-- **x402-list.com** — closest existing competitor. Tracks 631+ x402
-  services via uptime probing + a 14-point protocol-compliance checklist
-  (structural, not claim verification). Already sells a paid verification
-  badge ($0.25/check) — proof that willingness-to-pay for verification
-  exists today. No TEE/confidential-compute angle — Verdikt's differentiator.
-- **Settld** — live competitor with near-identical framing ("no way to
-  prove the work was actually done before the money moves"). Flagged for
-  direct evaluation before submission.
-- **Edge & Node's ampersend** — agent-payment dashboard on x402 + A2A +
-  ERC-8004; human-configured budget/allowlist tool, not an automated
-  verification/reputation proxy.
-- Past ETHGlobal ENS-track winners worth knowing (Immunity, Assay, DeFacts
-  AI) validate the bonding/escrow/role-separated-verdict pattern generally,
-  even though Verdikt no longer builds the registry on ENS itself.
+- **x402-list.com** — closest existing competitor. Tracks 600+ x402
+  services via uptime probing and a protocol-compliance checklist
+  (structural, not claim verification), and already sells a paid
+  verification badge[^9] — evidence that willingness-to-pay for
+  verification exists today. No confidential-compute angle; Verdikt's
+  differentiator is verifying actual response content against a
+  provider-declared SLA, privately, not just probing uptime.
+- **Settld** — a live competitor with framing ("no way to prove the work
+  was actually done before the money moves") close to Verdikt's own thesis.
+  Flagged for direct evaluation before submission.
+- **x402disputes.com** and **x402r.org** — both address x402 refunds, but
+  via manual dispute/arbitration: a party files a dispute with evidence
+  (x402disputes.com) or an escrow with a pluggable arbiter resolves a claim
+  (x402r.org). Verdikt's core distinction from both is that it never
+  invokes a human or third-party arbiter — the verdict is a deterministic,
+  automatic function of the SLA and the observed response (§6.1), with no
+  dispute step at all.
+- **Edge & Node's ampersend** — an agent-payment dashboard on x402 + A2A +
+  ERC-8004 covering budget limits and allowlists; a human-configured
+  spend-management tool, not an automated verification/reputation proxy.
 
-## 11. Demo script
-
-1. Provider registers a service on the registry, posts a deposit, points
-   to its SLA JSON.
-2. A live x402 call runs through the Verdikt proxy against that SLA, inside
-   the CRE enclave.
-3. CRE's signer writes the verdict on-chain (only that signer has write
-   access).
-4. On a DENY, the paying agent is auto-refunded from the deposit — no
-   dispute step.
-5. A second agent queries the registry for the same service and sees a
-   live SLA, verdict, and deposit balance it can trust without trusting
-   Verdikt or the provider.
-6. Dashboard shows the aggregate view: verdicts issued, refunds paid,
-   deposits held, live availability score with tier-based refund pool.
-
-## 12. Build phases (solo, remainder of 2-week window)
-
-Exact calendar dates not fixed here — sequence by dependency, not by day:
-
-1. **Foundation**: registrar + escrow contract (register, deposit, SLA
-   pointer, two-role access control, events) on Arc testnet.
-2. **Verification core**: CRE workflow — fetch SLA JSON, diff against a
-   real Blockrun (or equivalent) x402 response, emit boolean verdict,
-   signer writes to registry.
-3. **Refund paths**: per-request DENY refund; periodic availability
-   computation + tiered pro-rata refund; auto-suspend at zero deposit.
-4. **Proxy**: sits in the request path, correlates request↔payment↔verdict,
-   forwards to the demo API.
-5. **Dashboard**: aggregate stats view (MVP demo surface).
-6. **Stretch, only if time remains**: ENS payout-address integrity check
-   (§6.4); provider self-serve dashboard; discovery UI/API.
-7. **Submission prep**: write up explicit known gaps (reads as credibility
-   in this judging pool, not weakness, per past ENS-track winner patterns);
-   confirm Chainlink CLI-simulation evidence is sufficient in lieu of
-   private-beta CRE production access; finalize prize-track selections.
-
-## 13. Open risks / unresolved
+## 11. Open risks / unresolved
 
 - Settld not yet evaluated directly as a competitor.
-- Blockrun's x402 integration and response schema not yet confirmed as a
-  good verification target — may need a thinner/different demo API.
-- x402-capable wallet CLI for Arc referenced but not yet named/tested.
+- The demo API's x402 integration and response schema not yet confirmed as
+  a good verification target — may need a thinner/different demo API.
+- An x402-capable wallet CLI for Arc is referenced as available but not yet
+  named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
-- verdikt.bond domain not yet purchased — price/listing legitimacy unverified.
-- No dispute layer is a deliberate design choice, but should be stated
+- verdikt.bond domain not yet purchased — price/listing legitimacy
+  unverified.
+- No dispute layer is a deliberate design choice, and should be stated
   explicitly and confidently in the submission, not hedged.
+
+[^1]: A 2026 security study (reported via CryptoSlate) tested 15 major x402
+    facilitators, including Coinbase, and found all 15 violated at least
+    one security rule across 31 distinct vulnerabilities (free-shopping,
+    asset theft, sponsor-gas abuse).
+[^2]: ERC-8004, "Trustless Agents" (Aug 2025, mainnet-introduced Jan 29
+    2026), defines Identity/Reputation/Validation registries for agents;
+    its spec text acknowledges it cannot cryptographically guarantee that
+    advertised capabilities are functional and non-malicious.
+[^3]: An arXiv study found zero confirmed mainnet deployments of ERC-8004's
+    Validation Registry as of its study period (through May 2026).
+[^4]: IBM's WSLA (Web Service Level Agreement language) ships a reference
+    implementation, "SLA Compliance Monitor," in IBM's Web Services
+    Toolkit, which evaluates every guarantee as an independent true/false
+    predicate and auto-configures itself from a machine-readable SLA spec
+    on receipt.
+[^5]: E.g. AWS computes a continuous "Monthly Uptime Percentage" over a
+    billing window and maps it to a graduated credit table (its EC2
+    Region-Level SLA: 99.0–99.99% → 10% credit, 95.0–98.99% → 30%, <95.0% →
+    100%) rather than a single cliff.
+[^6]: Rana, Warnier, Quillinan, Brazier & Cojocarasu, "Managing Violations
+    in Service Level Agreements," *Grid Middleware and Services* (Springer,
+    2008). [DOI: 10.1007/978-0-387-78446-5_23](https://doi.org/10.1007/978-0-387-78446-5_23).
+[^7]: RBSLA (Rule-Based SLA) — a four-layer rule-engine implementation
+    (Prova rule engine, ContractLog KR, RBSLA markup, RBSLM tool) for
+    declarative, rule-based SLA compliance.
+[^8]: E.g. "Towards Trusted Service Monitoring: Verifiable Service Level
+    Agreements" (arXiv:2510.13370, ICSOC 2025), which monitors SLA clauses
+    inside TEEs with a zkVM circuit per SLO; and US Patent 12,494,976
+    ("Zero-Knowledge Service Level Agreement (SLA) Monitoring," granted
+    Dec 2025), which uses non-interactive zero-knowledge proofs.
+[^9]: x402-list.com sells a self-serve verification badge for $0.25/check,
+    with its methodology published at x402-list.com/methodology.
