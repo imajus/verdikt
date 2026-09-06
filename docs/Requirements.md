@@ -225,9 +225,11 @@ the architecture diagram live in [Specification.md](./Specification.md).
   that the contracts are still explicitly non-final before mainnet, so a
   redeploy can move the addresses under us — `pnpm spike:ens --read-only`
   re-checks them.
-- `verdikt.eth` is RESERVED on Sepolia ENSv2 (premigrated from mainnet), so
-  the parent name for the subname namespace is not yet settled — see Tasks
-  §0.6. Contained: the parent label appears once, in `packages/sdk/ens.js`.
+- The ENSv2 resolver is per-account, so its `ROOT_RESOURCE` roles do not
+  transfer with the name — observed live when `verdikt.eth` changed hands on
+  Sepolia and the previous holder kept write access to every record. Verdikt
+  relies on holding those roles itself, which makes setting them deliberately
+  part of onboarding rather than a consequence of owning the name.
 - Identity/SLA layer runs on Sepolia (ENSv2 has no mainnet deployment),
   separate from Arc's own network — a scope decision to state explicitly
   in the submission.

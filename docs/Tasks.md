@@ -47,17 +47,18 @@ source of truth to verify against.
 
 Deliverable: `scripts/spike-ens.mjs` running all of the above green.
 
-> **Gate passed.** 29/29 green — `pnpm spike:ens`. Per-key EAC enforces,
-> `sla` round-trips byte-identical, and `UniversalResolverV2` serves all four
-> records by name. ENSv2 stays; the ENSv1 PublicResolver fallback is not
-> taken. Findings, the confirmed Sepolia addresses, and the two ACL-bypass
-> routes the role bitmap has to close are in
+> **Gate passed.** 31/31 green — `pnpm spike:ens`, run against `verdikt.eth`
+> itself. Per-key EAC enforces, `sla` round-trips byte-identical, and
+> `UniversalResolverV2` serves all four records by name. ENSv2 stays; the
+> ENSv1 PublicResolver fallback is not taken. Findings, the confirmed Sepolia
+> addresses, and the two ACL-bypass routes the role bitmap has to close are in
 > [spikes/A-ens-sepolia.md](./spikes/A-ens-sepolia.md).
 >
-> One thing came back different: `verdikt.eth` is RESERVED on Sepolia ENSv2
-> (premigrated from mainnet) and cannot be registered there. That is 0.6's
-> decision to make, not a blocker here — the parent label appears once, in
-> `packages/sdk/ens.js`.
+> Two things to carry forward. `verdikt.eth` has no subregistry yet, so no
+> `<slug>.verdikt.eth` can exist until one is deployed and attached — that is
+> 3.x's provider-onboarding work. And the resolver's `ROOT_RESOURCE` roles do
+> not move when the name is transferred, so they have to be pointed at the
+> operator address deliberately.
 
 ### 0.3 Spike B — Chainlink CRE
 
@@ -109,10 +110,10 @@ fixture test.
 
 - [ ] Buy `verdikt.bond`, or pick a fallback subdomain on an owned domain
       and update the docs
-- [ ] **Decide the ENS parent name.** `verdikt.eth` is RESERVED on Sepolia
-      ENSv2 and only its mainnet owner can promote it (Spike A). Either buy
-      `verdikt.eth` on mainnet and migrate, or pick a label that is actually
-      available on Sepolia and update `ENS_PARENT_NAME`
+- [x] **ENS parent name.** `verdikt.eth` is registered on Sepolia ENSv2
+      (expires 2027-09-06) with a `PermissionedResolver` attached, so
+      `ENS_PARENT_NAME` stands as-is. Its subregistry is not deployed yet —
+      that is onboarding work, not a naming decision
 
 ---
 
