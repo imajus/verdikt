@@ -160,7 +160,10 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
 
 - **Permissionless registration**: `register(serviceId)` on a registrar
   contract, posting the required deposit. `serviceId` = `keccak256` of a
-  human-chosen slug.
+  human-chosen slug. The same slug doubles as the `<slug>.verdikt.bond`
+  routing subdomain and, if the §6.4 stretch goal ships, the
+  `<slug>.verdikt.eth` ENS subname label — one identifier, reused everywhere,
+  rather than a separate mapping table per surface.
 - **Deposit/bond**: held in an escrow contract keyed by `serviceId`, paid in
   USDC, **fixed amount** for MVP (no reputation-scaled tiering). This is the
   pool refunds are paid from. Paid directly to escrow, not through the
@@ -195,10 +198,15 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
 
 ### 6.4 ENS integration (stretch goal)
 
-Verdikt uses `api.eth` as a namespace for provider identity:
+Verdikt uses `verdikt.eth` as a namespace for provider identity:
 
-- Each API provider registers a **subname** under `api.eth` (e.g.
-  `provider-name.api.eth`) to represent their listed service.
+- Each API provider registers a **subname** under `verdikt.eth` (e.g.
+  `provider-name.verdikt.eth`) to represent their listed service. The label
+  is the same human-chosen slug used for the on-chain `serviceId` (§6.3),
+  so `provider-name.verdikt.bond/<path>` — the URL agents actually
+  call — maps directly to `provider-name.verdikt.eth` with no separate
+  lookup table: wildcard routing on `*.verdikt.bond` resolves the
+  subdomain label straight to both the registry entry and the ENS subname.
 - The subname carries two records:
   - A **custom text record** holding (or pointing to, e.g. via an IPFS
     hash) the provider's SLA JSON.
@@ -232,7 +240,7 @@ Paying agent
 Verdikt proxy (thin coordinator — handshake + payment/request
 correlation only; never decrypts or logs a provider response)
    |
-   | relays 402 challenge; [stretch] checks api.eth payTo record
+   | relays 402 challenge; [stretch] checks verdikt.eth payTo record
    | before payment; triggers a workflow run once payment settles
    v
 Chainlink CRE Confidential Workflow (TEE)
