@@ -314,6 +314,15 @@ store.
 
 - [ ] `packages/sdk` wrapping the Arc views and the ENS reads so callers
       don't need to know two chains are involved (spec §3)
+- [ ] **Fold the read path out of `scripts/ens-sepolia.mjs`.** Implementing
+      `resolveServiceRecord` puts the Universal Resolver address, the resolver's
+      getter ABI and DNS encoding in `packages/sdk/ens.js` — where the spike
+      scripts already have them. Two files knowing the ENSv2 deployment is the
+      duplication the "only file that knows ENS exists" rule exists to prevent,
+      and an address that moves in the beta then has to be fixed twice. Make
+      the SDK the source of truth and have the scripts import it, leaving
+      `ens-sepolia.mjs` the registrar/factory/anvil surface the SDK must never
+      carry (see docs/spikes/A-ens-sepolia.md)
 
 ---
 
