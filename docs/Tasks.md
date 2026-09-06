@@ -430,17 +430,32 @@ store.
 
 ### 4.5 SDK
 
-- [ ] `packages/sdk` wrapping the Arc views and the ENS reads so callers
-      don't need to know two chains are involved (spec §3)
-- [ ] **Fold the read path out of `scripts/ens-sepolia.mjs`.** Implementing
-      `resolveServiceRecord` puts the Universal Resolver address, the resolver's
-      getter ABI and DNS encoding in `packages/sdk/ens.js` — where the spike
-      scripts already have them. Two files knowing the ENSv2 deployment is the
-      duplication the "only file that knows ENS exists" rule exists to prevent,
-      and an address that moves in the beta then has to be fixed twice. Make
-      the SDK the source of truth and have the scripts import it, leaving
-      `ens-sepolia.mjs` the registrar/factory/anvil surface the SDK must never
-      carry (see docs/spikes/A-ens-sepolia.md)
+- [x] `resolveServiceRecord` — all four records in one batched round trip,
+      `sla` raw and unparsed, unwritten records `null`
+- [x] `serviceIdOf` — agrees with the contract on shared vectors
+- [x] **Fold the read path out of `scripts/ens-sepolia.mjs`.** Done: the
+      Universal Resolver address, the record ABI and DNS encoding now live only
+      in `packages/sdk/ens.js`, and `ens-sepolia.mjs` imports them. It keeps the
+      registrar, factory, EAC-onboarding and anvil surface, which the SDK must
+      never carry
+- [ ] Arc views (`getService`, `getVerdict`, `getOwed`, `VerdictWritten` log
+      replay) — landing with Phase 5's data layer, which is their only consumer
+
+> **Bug the tests caught, worth not reintroducing.** viem wraps a *transport*
+> failure in `ContractFunctionExecutionError`, the same class as a revert. The
+> first cut treated that class as "the name has no records", which silently
+> turned a Sepolia outage into a marketplace where no provider had published
+> anything — and, downstream, into every call taking the status-only fallback.
+> `isChainLevelRefusal` is now a positive test for an actual revert, and
+> anything unrecognised propagates.
+
+> **Constraint this surfaced, and it reshapes 3.2.** `writeServiceScores` is an
+> **EOA** path, for the seed and operational scripts. The hourly CRE workflow
+> cannot use it: a workflow holds no key, and its only on-chain write is a
+> DON-signed report delivered to an `IReceiver` (Spike B, CRE-2). An ENS
+> resolver is not an `IReceiver`, so the workflow cannot call `setText` at all.
+> §3.2 therefore needs a `VerdiktScoreWriter` receiver on Sepolia holding the
+> key-scoped EAC roles, with the workflow writing a report to it. (see docs/spikes/A-ens-sepolia.md)
 
 ---
 

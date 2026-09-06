@@ -15,18 +15,26 @@
 // accumulates single-caller items stops being a seam and becomes a junk drawer,
 // and the next reader can no longer tell which parts actually have to agree.
 //
-// PLANNED MOVE (Tasks.md 4.5)
+// THE READ PATH IS THE SDK'S (Tasks.md 4.5)
 //
-// When `resolveServiceRecord` lands, the read path — the Universal Resolver
-// address, the resolver's getter ABI, DNS encoding — will exist here and in
-// `packages/sdk/ens.js`, which is the duplication that rule exists to prevent.
-// The SDK should own it then and these scripts should import it, leaving this
-// file the registrar/factory surface the SDK must never carry.
+// The Universal Resolver address, the record ABI and DNS encoding live in
+// `packages/sdk/ens.js` and are imported below, not copied. Two files knowing
+// the ENSv2 deployment is exactly the duplication the choke-point rule exists
+// to prevent, and an address that moves in the beta would otherwise have to be
+// fixed twice. What stays here is the registrar, factory, EAC-onboarding and
+// anvil surface, which the SDK must never carry.
 
 import { spawn } from 'node:child_process';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { encodeAbiParameters, keccak256, parseAbi, stringToHex } from 'viem';
 import { sepolia } from 'viem/chains';
+import {
+  DEFAULT_SEPOLIA_RPC as SDK_DEFAULT_SEPOLIA_RPC,
+  SEPOLIA_UNIVERSAL_RESOLVER,
+  resolverRecordsAbi
+} from '@verdikt/sdk/ens';
+
+export { dnsEncode, universalResolverAbi } from '@verdikt/sdk/ens';
 
 // --------------------------------------------------------------------------
 // Deployment addresses — ENSv2 Beta on Sepolia.
@@ -39,14 +47,15 @@ export const SEPOLIA_ENSV2 = Object.freeze({
   ETHRegistry: '0xbdc85dd5b15d7ecb354cd7cb6f2c50b4f2c4f0e2',
   ETHRegistrar: '0xa88553f454b77203b0d036a05c894d555eaaa2cc',
   RootRegistry: '0x8115186e8f2e0b0281e86ab91f0f48ba90364354',
-  UniversalResolverV2: '0x4a1817d13e9cf196f471725176355c1234b63c70',
+  // The one address the SDK also needs, so the SDK owns it.
+  UniversalResolverV2: SEPOLIA_UNIVERSAL_RESOLVER,
   VerifiableFactory: '0x10dc6333cdfe1fcef624c6e0a8221b91804cd7ef',
   PermissionedResolverImpl: '0x9eae5c2730a7dd16bdd1dee6421a1b91e3b0365e',
   UserRegistryImpl: '0x624a25d67b59d587752ebec8dded8827dae52050',
   MockUSDC: '0x768f42455a2d082e23ceef7d51e5787c82d67a39'
 });
 
-export const DEFAULT_SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
+export const DEFAULT_SEPOLIA_RPC = SDK_DEFAULT_SEPOLIA_RPC;
 
 // --------------------------------------------------------------------------
 // ABIs. Human-readable fragments rather than committed artifacts: the full
@@ -66,17 +75,22 @@ export const registryAbi = parseAbi([
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
 ]);
 
-export const resolverAbi = parseAbi([
-  'function initialize(address admin, uint256 roleBitmap, bytes[] setters)',
-  'function setText(bytes32 node, string key, string value)',
-  'function text(bytes32 node, string key) view returns (string)',
-  'function setAddr(bytes32 node, address addr_)',
-  'function addr(bytes32 node) view returns (address)',
-  'function authorizeTextRoles(bytes toName, string key, address account, bool grant) returns (bool)',
-  'function authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant) returns (bool)',
-  'function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)',
-  'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
-]);
+/**
+ * The record surface comes from the SDK; only the EAC/onboarding fragments are
+ * added here. Nothing that ships needs `initialize` or `authorize*`, so
+ * carrying them into `packages/sdk/ens.js` would make it the registrar it is
+ * deliberately not.
+ */
+export const resolverAbi = [
+  ...resolverRecordsAbi,
+  ...parseAbi([
+    'function initialize(address admin, uint256 roleBitmap, bytes[] setters)',
+    'function authorizeTextRoles(bytes toName, string key, address account, bool grant) returns (bool)',
+    'function authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant) returns (bool)',
+    'function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)',
+    'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
+  ])
+];
 
 export const factoryAbi = parseAbi([
   'function deployProxy(address implementation, uint256 salt, bytes data) returns (address)',

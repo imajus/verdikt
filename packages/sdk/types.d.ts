@@ -52,6 +52,8 @@ interface WriteOptions {
   parentName?: string;
   /** Must be the key-scoped signer, not the provider's key. */
   privateKey: string;
+  /** Skips the Universal Resolver lookup when the caller already knows it. */
+  resolverAddress?: string;
 }
 
 /**

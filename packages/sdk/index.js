@@ -4,7 +4,14 @@
 // and the marketplace scores on ENS. Callers should not have to know that
 // (Specification.md §3), so everything is re-exported from here.
 
-export { ENS_BACKEND, resolveServiceRecord, writeServiceScores } from './ens.js';
+export {
+  DEFAULT_PARENT_NAME,
+  ENS_BACKEND,
+  clearServiceRecordCache,
+  resolveServiceRecord,
+  serviceName,
+  writeServiceScores
+} from './ens.js';
 export { decodePayment } from './payment.js';
 export {
   OUTCOME_ORDINAL,

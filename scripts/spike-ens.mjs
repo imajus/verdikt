@@ -44,7 +44,6 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { packetToBytes } from 'viem/ens';
 import { parseAbi } from 'viem';
 import {
   ALL_ROLES,
@@ -52,13 +51,15 @@ import {
   RESOLVER_ROLES_VERDIKT_NEEDS,
   RESOLVER_ROLE_SET_TEXT,
   SEPOLIA_ENSV2,
+  dnsEncode,
   factoryAbi,
   proxySalt,
   readNameState,
   registryAbi,
   resolverAbi,
   rpc,
-  startAnvil
+  startAnvil,
+  universalResolverAbi
 } from './ens-sepolia.mjs';
 
 // Only this script registers a name, reads through the Universal Resolver, or
@@ -73,10 +74,6 @@ const registrarAbi = parseAbi([
   'function MIN_COMMITMENT_AGE() view returns (uint64)'
 ]);
 
-const universalResolverAbi = parseAbi([
-  'function resolve(bytes name, bytes data) view returns (bytes, address)'
-]);
-
 const erc20Abi = parseAbi([
   'function mint(address to, uint256 amount)',
   'function approve(address spender, uint256 amount) returns (bool)'
@@ -86,9 +83,6 @@ const erc20Abi = parseAbi([
 const REGISTRY_ROLE_SET_RESOLVER = 1n << 24n;
 /** PermissionedRegistry ROLE_SET_SUBREGISTRY. */
 const REGISTRY_ROLE_SET_SUBREGISTRY = 1n << 20n;
-
-/** DNS wire format — what the resolver's `authorize*` functions take. */
-const dnsEncode = (name) => toHex(packetToBytes(name));
 
 const ONE_YEAR = 31_536_000n;
 
