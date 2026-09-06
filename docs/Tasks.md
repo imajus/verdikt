@@ -108,28 +108,52 @@ Two findings reshape work downstream, both detailed in
 
 Every refund depends on recovering the payer and the amount from the header.
 
-- [ ] Capture a real `GatewayWalletBatched` `X-PAYMENT` header from a live
-      paid call on Arc Testnet
-- [ ] Decode it; extract payer address and paid amount
-- [ ] **Verify those fields are cryptographically bound** — signed by the
-      payer, not merely asserted in a JSON blob. The refund target is read
-      out of this header, so if the binding is weak, anyone can name a
-      different payer and redirect refunds
-- [ ] Confirm the amount is in known minor units (needed for the refund cap
-      and for the price clause)
+Findings in [spikes/C-x402-payment.md](./spikes/C-x402-payment.md).
+
+- [x] Reconstruct the `X-PAYMENT` header for the Arc Testnet payment leg —
+      shapes from `@x402/core` and `@circle-fin/x402-batching`, constants read
+      back over RPC, cross-checked against a 402 recorded from a live
+      production x402 seller. No paid call has settled from this repo yet;
+      §0.5 says what is still owed
+- [x] Decode it; extract payer address and paid amount
+- [x] **Verify those fields are cryptographically bound** — they are. Both
+      are fields of the EIP-3009 `TransferWithAuthorization` struct the payer
+      signs, so naming a different payer means forging their signature.
+      `decodePayment` recovers the signer and returns nothing on a mismatch
+- [x] Confirm the amount is in known minor units — USDC's 6, confirmed by
+      `decimals()` on Arc Testnet. **Arc's native USDC has 18**, so the
+      deposit and the paid amount are not directly comparable; see
+      `toArcNativeUnits` before wiring the refund cap
+- [x] `GatewayWalletBatched` is the EIP-712 domain name, not a scheme — the
+      scheme is `exact`, and the same decoder handles vanilla x402
 
 Deliverable: `packages/sdk/payment.js` with `decodePayment(header)` plus a
-fixture test.
+fixture test. Also `decodeSettlement`, `scripts/spike-payment.mjs`.
 
-> **Fallback.** If payer/amount aren't verifiable from the header alone,
-> take them from the settlement receipt instead and have the enclave
-> confirm settlement before writing a verdict.
+> **Fallback — not taken for identity, but half of it is still required.**
+> The payer and amount are verifiable from the header alone, so they are not
+> read from the receipt. But a signed authorization is an *intent to pay*, not
+> a payment, and it stays valid for seven days. **The enclave must confirm
+> settlement before writing a verdict** — no settlement, no verdict, not even
+> a `DOWN`. Phase 3 owes that check.
+
+Spike B's workflow passes the header through unexamined and takes `payer` and
+`paidAmountMinorUnits` as trigger inputs, which puts the refund target outside
+the enclave. Now that both are recoverable inside it, §8 of
+[spikes/C-x402-payment.md](./spikes/C-x402-payment.md) lists what
+`cre/spike/verify/workflow.ts` should do instead when Phase 3 promotes it.
 
 ### 0.5 Freeze fixtures
 
-- [ ] Record and commit: 402 challenge JSON, `X-PAYMENT` header, provider
-      200 response, settlement receipt
-- [ ] Everything downstream develops against these — no live paid call
+- [x] 402 challenge JSON, `X-PAYMENT` header, settlement receipt — in
+      `fixtures/x402.js`, generated reproducibly by `scripts/spike-payment.mjs`
+      and carrying a signature that actually verifies. The provenance note at
+      the top of that file says which parts are real and which are synthetic
+- [ ] Provider 200 response — waits on the demo provider (§0.6)
+- [ ] Replace `SETTLEMENT_RECEIPT` with one captured from a real paid call
+      once the provider is up. It is the one fixture that is pure invention,
+      and the settlement check in Phase 3 is the thing that depends on it
+- [x] Everything downstream develops against these — no live paid call
       needed to run a test
 
 ### 0.6 Domain

@@ -63,6 +63,47 @@ export function statusFromOrdinal(ordinal) {
 }
 
 /**
+ * Decimals of the USDC ERC-20 an x402 payment is denominated in. Read back
+ * from `decimals()` on Arc Testnet's USDC (0x3600…0000) during Spike C.
+ */
+export const PAYMENT_ASSET_DECIMALS = 6;
+
+/**
+ * Decimals of Arc's *native* USDC — the unit `msg.value` is counted in, and
+ * therefore the unit deposits, refunds and `owed` balances are counted in.
+ */
+export const ARC_NATIVE_DECIMALS = 18;
+
+/**
+ * Convert a decoded `paidAmount` into the units the Arc registry works in.
+ *
+ * This exists because the two ends of a refund are denominated differently
+ * and nothing about the types says so. An x402 payment moves the USDC ERC-20,
+ * whose `decimals()` is 6; the bond is held and refunded as Arc's native USDC,
+ * which has 18. Handing `decodePayment`'s `amount` straight to `setVerdict`
+ * would put 2500 wei up against a deposit denominated in 10^18, so
+ * `min(FIXED_REFUND, paidAmount, deposit)` would always pick `paidAmount` and
+ * every refund would be a trillionth of what was paid — a silently wrong
+ * refund, on a verdict with no dispute layer to catch it
+ * (Specification.md §3).
+ *
+ * @param {bigint} amount integer in the asset's minor units
+ * @param {number} [assetDecimals] defaults to USDC's 6
+ * @returns {bigint} integer in Arc native units (wei)
+ */
+export function toArcNativeUnits(amount, assetDecimals = PAYMENT_ASSET_DECIMALS) {
+  if (typeof amount !== 'bigint' || amount < 0n) {
+    throw new Error('toArcNativeUnits: amount must be a non-negative bigint');
+  }
+  if (!Number.isInteger(assetDecimals) || assetDecimals < 0 || assetDecimals > ARC_NATIVE_DECIMALS) {
+    // Scaling down would truncate, and a refund that silently rounds is worse
+    // than one that refuses to compute.
+    throw new Error(`toArcNativeUnits: unsupported asset decimals: ${assetDecimals}`);
+  }
+  return amount * 10n ** BigInt(ARC_NATIVE_DECIMALS - assetDecimals);
+}
+
+/**
  * Derive a serviceId from a slug: `keccak256(utf8Bytes(slug))`.
  *
  * The slug is one identifier reused across three surfaces — the Arc

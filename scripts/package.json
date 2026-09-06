@@ -6,7 +6,8 @@
   "description": "Spikes and operational scripts — throwaway by design, kept for the evidence they produce",
   "scripts": {
     "spike:ens": "node --env-file-if-exists=../.env spike-ens.mjs",
-    "setup:ens": "node --env-file-if-exists=../.env setup-ens.mjs"
+    "setup:ens": "node --env-file-if-exists=../.env setup-ens.mjs",
+    "spike:payment": "node --env-file-if-exists=../.env spike-payment.mjs"
   },
   "dependencies": {
     "viem": "^2.56.3"

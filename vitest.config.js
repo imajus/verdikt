@@ -6,10 +6,9 @@ export default defineConfig({
   test: {
     include: ['{packages,fixtures,cre,proxy,web}/**/*.test.js'],
     exclude: ['**/node_modules/**', '**/dist/**', 'contracts/**'],
-    environment: 'node',
-    // Wave 0 ships seams and no tests, and vitest exits 1 on an empty suite.
-    // Drop this the moment Phase 1 lands its first test — left in place it
-    // would also swallow "someone deleted every test".
-    passWithNoTests: true
+    environment: 'node'
+    // `passWithNoTests` lived here through Wave 0 and is gone now that Spike C
+    // has landed real tests: an empty suite is once again a failure, which is
+    // the only way "someone deleted every test" ever gets noticed.
   }
 });

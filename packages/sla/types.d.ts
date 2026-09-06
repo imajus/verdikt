@@ -31,11 +31,14 @@ interface SlaObservation {
    * (USDC has 6, so 2500n = $0.0025). Never a float, never a decimal string:
    * price clauses compare with integer semantics only (Specification.md §1).
    *
-   * This is the seam that keeps the engine independent of Spike C (Tasks.md
-   * 0.4). However the `X-PAYMENT` header turns out to encode an amount —
-   * and whether the amount ends up being read from the header or from the
-   * settlement receipt — `decodePayment` normalises it to this before the
-   * engine ever sees it.
+   * This is the seam that keeps the engine independent of the wire format:
+   * `decodePayment` normalises whatever the `X-PAYMENT` header encodes to this
+   * before the engine ever sees it. Spike C (Tasks.md 0.4) settled that the
+   * amount is readable from the header itself, bound to the payer's signature.
+   *
+   * Note these are the *asset's* minor units, not the deposit's — the bond is
+   * Arc native USDC at 18 decimals. The engine never needs the difference; the
+   * registry does, via `toArcNativeUnits`.
    */
   paidAmount: bigint;
   /** Populated when `status` is null; surfaced by the dashboard as the failure reason. */

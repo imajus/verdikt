@@ -5,8 +5,11 @@
 // (Specification.md §3), so everything is re-exported from here.
 
 export { ENS_BACKEND, resolveServiceRecord, writeServiceScores } from './ens.js';
-export { decodePayment } from './payment.js';
+export { decodePayment, decodeSettlement, PaymentDecodeError } from './payment.js';
 export {
+  ARC_NATIVE_DECIMALS,
+  PAYMENT_ASSET_DECIMALS,
+  toArcNativeUnits,
   OUTCOME_ORDINAL,
   STATUS_ORDINAL,
   outcomeToOrdinal,

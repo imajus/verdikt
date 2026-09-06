@@ -16,10 +16,12 @@
     "contracts:build": "pnpm --filter @verdikt/contracts build",
     "contracts:test": "pnpm --filter @verdikt/contracts test",
     "spike:ens": "node --env-file-if-exists=.env scripts/spike-ens.mjs",
-    "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs"
+    "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs",
+    "spike:payment": "node --env-file-if-exists=.env scripts/spike-payment.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@types/node": "^22.10.2",
     "eslint": "^10.10.0",
     "globals": "^17.12.0",
     "typescript": "^7.0.2",
