@@ -5,7 +5,7 @@ Step-by-step build plan for the system specified in
 Two weeks, solo.
 
 Phases are ordered by **risk, not by layer**. The three unknowns in
-Requirements §10 gate everything downstream, so they get spiked before any
+Requirements §9 gate everything downstream, so they get spiked before any
 real code is written; each carries an explicit fallback and a date by which
 the fallback must be taken.
 

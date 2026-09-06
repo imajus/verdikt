@@ -6,310 +6,245 @@ problem, product summary, goals, scope, and user flows.
 
 ## 1. SLA verification model
 
-Verdikt verifies two categories of guarantee using one evaluation stack,
-adapted from IBM's WSLA per-guarantee predicate model[^1]:
+Verdikt evaluates two guarantee categories on one stack, adapting IBM WSLA's
+per-guarantee predicate model[^1]:
 
-- **Per-request boolean verdict** — schema/input-output conformance,
-  latency, and price range are each evaluated as an independent true/false
-  predicate against the provider's declared SLA JSON, per call. The call's
-  outcome is one of three: `PASS`, `FAIL` (a response arrived
-  and broke a clause), or `DOWN` (payment settled and no usable
-  response came back). Each result emits a `VerdictWritten` event on Arc
-  (§3); nothing per-call is published beyond Arc.
-- **Periodic availability score** — derived from those same verdicts rather
-  than from a separate probe: **a service counts as up unless a paid call
-  reported it down.** Availability is the share of settled calls that
-  produced any usable response, mapped through a published tier table to
-  the score shown in the marketplace listing (§5), following the
-  tiered-banding approach used in commercial cloud SLA credit tables[^2].
-  **A service with no traffic scores 1000** — an accepted consequence.
-  Verdikt observes only what agents actually paid for, and synthesising
-  uptime from unpaid probes would measure something other than the thing
-  consumers are buying.
+- **Per-request boolean verdict** — schema/input-output conformance, latency,
+  and price-range clauses each evaluate as an independent predicate against the
+  provider's declared SLA JSON, per call. Outcome is `PASS`, `FAIL` (a response
+  arrived and broke a clause), or `DOWN` (payment settled, no usable response
+  came back). Each emits a `VerdictWritten` event on Arc (§3); nothing per-call
+  is published beyond Arc.
+- **Periodic availability score** — derived from those same verdicts, not a
+  separate probe: a service is up unless a paid call reported it down. It is the
+  share of settled calls that returned any usable response, mapped through a
+  published tier table to the marketplace score (§5), following commercial cloud
+  SLA credit banding[^2]. A zero-traffic service scores 1000 — an accepted
+  consequence of measuring only what agents paid for; synthesising uptime from
+  unpaid probes would measure something other than what consumers buy.
 
-The two metrics stay distinct because the outcome enum separates them:
-conformance measures the quality of responses that *arrived*, availability
-measures whether they arrived at all. Both recompute **hourly** from a
-rolling trailing **7-day** window of `VerdictWritten` events:
-- **SLA conformance ratio** — `PASS ÷ (PASS + FAIL)` over the
-  trailing 7 days, expressed on a **0–1000 scale** (e.g. 987 = 98.7%
-  conformance) rather than a percentage (ENS text records are strings; an
-  integer avoids decimal-formatting ambiguity). Unreachable calls are
-  excluded from the denominator — they say nothing about whether the
-  response body would have conformed.
-- **Availability ratio** — `(PASS + FAIL) ÷ all verdicts` on
-  the same 0–1000 scale. An empty window yields 1000.
+The enum separates the two: conformance measures the quality of responses that
+*arrived*; availability, whether they arrived at all. Both recompute **hourly**
+over a trailing **7-day** window of `VerdictWritten` events, on a **0–1000
+integer scale** (ENS text records are strings; an integer sidesteps
+decimal-format ambiguity):
 
-An hourly rolling-window write costs at most one ENS update per service per
-hour, regardless of call volume, and is fresher than a weekly one while
-still reflecting a week of history. Per-call events remain the ground truth
-on Arc; both ratios are derived, display-only summaries (§4) — a missed or
-late hourly run just leaves a stale score until the next run overwrites it,
-with no refund state to reconcile.
+- **Conformance** = `PASS ÷ (PASS + FAIL)`. `DOWN` calls leave the denominator —
+  they say nothing about whether the body would have conformed.
+- **Availability** = `(PASS + FAIL) ÷ all verdicts`. An empty window yields 1000.
 
-Both mechanisms share one evaluation engine and one SLA schema. Mixing a
-boolean-per-clause model with one graduated aggregate metric follows Rana
-et al.'s taxonomy of SLA violation types (all-or-nothing / partial /
-weighted-partial)[^3].
-
-Other approaches exist — rule-based SLA engines[^4], zero-knowledge/
-TEE-attested compliance proofs[^5] — cited for reference; Verdikt uses the
-WSLA-predicate plus tiered-credit stack above.
+Per-call events are the ground truth on Arc; both ratios are derived,
+display-only summaries (§4). One rolling write per service per hour, independent
+of call volume; a missed or late run just leaves a stale score until the next
+overwrites it, with no refund state to reconcile. Mixing a boolean-per-clause
+model with one graduated aggregate follows Rana et al.'s violation-type taxonomy
+(all-or-nothing / partial / weighted-partial)[^3]. Rule-based SLA engines[^4]
+and ZK/TEE-attested compliance proofs[^5] are cited for reference; Verdikt uses
+the WSLA-predicate-plus-tiered-credit stack above.
 
 ### Fallback when the SLA can't be read
 
-If the ENS record is unreachable or won't parse, the workflow does not skip
-the call. It falls back to a status-only default: **2xx → PASS, 5xx →
-`FAIL`, and a 4xx writes no verdict at all.**
-
-The 4xx carve-out matters. A 4xx is usually the provider correctly
-rejecting a malformed request, so treating it as a failure would let an
-agent farm refunds by sending deliberate garbage — the caller wasted its
-own payment and the provider behaved exactly as it should. Excluding 4xx
-keeps a Verdikt-side outage from silently suspending verification without
-letting the fallback manufacture refunds out of provider bonds.
-
-### Why a neutral middleman, not caller-side evaluation
-
-An alternative design would let the paying agent evaluate compliance itself
-and decide whether to claim a refund. This is simpler to build but
-structurally weak: the agent has a direct financial incentive to claim
-non-compliance regardless of the actual response, the provider has no way
-to contest a false claim without an arbitration process, and neither
-party's evaluation is auditable by anyone else.
-
-Verdikt instead runs the compliance check inside a neutral, deterministic
-middleman. The same SLA JSON evaluated against the same observed response
-produces the same verdict regardless of who is asking; the verifier role is
-code-enforced and held by neither the provider nor the calling agent (§3);
-and the resulting verdict is written on-chain, so any third party can trust
-it without having to trust the agent or the provider individually. This is
-what makes the reputation system judgment-independent: compliance is a
-deterministic function of (SLA, response), evaluated once by an unbiased
-third party.
+If the `sla` record is unreachable or won't parse, the workflow does not skip
+the call — it falls back to status-only: **2xx → PASS, 5xx → `FAIL`, 4xx → no
+verdict.** The 4xx carve-out prevents refund-farming: a 4xx is usually the
+provider correctly rejecting a malformed request, so scoring it as failure would
+let an agent farm refunds with deliberate garbage. Excluding it keeps a
+Verdikt-side outage from silently suspending verification without letting the
+fallback manufacture refunds out of provider bonds.
 
 ## 2. Verification execution — Chainlink CRE Confidential Workflows
 
-Verification runs inside a Chainlink CRE Confidential Workflow (TEE): the
-workflow makes the paid HTTP call to the provider's API and evaluates the
-response inside the enclave. The paying agent's own connection terminates
-at Verdikt's proxy, so the payload necessarily transits it on the way back
-— what the enclave buys is not that Verdikt never handles those bytes, but
-that the code which reads and judges them is fixed, attested, and
-published. Anyone can check the running enclave's measurement against the
-open-source workflow.
-
-API responses often contain proprietary or otherwise valuable data — market
-data feeds, proprietary model outputs, personal data — that a provider has
-a legitimate interest in keeping out of a verification layer's hands.
-Attestation is what makes handing it over acceptable: the provider trusts a
-published workflow and an enclave measurement, not Verdikt's operators or
-their good intentions. The proxy relays; it does not evaluate, retain, or
-log response bodies.
-
-The enclave replays the agent's payment against the provider (request
-credentials kept encrypted in-enclave), evaluates the checks in §1, returns
-the response payload for the proxy to relay back to the caller, and posts a
-signed verdict on-chain — per
+Per-request verification runs in a Chainlink CRE Confidential Workflow (TEE):
+the enclave replays the agent's x402 payment against the provider (request
+credentials kept encrypted in-enclave), evaluates the response against the SLA
+(§1), returns the payload for the proxy to relay back, and posts a signed
+verdict on Arc (§3) — per
 [Chainlink's CRE template pattern](https://docs.chain.link/cre-templates/ai-audit-firewall).
-The USDC payment settles on **Arc** — the same chain the verdict and refund
-land on (§3) — so payment and refund share one chain and one asset. The
-demo provider is a [Proceeds](https://myproceeds.xyz)
-paywall wrapping a real upstream API (Open-Meteo) and accepting x402 on Arc
-Testnet; payment settles via **Circle Gateway** (the batched
-`GatewayWalletBatched` scheme), proven end-to-end on Arc Testnet — a paid
-call returned the provider's real JSON with a `success` receipt on
-`eip155:5042002`. Verdikt does not require providers to use Proceeds; the
-proxy relays whatever chain and scheme the provider's 402 challenge
-advertises, but settling on Arc is the default that keeps the payment and
-refund legs unified.
 
-Production CRE enrollment is currently private-beta; `cre workflow
-simulate` is self-serve, and the ETHOnline2026 Chainlink track accepts CLI
-simulation as sufficient evidence.
+The agent's connection terminates at the proxy, so the response payload transits
+it on the way back. What the enclave buys is not that Verdikt never handles those
+bytes but that the code reading and judging them is fixed, attested, and
+open-source — anyone can check the running enclave's measurement against the
+published workflow. Paid API responses often carry proprietary or sensitive data
+(market feeds, model outputs, personal data) a provider will not hand a
+verification layer on operator trust; attestation is what makes handing it over
+acceptable. The proxy relays only — it does not evaluate, retain, or log
+response bodies.
+
+Production CRE enrollment is private-beta; `cre workflow simulate` is self-serve,
+and the ETHOnline2026 Chainlink track accepts CLI simulation as sufficient
+evidence.
 
 ### Proxy request path
 
-The proxy branches on whether the incoming request carries an `X-PAYMENT`
-header:
+The proxy branches on the `X-PAYMENT` header:
 
-- **No `X-PAYMENT`** — plain passthrough to the provider. The provider
-  answers with its 402 challenge, and the proxy compares the challenge's
-  `payTo` against the address record on the service's ENS subname (§4)
-  before relaying it. On mismatch the proxy blocks and returns an error
-  instead of the challenge, so the agent never signs a payment to a spoofed
-  address. Nothing on this leg is sensitive — the 402 challenge is public
-  by construction — so the check runs outside the enclave, in ordinary
-  proxy code.
-- **`X-PAYMENT` present** — the proxy triggers the confidential workflow
-  and passes the header through. The enclave replays it against the
-  provider, receives the paid response, evaluates it against the SLA (§1),
-  writes the verdict to Arc (§3), and returns the payload for the proxy to
-  relay back.
+- **Absent** — plain passthrough. The provider returns its 402 challenge; the
+  proxy compares the challenge's `payTo` against the address record on the
+  service's ENS subname (§4) and blocks on mismatch, so the agent never signs a
+  payment to a spoofed address. The 402 challenge is public, so this check runs
+  in ordinary proxy code, outside the enclave.
+- **Present** — the proxy triggers the confidential workflow and passes the
+  header through. The enclave replays it against the provider, evaluates the paid
+  response (§1), writes the verdict to Arc (§3), and returns the payload to relay
+  back.
 
-The paying agent signs its own payment, exactly as it would calling the
-provider directly; Verdikt holds no wallet on the payment leg and never
-signs on an agent's behalf. Because the payer address and the paid amount
-are both recoverable from the payment payload, a refund needs no session
-state correlating request to payment — the verdict carries everything the
-registrar needs.
+The agent signs its own payment, exactly as it would calling the provider
+directly; Verdikt holds no wallet on the payment leg and never signs on an
+agent's behalf. Payer address and paid amount are both recoverable from the
+payment payload, so a refund needs no session state correlating request to
+payment — the verdict carries everything the registrar needs.
 
 ### Two CRE workflows
 
-The workflow above is per-request: proxy-triggered right after payment
-settles, confidential because it touches the provider's actual response. It
-also triggers the per-request refund (§3) directly from its own PASS/FAIL/DOWN
+The per-request workflow above is confidential (it touches the provider's real
+response) and triggers the refund (§3) directly from its `PASS`/`FAIL`/`DOWN`
 result.
 
-The hourly reputation-scoring run (§1) is a separate CRE workflow on a
-cron trigger. It only reads `VerdictWritten` events already public on Arc,
-so it needs no confidentiality and doesn't run in the TEE: it computes the
-trailing-7-day conformance and availability ratios and writes both to ENS
-as marketplace scores — it makes no Arc writes and settles no refund.
-Confidentiality is an optional, layered feature of a CRE workflow, and Cron
-is a first-class trigger type alongside HTTP and on-chain events[^6].
-
-Merging the two would make the aggregate depend on traffic timing (an hour
-with zero calls would never publish) and put non-confidential logic inside
-the TEE workflow — kept separate instead.
+The hourly reputation run (§1) is a separate CRE workflow on a cron trigger. It
+reads only public `VerdictWritten` events, needs no confidentiality, and runs
+outside the TEE: it computes the trailing-7-day conformance and availability
+ratios and writes both to ENS (§4), making no Arc write and settling no refund.
+Confidentiality is an optional, layered CRE feature, and Cron is a first-class
+trigger alongside HTTP and on-chain events[^6]. Merging the two would couple the
+aggregate to traffic timing (a zero-call hour would never publish) and put
+non-confidential logic in the TEE.
 
 ## 3. On-chain registry
 
-- **Permissionless registration**: `register(serviceId)` on a registrar
-  contract, posting the required deposit. `serviceId` = `keccak256` of a
-  human-chosen slug. The same slug doubles as the `<slug>.verdikt.bond`
-  routing subdomain and the `<slug>.verdikt.eth` ENS subname label (§4) —
-  one identifier, reused across all three surfaces.
-- **Deposit/bond**: held in an escrow contract keyed by `serviceId`, paid in
-  **native USDC** (Arc's gas token, so escrow holds value directly rather
-  than an ERC-20 balance — no `approve`/`transferFrom` and no token address
-  to configure), **fixed amount** for MVP (no reputation-scaled tiering).
-  This is the pool refunds are paid from. Paid directly to escrow, not
-  through the proxy.
-- **No SLA storage on Arc**: the registry struct has no SLA field and no
-  `setSLA` function. The SLA lives only on the provider's ENS subname
-  (§4); the verification workflow reads it from ENS at run time, diffing
-  against whatever the provider published there.
-- **One role per service**: verifier only (the CRE workflow's callback
-  signer, can `setVerdict`). Neither the provider nor Verdikt itself can
-  write a verdict — enforced at the contract level. The provider has no
-  write role on Arc — their authorship happens on the ENS side (§4).
-- **Refund, auto-executed, no dispute step**: either FAIL or DOWN outcome for a
-  specific paid request credits a refund from that service's deposit to the
-  paying agent automatically. The verdict carries the payer address and the
-  paid amount, both read out of the payment payload (§2), so the registrar
-  needs no correlation table; it records the `requestId` to make a second
-  refund against the same request revert. The refund is booked on Arc
-  against the bonded deposit, in the same asset (USDC) and on the same chain
-  the x402 call was paid on (§2) — payment and refund share one chain, so
-  there is no cross-chain correlation between the leg the agent paid on and
-  the leg it is refunded on. The aggregate availability *score* still never
-  moves a deposit (§1, §5); an unreachable call refunds because that one
-  call took payment and delivered nothing, not because a score crossed a
-  threshold.
-- **Pull payments, never push**: `setVerdict` books `owed[payer] += amount`
-  and the agent calls `withdraw()` to collect. The registrar sends no value
-  while writing a verdict. If it pushed, a payer address that rejects
-  incoming transfers would revert the whole transaction and erase its own
-  FAIL verdict — which a provider farming its own service through a
-  reverting contract could use to keep a spotless conformance ratio while
-  failing real calls. Booking a credit decouples whether a verdict can be
-  recorded from whether anyone can be paid, and removes the reentrancy
-  surface that an external call inside `setVerdict` would open.
-- **Refund capped at the amount paid**: the payout is
-  `min(fixedRefund, paidAmount)`, never a penalty on top. Without a dispute
-  layer there is no way to contest a refund, so a refund larger than the
-  payment would make induced failure profitable — an agent crafting requests
-  that push a service into violating its own SLA could drain the bond and
-  force an auto-suspend. Capping at the payment makes that attack
-  break-even-minus-gas: the griefer recovers only what they spent, and the
-  provider's exposure per bad call is bounded by its own price.
-- **Auto-suspend at zero**: once refunds drain a service's deposit to 0,
-  the registrar flips status to SUSPENDED and the proxy stops routing new
-  payments to it until topped up.
-- **Deregistration**: `deregister(serviceId)`, provider-only, delists the
-  service from the marketplace and withdraws the remaining deposit. Blocked
-  while status is SUSPENDED, so a provider can't deregister to dodge an
-  outstanding refund obligation.
-- **Reading**: any agent or dApp checks a service's verdict/deposit via view
-  functions (`getVerdict`, `getDeposit`) on Arc, and its SLA by resolving
-  the ENS subname directly (§4) — no `getSLA` on Arc. A minimal JS SDK
-  (or thin REST wrapper) should ship alongside the contract to wrap both
-  lookups so callers don't need to know multiple chains are involved.
-- **History**: a standard `VerdictWritten` event on Arc for verdict history,
-  replayable directly off an RPC node with no subgraph dependency. SLA edit
-  history is covered by ENS's own `TextChanged` event on the Permissioned
-  Resolver (Sepolia); no custom event needed.
+- **Permissionless registration** — `register(slug)` posts the required deposit.
+  `serviceId = keccak256(slug)`, a human-chosen slug reused verbatim as the
+  `<slug>.verdikt.bond` route and the `<slug>.verdikt.eth` ENS subname (§4).
+- **Deposit/bond** — held in escrow keyed by `serviceId`, in **native USDC**
+  (Arc's gas token, so escrow holds value directly — no `approve`/`transferFrom`,
+  no token address), a **fixed amount** for MVP. Paid directly to escrow, not
+  through the proxy. This is the pool refunds draw from.
+- **No SLA on Arc** — the registry struct has no SLA field and no `setSLA`. The
+  SLA lives only on the ENS subname (§4); the workflow reads it at run time.
+- **One role per service** — verifier only (the CRE callback signer, may
+  `setVerdict`). Neither provider nor Verdikt can write a verdict, enforced at
+  the contract level; the provider's authorship happens on the ENS side (§4).
+- **Refund, auto-executed, no dispute** — a `FAIL` or `DOWN` on a paid request
+  credits a refund from that service's deposit to the payer. The verdict carries
+  payer and paid amount out of the payment payload (§2), so the registrar needs
+  no correlation table; it records the `requestId` so a second refund against the
+  same request reverts. Refund and payment are the same asset on the same chain
+  (§6) — no cross-chain correlation between the two legs. The availability
+  *score* never moves a deposit (§1, §5); a `DOWN` refunds because that one call
+  took payment and delivered nothing, not because a score crossed a threshold.
+- **Pull payments, never push** — `setVerdict` books `owed[payer] += amount`; the
+  agent calls `withdraw()` to collect. Pushing value here would let a payer
+  address that rejects transfers revert the whole call and erase its own `FAIL` —
+  which a provider farming its own service through a reverting contract could use
+  to hold a spotless conformance ratio while failing real calls. Booking a credit
+  decouples recording a verdict from paying anyone, and removes the reentrancy
+  surface an external call inside `setVerdict` would open.
+- **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
+  penalty on top. With no dispute layer, a refund larger than the payment would
+  make induced failure profitable; capping at the payment makes griefing
+  break-even-minus-gas — the griefer recovers only what it spent.
+- **Auto-suspend at zero** — when refunds drain a service's deposit to 0, status
+  flips to SUSPENDED and the proxy stops routing new payments to it until topped
+  up.
+- **Deregistration** — `deregister(serviceId)`, provider-only; delists and
+  returns the remaining deposit. Blocked while SUSPENDED, so a provider can't
+  deregister to dodge an outstanding refund obligation.
+- **Reading** — `getVerdict`, `getDeposit` view functions on Arc; the SLA
+  resolves from the ENS subname directly (§4), no `getSLA` on Arc. A minimal JS
+  SDK (or thin REST wrapper) wraps both lookups so callers needn't know multiple
+  chains are involved.
+- **History** — a `VerdictWritten` event on Arc, replayable off an RPC node with
+  no subgraph. SLA edit history is ENS's own `TextChanged` event on the
+  Permissioned Resolver (Sepolia); no custom event needed.
 
 ## 4. ENS integration — the SLA source of truth
 
-Verdikt targets ENSv2's Permissioned Registry and Permissioned Resolver,
-not ENSv1. ENSv2's Enhanced Access Control (EAC) scopes write permission to
-a single text-record key via `authorizeTextRoles(name, key, account,
-grant)`: an address can be granted rights to write only the `sla` key, or
-only the `conformance`/`availability` keys, with any other key reverting.
-ENSv1's PublicResolver has no equivalent — any approved operator can write
-any text key — so it can't enforce that the provider writes only the SLA
-and the CRE verifier writes only the reputation ratios.
+Verdikt targets ENSv2's Permissioned Registry and Resolver. Its Enhanced Access
+Control (EAC) scopes write permission per text-record key via
+`authorizeTextRoles(name, key, account, grant)`: an address can be granted the
+`sla` key only, or the `conformance`/`availability` keys only, with any other
+key reverting. ENSv1's PublicResolver has no equivalent — any approved operator
+writes any key — so it can't enforce that the provider writes only the SLA and
+the CRE verifier writes only the ratios. That per-key ACL is why the SLA lives
+only on ENS, never duplicated on Arc (§3): the ENS record *is* the SLA, and the
+workflow reads it directly at verification time.
 
-That per-key ACL is why the SLA lives only on ENS, not duplicated on Arc
-(§3) — the ENS record is the SLA, and the CRE workflow reads it directly
-at verification time.
+ENSv2 has no mainnet deployment, so this namespace runs on **Sepolia** —
+Verdikt's identity/SLA layer is a testnet component alongside Arc's own testnet,
+an accepted scope decision for a two-week build.
 
-Trade-off: ENSv2 has no mainnet deployment, so this namespace runs on
-**Sepolia** — Verdikt's identity/SLA layer is a testnet component alongside
-Arc's own testnet, not a `verdikt.eth` mainnet name. An accepted scope
-decision for a two-week build.
-
-- Each API provider registers a **subname** under `verdikt.eth` on the
-  ENSv2 Permissioned Registry (Sepolia), e.g. `provider-name.verdikt.eth`.
-  The label is the same human-chosen slug used for the on-chain `serviceId`
-  (§3), so `provider-name.verdikt.bond/<path>` — the URL agents actually
-  call — maps directly to `provider-name.verdikt.eth` with no separate
-  lookup table.
-- At mint time, the resolver's EAC roles are set: the provider's address
-  gets a role scoped to the `sla` key only; the CRE workflow's signer
-  address gets a role scoped to the `conformance` and `availability` keys
-  only, granted once at registration.
+- Each provider registers a **subname** under `verdikt.eth` (e.g.
+  `provider-name.verdikt.eth`), labelled with the same slug as the Arc
+  `serviceId` (§3), so `provider-name.verdikt.bond/<path>` — the URL agents
+  call — maps directly to `provider-name.verdikt.eth` with no lookup table.
+- At mint, EAC roles are set once: the provider's address scoped to the `sla`
+  key; the CRE signer scoped to the `conformance` and `availability` keys.
 - The subname carries four records:
-  - An **`sla` text record**, written directly by the provider, any time,
-    with no Arc involvement — the sole copy of the SLA (§3).
-  - A **`conformance` text record** — the SLA conformance ratio (0–1000,
-    §1), and an **`availability` text record** — the availability ratio
-    (0–1000, §1), both written by the CRE workflow's signer hourly over
-    the trailing 7-day window (§1), not per call — the same scheduled run
-    described in §2's "Two CRE workflows". Neither record ever triggers a
-    refund (§3); per-call PASS/FAIL/DOWN verdicts stay Arc-only events (§1) and
-    never touch ENS individually.
-  - An **address record**, owner-controlled, set to the provider's
-    payout wallet.
-- On the unpaid leg, the proxy resolves the subname's address record and
-  compares it against the `payTo` address in the live 402 challenge before
-  relaying that challenge to the agent (§2). A mismatch blocks the payment
-  before it is signed — checked pre-payment, not post-hoc like §1's checks,
-  since a spoofed payTo address leaves no bonded deposit to reclaim funds
-  from. This one runs outside the enclave: the 402 challenge is public, so
-  the check touches nothing confidential and does not need attestation.
-- The CRE workflow reads the live `sla` text record straight from the
-  Permissioned Resolver (Sepolia) as its verification input, with no IPFS
-  pointer or Arc-side copy to drift out of sync.
+  - **`sla`** — written directly by the provider, any time, no Arc involvement;
+    the sole copy of the SLA (§3).
+  - **`conformance`** and **`availability`** — the two ratios (0–1000, §1),
+    written by the CRE signer hourly over the trailing 7-day window (§2, "Two CRE
+    workflows"), never per call and never a refund trigger (§3). Per-call
+    `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
+  - **address** — owner-controlled, set to the provider's payout wallet.
+- On the unpaid leg the proxy resolves the address record and compares it against
+  the live 402 challenge's `payTo` before relaying (§2). A mismatch blocks
+  pre-payment, not post-hoc like §1's checks, since a spoofed `payTo` leaves no
+  bonded deposit to reclaim from. Runs outside the enclave — the challenge is
+  public.
+- The workflow reads the live `sla` record straight from the Permissioned
+  Resolver as its verification input, with no IPFS pointer or Arc-side copy to
+  drift out of sync.
 
 ## 5. Product / dashboard
 
-- **MVP**: a marketplace dashboard (own web UI) listing every registered
-  service with its live conformance/availability metrics, deposit balance,
-  and verdict history — the surface consumers use to compare similar
-  services and pick one, plus aggregate platform stats (services
-  registered, verdict breakdown, refunds paid out over time). The primary
-  demo surface.
+- **MVP** — a marketplace dashboard (own web UI) listing every registered service
+  with its live conformance/availability metrics, deposit balance, and verdict
+  history — the surface consumers use to compare similar services and pick one —
+  plus aggregate platform stats (services registered, verdict breakdown, refunds
+  paid out over time). The primary demo surface.
 - **Stretch, in priority order**:
   1. Provider self-serve dashboard (own verdict history, deposit balance,
      SLA-JSON editor).
   2. Machine-facing discovery API — agents filtering the marketplace by
-     cost/latency/availability programmatically, on top of the human-facing
-     MVP listing.
+     cost/latency/availability programmatically, on top of the human-facing MVP
+     listing.
 
-## 6. Architecture
+## 6. Target chain & stack
+
+Two chains, each chosen for what only it provides:
+
+- **Registry / escrow / payment: Arc**, Circle's stablecoin-native L1. The
+  registrar, escrow, verdicts, and refunds (§3) all deploy here, and the x402
+  call is paid on Arc too. USDC is Arc's native gas token, so payment, bond, and
+  refund are one asset on one chain: the agent pays on Arc and, on a `FAIL` or
+  `DOWN` verdict, is refunded on Arc from the same-asset bond, with no
+  cross-chain correlation between the two legs. x402 settles via **Circle
+  Gateway** (batched `GatewayWalletBatched` scheme), which debits a pre-funded
+  Gateway balance; the bond is held as native USDC, so a refunded agent receives
+  native USDC rather than Gateway credit.
+- **Identity / SLA: Ethereum Sepolia** — the only network with an ENSv2
+  Permissioned Registry/Resolver deployment, which the SLA and reputation layer
+  requires (§4).
+- **Verification compute: Chainlink CRE** — a Confidential Workflow (TEE) per
+  request, plus a separate plain scheduled workflow for the hourly reputation
+  aggregate (§2).
+- **SLA storage: none separate** — the SLA is the ENS `sla` text record (§4), an
+  arbitrary UTF-8 string per ENSIP-5[^7], not an IPFS-pointed blob. The write is
+  infrequent (registration and occasional edits, not per call), so on-chain
+  string cost is acceptable and simpler than an IPFS-plus-hash design.
+- **Payments: x402**, settled in USDC by the calling agent itself — Verdikt
+  relays the handshake and holds no wallet on the payment leg. The demo caller
+  uses the Circle Agent Wallet CLI, a ready x402-capable wallet across EVM
+  chains.
+- **Demo provider** — a [Proceeds](https://myproceeds.xyz) paywall accepting x402
+  on Arc Testnet stands in for a live provider. Verdikt requires no provider to
+  use Proceeds or settle on Arc — the proxy relays whatever the 402 challenge
+  advertises — but settling on Arc is the default that keeps the payment and
+  refund legs unified; independently-operated mainnet providers (e.g.
+  [Blockrun](https://blockrun.ai/docs/x402/endpoints)) are the production target.
+
+## 7. Architecture
 
 ```
 Paying agent (signs its own x402 payment; Verdikt holds no payment wallet)
@@ -331,8 +266,7 @@ response-body retention or logging)
    v
 Chainlink CRE Confidential Workflow (TEE) -- per-request run
    - replays the agent's payment against the provider from inside the
-     enclave (x402 settles on Arc via Circle Gateway; Proceeds paywall
-     wrapping Open-Meteo as the demo provider)
+     enclave (x402 settles on Arc via Circle Gateway -- §6)
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
    - classifies the paid call -> PASS / FAIL / DOWN (diffs the observed
@@ -393,3 +327,7 @@ Dashboard — reads verdict events/deposit from Arc, SLA + ratios from ENS
     the [Trigger Capability](https://docs.chain.link/cre/capabilities/triggers)
     docs list the Cron trigger as a standard, first-class trigger type
     alongside HTTP and on-chain EVM Log triggers.
+[^7]: [ENSIP-5: Text Records](https://docs.ens.domains/ens-improvement-proposals/ensip-5-text-records)
+    specifies a text record value as "any arbitrary UTF-8 string," with no
+    protocol-level size or content-type constraint — the resolver stores and
+    returns it as an opaque string regardless of what's inside it.

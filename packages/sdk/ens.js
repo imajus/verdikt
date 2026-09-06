@@ -3,7 +3,7 @@
 // WHY THIS FILE IS A CHOKE POINT
 //
 // ENSv2's Permissioned Registry/Resolver are beta and unverified on Sepolia
-// (Requirements.md §10). Spike A (Tasks.md 0.2) decides whether the per-key
+// (Requirements.md §9). Spike A (Tasks.md 0.2) decides whether the per-key
 // EAC that justifies choosing v2 over v1 actually enforces; its stated
 // fallback is ENSv1's PublicResolver with EAC demoted to future work. That is
 // a live risk with a dated gate, and it must not be able to ripple outward.

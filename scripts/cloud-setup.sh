@@ -105,7 +105,7 @@ install_cre() {
 }
 
 # --------------------------------------------------------- 3. Circle CLI
-# The demo caller's x402 wallet (Requirements §8). Plain npm, so registry
+# The demo caller's x402 wallet (Specification.md §6). Plain npm, so registry
 # access is covered by the default allowlist. Drop this block if the demo
 # stops using it.
 install_circle() {

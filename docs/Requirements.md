@@ -16,7 +16,7 @@ cryptographically guarantee advertised capabilities are functional and
 non-malicious[^2], and a 2026 study found zero confirmed mainnet deployments
 of its Validation Registry[^3].
 
-Verification is also hard to bolt on after the fact, for two structural
+Verification is also hard to bolt on after the fact, for three structural
 reasons. First, paid API responses often carry proprietary or sensitive
 data — market feeds, model outputs, personal data — and any layer that
 checks delivery has to read that data to check it. A verifier whose
@@ -26,7 +26,16 @@ attested code, published in the open, that anyone can check against what
 actually ran. Second, x402 calls are pay-per-request micropayments, often
 sub-cent, at a volume no human can audit one response at a time — whatever
 checks delivery has to run automatically, per call, not as an occasional
-spot-check.
+spot-check. Third, the party doing the checking cannot be either party to
+the payment. An agent evaluating its own calls and claiming its own refunds
+has a standing incentive to report non-compliance; a provider grading itself,
+the reverse. With no free public source of truth to re-derive a paid response
+against, neither self-report is contestable without an arbitration process.
+The evaluation has to be a neutral, deterministic function of (SLA, observed
+response) — the same inputs yielding the same verdict for anyone — run by a
+party that is neither the provider nor the caller
+([spec §3](./Specification.md#3-on-chain-registry)). That is what makes the
+reputation judgment-independent.
 
 ## 2. Product summary
 
@@ -148,7 +157,8 @@ the architecture diagram live in [Specification.md](./Specification.md).
   with no dispute step ([spec §3](./Specification.md#3-on-chain-registry)).
   The x402 call itself is also paid on Arc, so payment, bonded deposit, and
   refund all settle on the same chain in the same asset (USDC) — no
-  cross-chain correlation between the payment leg and the refund leg (§8).
+  cross-chain correlation between the payment leg and the refund leg
+  ([spec §6](./Specification.md#6-target-chain--stack)).
 - **ENS integration** — each provider's SLA and derived reputation ratios
   live on an ENSv2 subname (`<slug>.verdikt.eth`), the sole source of truth
   the CRE workflow reads at verification time
@@ -158,63 +168,12 @@ the architecture diagram live in [Specification.md](./Specification.md).
   platform stats, as the primary demo surface
   ([spec §5](./Specification.md#5-product--dashboard)).
 
-## 8. Target chain & stack
-
-Verdikt spans two chains, each chosen for what only it provides:
-
-- **Registry/escrow/payment chain**: **Arc**, Circle's stablecoin-native L1.
-  The registrar, escrow deposits, verdicts, and refunds
-  ([spec §3](./Specification.md#3-on-chain-registry)) all deploy here, and
-  the x402 call is paid on Arc too. USDC is Arc's native gas token, so
-  payment, bond, and refund are denominated in the same asset on one chain:
-  the paying agent pays on Arc and, on a FAIL or DOWN verdict, is refunded on Arc
-  from the same-asset bond, with no cross-chain correlation between the two
-  legs. The x402 payment settles via **Circle Gateway** (batched
-  `GatewayWalletBatched` scheme), which debits a pre-funded Gateway balance;
-  the bond is held as native USDC, so a refunded agent receives native USDC
-  rather than Gateway credit.
-- **Demo x402 provider**: a [Proceeds](https://myproceeds.xyz) paywall on Arc
-  Testnet stands in for a live provider. Verdikt does not require a provider to
-  use Proceeds or to settle on Arc — the proxy relays the x402 handshake on
-  whatever the provider's 402 challenge advertises — but settling on Arc is the
-  default that keeps the payment and refund legs unified; independently-operated
-  mainnet providers (e.g. [Blockrun](https://blockrun.ai/docs/x402/endpoints))
-  are the production target.
-- **Identity/SLA chain**: **Ethereum Sepolia** — the only network with an
-  ENSv2 Permissioned Registry/Resolver deployment, which the SLA and
-  reputation layer requires
-  ([spec §4](./Specification.md#4-ens-integration--the-sla-source-of-truth)).
-- **Verification compute**: Chainlink CRE — a Confidential Workflow (TEE)
-  per request, plus a separate plain (non-confidential) scheduled workflow
-  for the hourly reputation aggregate
-  ([spec §2](./Specification.md#2-verification-execution--chainlink-cre-confidential-workflows)).
-- **Storage**: no separate storage layer for the SLA — it's written directly
-  as the ENS `sla` text record
-  ([spec §4](./Specification.md#4-ens-integration--the-sla-source-of-truth)),
-  an arbitrary UTF-8 string per ENSIP-5[^4], not an IPFS-pointed blob.
-  Simpler to implement than an IPFS-plus-hash-record design, and the write
-  is infrequent (registration and occasional edits, not per call), so
-  on-chain string-storage cost is acceptable.
-- **Payments**: x402, settled in USDC by the calling agent itself — Verdikt
-  relays the handshake and holds no wallet on the payment leg. The demo
-  caller uses the Circle Agent Wallet CLI, which provides a ready
-  x402-capable wallet across EVM chains without building custom signing
-  infrastructure.
-
-Verdikt fits Arc's agent-commerce ecosystem: Circle's own
-[agent marketplace](https://agents.circle.com/sell) lets providers list x402
-endpoints and scores an endpoint's "agent-readiness" before listing — a check
-that an endpoint is structurally ready to be listed, not that a listed endpoint
-keeps delivering what it promised once it's live and paid per call. Verdikt is
-the piece downstream of listing: ongoing, automatic verification of delivery
-against a provider's own SLA, with code-enforced refunds when it falls short.
-
-## 9. Competitive landscape
+## 8. Competitive landscape
 
 - **x402-list.com** — closest existing competitor. Tracks 600+ x402
   services via uptime probing and a protocol-compliance checklist
   (structural, not claim verification), and already sells a paid
-  verification badge[^5] — evidence that willingness-to-pay for
+  verification badge[^4] — evidence that willingness-to-pay for
   verification exists today. No confidential-compute angle; Verdikt's
   differentiator is verifying actual response content against a
   provider-declared SLA, privately, not just probing uptime.
@@ -227,8 +186,15 @@ against a provider's own SLA, with code-enforced refunds when it falls short.
 - **Edge & Node's ampersend** — an agent-payment dashboard on x402 + A2A +
   ERC-8004 covering budget limits and allowlists; a human-configured
   spend-management tool, not an automated verification/reputation proxy.
+- **Circle's [agent marketplace](https://agents.circle.com/sell)** — lets
+  providers list x402 endpoints and scores an endpoint's "agent-readiness"
+  before listing: a check that an endpoint is structurally ready to be listed,
+  not that a listed endpoint keeps delivering what it promised once it's live
+  and paid per call. Verdikt is the piece downstream of listing — ongoing,
+  automatic verification of delivery against a provider's own SLA, with
+  code-enforced refunds when it falls short.
 
-## 10. Open risks / unresolved
+## 9. Open risks / unresolved
 
 - Payment settlement uses Circle Gateway's batched scheme
   (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
@@ -273,9 +239,5 @@ against a provider's own SLA, with code-enforced refunds when it falls short.
     advertised capabilities are functional and non-malicious.
 [^3]: An arXiv study found zero confirmed mainnet deployments of ERC-8004's
     Validation Registry as of its study period (through May 2026).
-[^4]: [ENSIP-5: Text Records](https://docs.ens.domains/ens-improvement-proposals/ensip-5-text-records)
-    specifies a text record value as "any arbitrary UTF-8 string," with no
-    protocol-level size or content-type constraint — the resolver stores
-    and returns it as an opaque string regardless of what's inside it.
-[^5]: x402-list.com sells a self-serve verification badge for $0.25/check,
+[^4]: x402-list.com sells a self-serve verification badge for $0.25/check,
     with its methodology published at x402-list.com/methodology.
