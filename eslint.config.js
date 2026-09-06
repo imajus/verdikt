@@ -7,7 +7,15 @@ import globals from 'globals';
 // and edit a shared file.
 export default [
   {
-    ignores: ['**/node_modules/**', '**/dist/**', 'contracts/out/**', 'contracts/cache/**']
+    // cre/spike is a bun-installed TypeScript island with its own toolchain
+    // (docs/spikes/cre.md, CRE-5); the root JS lint config does not apply to it.
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      'contracts/out/**',
+      'contracts/cache/**',
+      'cre/spike/**'
+    ]
   },
   js.configs.recommended,
   {

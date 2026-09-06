@@ -1,0 +1,16 @@
+# Spike B project config (docs/Tasks.md §0.3).
+#
+# Two EVM entries because Verdikt straddles two chains (Specification.md §3,
+# §4). Arc is the one the spike actually exercises: the verdict write.
+# Sepolia is here because the CRE runtime resolves ENS-side reads through the
+# same EVM capability, and the spike needs to prove both selectors resolve.
+staging-settings:
+  evms:
+    # Arc Testnet. eip155:5042002, selector 3034092155422581607.
+    # Verified against smartcontractkit/chain-selectors selectors.yml and
+    # EVMClient.SUPPORTED_CHAIN_SELECTORS['arc-testnet'] in @chainlink/cre-sdk.
+    - chain-selector: "3034092155422581607"
+      rpc-url: "https://rpc.testnet.arc.network"
+    # Ethereum Sepolia — ENSv2 lives here (Specification.md §4).
+    - chain-selector: "16015286601757825753"
+      rpc-url: "https://ethereum-sepolia-rpc.publicnode.com"

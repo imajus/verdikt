@@ -1,0 +1,6 @@
+{
+  "authorizedKeys": [],
+  "arcChainSelectorName": "arc-testnet",
+  "registryAddress": "0x0000000000000000000000000000000000000001",
+  "gasLimit": "500000"
+}

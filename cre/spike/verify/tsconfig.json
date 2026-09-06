@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "allowJs": true,
+    // @verdikt/sla and @verdikt/sdk are plain ESM JS whose types live in
+    // JSDoc, and they resolve through node_modules symlinks. Without this TS
+    // stops at the package boundary and both imports degrade to `any` — which
+    // would quietly void the thing this spike is trying to prove.
+    "maxNodeModuleJsDepth": 2
+  },
+  // packages/sla/types.d.ts declares SlaOutcome and friends globally with no
+  // `export` (a repo convention, see CLAUDE.md). Ambient globals are not
+  // carried across a package boundary by an import, so the file has to be
+  // named here explicitly.
+  "include": ["./**/*.ts", "../../../packages/sla/types.d.ts"],
+  "exclude": ["node_modules", ".tmp"]
+}

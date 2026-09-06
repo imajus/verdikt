@@ -1,0 +1,8 @@
+{
+  "serviceId": "0x1111111111111111111111111111111111111111111111111111111111111111",
+  "requestId": "0x2222222222222222222222222222222222222222222222222222222222222222",
+  "providerUrl": "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current=temperature_2m",
+  "payer": "0x000000000000000000000000000000000000beef",
+  "paidAmountMinorUnits": "2500",
+  "latencyBudgetMs": 2000
+}
