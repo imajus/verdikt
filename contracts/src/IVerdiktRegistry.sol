@@ -48,9 +48,7 @@ interface IVerdiktRegistry {
     ///      marketplace reads services straight off RPC logs with no subgraph
     ///      (Specification.md §3, §5), so this event is the only place a
     ///      serviceId can be resolved back to its human-readable slug.
-    event ServiceRegistered(
-        bytes32 indexed serviceId, address indexed provider, string slug, uint256 deposit
-    );
+    event ServiceRegistered(bytes32 indexed serviceId, address indexed provider, string slug, uint256 deposit);
 
     event DepositToppedUp(bytes32 indexed serviceId, uint256 amount, uint256 balance);
 
@@ -59,22 +57,14 @@ interface IVerdiktRegistry {
     ///      availability ratios, so `serviceId` is indexed and `outcome` is
     ///      carried in the payload.
     event VerdictWritten(
-        bytes32 indexed serviceId,
-        bytes32 indexed requestId,
-        Outcome outcome,
-        address payer,
-        uint256 paidAmount
+        bytes32 indexed serviceId, bytes32 indexed requestId, Outcome outcome, address payer, uint256 paidAmount
     );
 
-    event RefundCredited(
-        bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount
-    );
+    event RefundCredited(bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount);
 
     event RefundWithdrawn(address indexed payer, uint256 amount);
     event ServiceSuspended(bytes32 indexed serviceId);
-    event ServiceDeregistered(
-        bytes32 indexed serviceId, address indexed provider, uint256 returnedDeposit
-    );
+    event ServiceDeregistered(bytes32 indexed serviceId, address indexed provider, uint256 returnedDeposit);
 
     // ------------------------------------------------------------------ errors
 
@@ -121,13 +111,8 @@ interface IVerdiktRegistry {
     ///      `payer` and `paidAmount` are recovered from the x402 payment payload
     ///      by the enclave (Specification.md §2), so no correlation table is
     ///      needed between the payment leg and the refund leg.
-    function setVerdict(
-        bytes32 serviceId,
-        bytes32 requestId,
-        Outcome outcome,
-        address payer,
-        uint256 paidAmount
-    ) external;
+    function setVerdict(bytes32 serviceId, bytes32 requestId, Outcome outcome, address payer, uint256 paidAmount)
+        external;
 
     // ------------------------------------------------------------ payer writes
 
