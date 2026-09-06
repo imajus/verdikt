@@ -161,9 +161,9 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
 - **Permissionless registration**: `register(serviceId)` on a registrar
   contract, posting the required deposit. `serviceId` = `keccak256` of a
   human-chosen slug. The same slug doubles as the `<slug>.verdikt.bond`
-  routing subdomain and, if the §6.4 stretch goal ships, the
-  `<slug>.verdikt.eth` ENS subname label — one identifier, reused everywhere,
-  rather than a separate mapping table per surface.
+  routing subdomain and the `<slug>.verdikt.eth` ENS subname label (§6.4) —
+  one identifier, reused everywhere, rather than a separate mapping table
+  per surface.
 - **Deposit/bond**: held in an escrow contract keyed by `serviceId`, paid in
   USDC, **fixed amount** for MVP (no reputation-scaled tiering). This is the
   pool refunds are paid from. Paid directly to escrow, not through the
@@ -176,7 +176,9 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
 - **Two roles per service**: owner (can `setSLA`) and verifier (the CRE
   workflow's callback signer, can `setVerdict`). Neither the provider nor
   Verdikt itself can write a verdict — enforced at the contract level, not
-  by convention.
+  by convention. Both writes also fan out to the provider's ENS subname
+  (§6.4), since the registry and the ENS record are two different chains,
+  not two calls on one contract.
 - **Two refund paths, both auto-executed, no dispute step**:
   1. *Per-request*: a FAIL verdict for a specific paid request releases a
      fixed refund from that service's deposit to the paying agent
@@ -196,9 +198,22 @@ accepts CLI simulation as sufficient evidence — not a build blocker.
   write — verdict history is replayable directly off an RPC node, no
   subgraph dependency.
 
-### 6.4 ENS integration (stretch goal)
+### 6.4 ENS integration
 
-Verdikt uses `verdikt.eth` as a namespace for provider identity:
+Verdikt uses `verdikt.eth` as a namespace for provider identity. This is not
+a side-channel bolted onto the registry — it's the human/agent-facing
+interface layer that any ENS-aware wallet, explorer, or agent framework can
+read directly, without knowing Verdikt's own contract ABI.
+
+ENS names resolve on Ethereum, not on Arc, which is Verdikt's registry
+chain. There is no single contract that can hold both an ENS subname's
+records and Arc-side USDC deposits — these are necessarily two contracts on
+two chains, kept in sync by CRE rather than merged. This also settles which
+ENS generation to build on: ENSv2's Permissioned Registry is a purpose-built
+naming/permission contract (ERC1155-based, role-gated subname lifecycle),
+not designed to be extended with custom escrow logic, and it is currently
+beta and live only on Sepolia with no mainnet deployment. Verdikt uses the
+standard, live ENSv1 `.eth` registrar and PublicResolver instead.
 
 - Each API provider registers a **subname** under `verdikt.eth` (e.g.
   `provider-name.verdikt.eth`) to represent their listed service. The label
@@ -207,9 +222,16 @@ Verdikt uses `verdikt.eth` as a namespace for provider identity:
   call — maps directly to `provider-name.verdikt.eth` with no separate
   lookup table: wildcard routing on `*.verdikt.bond` resolves the
   subdomain label straight to both the registry entry and the ENS subname.
-- The subname carries two records:
+- Registering the subname (part of `register()`, §6.3) also grants a
+  CRE-controlled Ethereum-side writer operator approval on that subname, so
+  later verdict/SLA updates don't need a fresh per-write authorization step.
+- The subname carries three records:
   - A **custom text record** holding (or pointing to, e.g. via an IPFS
-    hash) the provider's SLA JSON.
+    hash) the provider's SLA JSON, kept in sync with `setSLA` (§6.3).
+  - A **reputation text record** mirroring the latest verdict/compliance
+    status, kept in sync with `setVerdict` (§6.3) — so a provider's
+    standing is visible to any tool that resolves `provider-name.verdikt.eth`,
+    not just to Verdikt's own dashboard.
   - An **address record** set to the API provider's owner/payout wallet.
 - At payment time, the CRE workflow resolves the subname's address record
   and compares it against the `payTo` address in the live x402 402
@@ -217,7 +239,10 @@ Verdikt uses `verdikt.eth` as a namespace for provider identity:
   pre-payment gate, not a post-hoc verdict like the checks in §6.1, because
   once an agent pays a spoofed address there is no bonded deposit to
   reclaim it from.
-- Build the core (§6.1–§6.3) first; attempt this only if time remains.
+- Each CRE run that produces a verdict fans out to both chains in the same
+  workflow: the refund-triggering write to the Arc registry, and the
+  reputation text-record update on Ethereum — one verification event, two
+  destinations, rather than a separate sync service that could drift or lag.
 
 ### 6.5 Product / dashboard
 
@@ -240,21 +265,25 @@ Paying agent
 Verdikt proxy (thin coordinator — handshake + payment/request
 correlation only; never decrypts or logs a provider response)
    |
-   | relays 402 challenge; [stretch] checks verdikt.eth payTo record
-   | before payment; triggers a workflow run once payment settles
+   | relays 402 challenge; checks verdikt.eth payTo record before
+   | payment; triggers a workflow run once payment settles
    v
 Chainlink CRE Confidential Workflow (TEE)
    - fetches the provider's API response directly, inside the enclave
-   - resolves provider's SLA JSON (IPFS)
+   - resolves provider's SLA JSON (IPFS / verdikt.eth text record)
    - diffs observed response vs SLA -> PASS/FAIL + availability score
    - releases the response payload to the calling agent
-   - posts only the signed verdict on-chain
+   - posts the signed verdict to both chains below
    |
-   v
-On-chain registry (Arc)
-   - SLA record, verdict, deposit balance, roles
-   - auto-refund on FAIL / low availability
-   - auto-suspend at zero deposit
+   +-----------------------------+
+   v                             v
+On-chain registry (Arc)     ENS subname (Ethereum, verdikt.eth)
+   - SLA record, verdict,      - SLA text record
+     deposit balance, roles    - reputation/verdict text record
+   - auto-refund on FAIL /     - address record (payout wallet)
+     low availability
+   - auto-suspend at zero
+     deposit
    |
    v
 Dashboard — reads registry via SDK/view functions
@@ -286,8 +315,8 @@ multiple tracks count as one slot).
 
 - **Chainlink** — confirmed. CRE is the verification engine itself.
 - **Arc** — confirmed. Chain the registry and demo API run on.
-- **Open** — one slot unfilled. ENS is a candidate for this slot only if
-  the §6.4 stretch goal ships.
+- **ENS** — confirmed. `verdikt.eth` subnames are the provider-identity and
+  reputation-interface layer (§6.4), not an optional add-on.
 
 ## 10. Competitive landscape
 
@@ -316,6 +345,9 @@ multiple tracks count as one slot).
 - An x402-capable wallet CLI for Arc is referenced as available but not yet
   named/tested.
 - Availability tier boundaries/percentages may need tuning during build.
+- Cross-chain verdict delivery (Arc registry + Ethereum ENS record from one
+  CRE run) needs a defined behavior for partial failure — e.g. the Arc
+  write succeeds but the Ethereum write doesn't land — not yet designed.
 - verdikt.bond domain not yet purchased — price/listing legitimacy
   unverified.
 - No dispute layer is a deliberate design choice, and should be stated
