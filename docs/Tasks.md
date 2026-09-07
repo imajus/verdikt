@@ -744,4 +744,8 @@ itself, a real forwarder, and a real payment.
       dispute layer is a design choice; ENS on Sepolia is a deployment
       constraint; attestation is simulated because CRE production
       enrollment is private-beta
-- [ ] Recorded walkthrough
+- [x] Written walkthrough — [walkthrough.md](./walkthrough.md). Every command
+      in it has been run and every output is real, with the transcripts in
+      `evidence/`
+- [ ] **Recorded walkthrough** — needs a human at a screen; the doc above is the
+      script for one, in order, with the numbers to expect

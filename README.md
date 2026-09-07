@@ -117,6 +117,9 @@ the TEE banner, and the enclave-to-proxy callback round trip.
 | `deployments` | Verdikt's own deployed addresses, per network. Checked in: they are public and identical everywhere. |
 | `docs` | The specification, and the spikes that reshaped it. |
 
+Start with the [walkthrough](docs/walkthrough.md) — the whole loop, on a public
+chain, with real commands and real output.
+
 `docs/` takes precedence over inference from code:
 [Requirements](docs/Requirements.md) ·
 [Specification](docs/Specification.md) ·
@@ -145,13 +148,24 @@ verification would be self-refuting.
   Chainlink documents no way to *read* an execution's result, so pushing is the
   mechanism (spike finding CRE-9).
 
+**Live on a public chain:**
+
+- `VerdiktRegistry` on Arc Testnet at `0xa22440c1ae6ce9178b3341ee19b55b881eaeff76`,
+  `VerdiktScoreWriter` on Sepolia, and `weather` / `weather-lite` registered with
+  10 USDC bonds and their own `verdikt.eth` subnames.
+- A PASS and a FAIL written by DON-signed reports through the real
+  KeystoneForwarder, the FAIL refunding 1 USDC from the bond.
+- The proxy relaying a real 402 from a live Proceeds paywall with its `payTo`
+  verified, and blocking the same call once the address record was repointed.
+- The hourly aggregate computing `weather=1000/1000 weather-lite=0/1000` from
+  those events. All of it in [`docs/evidence/`](docs/evidence).
+
 **Simulated or blocked, and why:**
 
-- **Attestation is simulated.** CRE production enrollment is private beta.
-  Simulation is the evidence available; it is not a live attested deployment.
-- **Nothing is deployed to Arc Testnet.** No RPC URL and no funded deployer key
-  in this checkout, so `pnpm demo` runs on `anvil` instead. Everything except
-  Arc's own behaviour is identical.
+- **Attestation is simulated.** CRE production enrollment is private beta
+  (`cre whoami` → *Deploy Access: Not enabled*), so both receivers are pinned to
+  the simulation forwarder. The simulator says it plainly: *"The simulator is not
+  a real TEE."*
 - **`decodePayment` is a stub.** Spike C — decoding a real
   `GatewayWalletBatched` `X-PAYMENT` header — has not run. Every refund targets
   the payer that function returns, so it now *refuses to run* unless
