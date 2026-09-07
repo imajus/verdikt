@@ -1,0 +1,106 @@
+Per-verdict clause detail, live on Arc Testnet and Sepolia
+==========================================================
+
+Tasks.md 5.2. A verdict now records which clause broke. This is the transcript
+of publishing that: a redeployed registry, three real verdicts through the CRE
+simulation forwarder, and the first scores ever to reach ENS.
+
+Redeployed because both receivers are immutable and the verdict struct gained a
+word. The earlier registry (0xa22440c1…) is still readable; the transcripts in
+this directory from before this run refer to it.
+
+1. Recover the old bonds and redeploy
+-------------------------------------
+$ cast send $OLD 'deregister(bytes32)' <weather>       -> success, 10 USDC returned
+$ cast send $OLD 'deregister(bytes32)' <weather-lite>  -> success,  9 USDC returned
+
+$ forge script script/Deploy.s.sol:Deploy --broadcast
+  VerdiktRegistry: 0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af   (block 60860488)
+  forwarder:       0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1   (CRE simulation, Arc)
+  workflowOwner:   0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa
+
+The struct is seven fields now, the last being the clause:
+$ cast call $REGISTRY 'getVerdict(bytes32)(...)' 0x…01
+  (0x00…, 0, 0x00…, 0, 0, 0, 0x0000000000000000000000000000000000000000000000000000000000000000)
+
+$ cast send $REGISTRY 'register(string)' weather      --value 10e18   -> success
+$ cast send $REGISTRY 'register(string)' weather-lite --value 10e18   -> success
+
+2. Three paid calls judged in the enclave
+-----------------------------------------
+$ cre workflow simulate verify --broadcast --listen
+$ curl -X POST http://localhost:2000/trigger -d @trigger-weather.json
+
+The SLA is read from ENS and passed in; the enclave measures and the shared
+engine judges. Clause results, verbatim from the third run:
+
+  requestId 0x0606060606060606060606060606060606060606060606060606060606060606
+  outcome   FAIL | mode sla
+  tx        0x3f136dcbbe5d5ca88dee63da5ef1a9efba065ce81bcb27f7d5f90c377463ef4f
+    PASS delivery                 HTTP status < 500 -> 200
+    FAIL current-weather-shape    /current/relative_humidity_2m: present -> /current/relative_humidity_2m: absent
+    FAIL responds-within-5ms      <= 5ms -> 87ms
+    PASS price-band               1000..10000 USDC minor units -> 2500 USDC minor units
+
+Two clauses broke. Only the first in the SLA's declared order is recorded, so
+the provider chose which one that is and the answer is stable across runs.
+
+3. What is on Arc
+-----------------
+$ cast call $REGISTRY 'getVerdict(bytes32)(...)' 0x03030303…
+  (0x00840d14970f593887dc91256f2e2f1380aa176569b6c84f16d7f2ced5965666, 1, 0x1111111111111111111111111111111111111111, 2500000 [2.5e6], 1000000000000000000 [1e18], 1788757063 [1.788e9], 0x70004033d2133adf8dfa0915ea2ff704a909385400cb80d3c5037f5c14cc1b74)
+$ cast call $REGISTRY 'getVerdict(bytes32)(...)' 0x05050505…
+  (0x00840d14970f593887dc91256f2e2f1380aa176569b6c84f16d7f2ced5965666, 0, 0x1111111111111111111111111111111111111111, 2500, 0, 1788757114 [1.788e9], 0x0000000000000000000000000000000000000000000000000000000000000000)
+$ cast call $REGISTRY 'getVerdict(bytes32)(...)' 0x06060606…
+  (0x899bec1a6fac1010f453e04f5b2827fdd8a3eeeabd5f39a1c54f9539a116a887, 1, 0x1111111111111111111111111111111111111111, 2500, 2500000000000000 [2.5e15], 1788757145 [1.788e9], 0x4d29d1a833ea33e742aabcd5bea56a08be524cbd879b47756e2808635c46dd1b)
+
+  serviceId, outcome, payer, paidAmount, refundCredited, writtenAt, failedClause
+
+The last word is keccak256 of the clause id:
+  price-band             0x70004033d2133adf8dfa0915ea2ff704a909385400cb80d3c5037f5c14cc1b74
+  current-weather-shape  0x4d29d1a833ea33e742aabcd5bea56a08be524cbd879b47756e2808635c46dd1b
+  (a PASS stores the zero word)
+
+The cap holds from both directions: the first FAIL paid 2 500 000 minor units
+and is credited the fixed 1 USDC; the second paid 2500 and is credited exactly
+that, 0.0025 USDC, because this time the payment is the smallest of the three.
+
+$ cast call $REGISTRY 'getOwed(address)(uint256)' 0x1111…1111
+  1002500000000000000 [1.002e18]
+
+4. Resolved back through the dashboard's own read path
+------------------------------------------------------
+The chain stores a hash. A reader matches it by hashing the ids in the SLA it
+reads from ENS — matchFailedClause(), the same call the dashboard makes:
+
+  0x03030303… weather       FAIL  -> price-band
+  0x05050505… weather       PASS  -> null
+  0x06060606… weather-lite  FAIL  -> current-weather-shape
+
+5. The hourly aggregate, and the scores reaching ENS for the first time
+-----------------------------------------------------------------------
+$ cre workflow simulate aggregate --broadcast
+
+  "window 604800s ending 1788757945: weather=500/1000 tx=0xfd6894ffffc001066c8574ebbeac7229eb2ee799749b357e6538722272fd4481 status=2 weather-lite=0/1000 tx=0x8d3ba7d8b9ab29287a8fe4d710f0775ac00b57773e1752af0820a66c9c06988f status=2"
+
+  weather has one PASS and one FAIL, so conformance is 500.
+
+This is the first run whose writes actually landed. Every earlier one reported
+success and wrote nothing: the score writer was pinned to Chainlink's PRODUCTION
+Sepolia forwarder while the simulator sends through 0x15fC6ae9…, so onReport
+reverted NotForwarder — and the forwarder swallows a receiver revert and mines
+anyway. Green transaction, no record. Only replaying the call shows it:
+
+  $ cast call $SCORE_WRITER 'onReport(bytes,bytes)' $META $REPORT --from 0x15fC6ae9…
+  Error: execution reverted: NotForwarder(0x15fC6ae953E024d975e77382eEeC56A9101f9F88)
+
+Redeployed pinned to the simulation forwarder, re-granted per key, and read back
+off the resolver — which is the only step that proves anything:
+
+  VerdiktScoreWriter: 0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA  (forwarder 0x15fC6ae9…)
+
+  $ cast call $RESOLVER text(node,"conformance")  weather       -> "500" / "1000"
+  $ cast call $RESOLVER text(node,"conformance")  weather-lite  -> "0" / "1000"
+
+Recorded 2026-09-07. Every address above is on a public testnet and can be
+re-read from it.

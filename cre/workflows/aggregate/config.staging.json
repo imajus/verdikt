@@ -1,10 +1,10 @@
 {
-  "schedule": "0 0 * * * *",
+  "schedule": "*/15 * * * * *",
   "arcChainSelectorName": "arc-testnet",
   "sepoliaChainSelectorName": "ethereum-testnet-sepolia",
-  "registryAddress": "0xa22440c1ae6ce9178b3341ee19b55b881eaeff76",
-  "scoreWriterAddress": "0xbd4a99ae4f0534f84089de2a21edb8dbfcae0deb",
-  "registryDeployBlock": "60839524",
+  "registryAddress": "0xe182626142e63ef440421cb0c5e4debeef76e4af",
+  "scoreWriterAddress": "0x542cb024d71e0cd0ef40ab7603779c89895effaa",
+  "registryDeployBlock": "60860488",
   "gasLimit": "1000000",
   "blockTimeSeconds": 0.512
 }

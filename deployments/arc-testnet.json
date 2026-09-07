@@ -2,9 +2,9 @@
   "$comment": "Verdikt's own deployed addresses on Arc Testnet. See deployments/sepolia.json for why these are checked in rather than kept in .env.",
   "network": "arc-testnet",
   "chainId": 5042002,
-  "$registry": "VerdiktRegistry, deployed by contracts/script/Deploy.s.sol.",
-  "registry": "0xa22440c1ae6ce9178b3341ee19b55b881eaeff76",
+  "$registry": "VerdiktRegistry, deployed by contracts/script/Deploy.s.sol. Redeployed once, to add the failedClause word to the verdict. The earlier 0xa22440c1\u2026 is still readable and is what the transcripts in docs/evidence/ from before that change refer to; it decodes the five-field report and has both services deregistered.",
+  "registry": "0xe182626142e63ef440421cb0c5e4debeef76e4af",
   "$deployBlock": "Where log scans start. Without it every marketplace read scans Arc from genesis, which public RPCs refuse or crawl through.",
-  "deployBlock": 60839524,
+  "deployBlock": 60860488,
   "$forwarder": "Deployed against the CRE SIMULATION forwarder (0x6E9EE680\u2026) and the workflowOwner simulation actually sends (0xaAaA\u2026aAaa), observed in a real delivery. That is what lets `cre workflow simulate --broadcast` write real verdicts here today, since CRE deploy access is still private beta. A production deployment redeploys with the production forwarder (0x76c9cf54\u2026) and a linked workflow owner \u2014 both are immutable."
 }

@@ -150,15 +150,20 @@ verification would be self-refuting.
 
 **Live on a public chain:**
 
-- `VerdiktRegistry` on Arc Testnet at `0xa22440c1ae6ce9178b3341ee19b55b881eaeff76`,
-  `VerdiktScoreWriter` on Sepolia, and `weather` / `weather-lite` registered with
-  10 USDC bonds and their own `verdikt.eth` subnames.
-- A PASS and a FAIL written by DON-signed reports through the real
-  KeystoneForwarder, the FAIL refunding 1 USDC from the bond.
+- `VerdiktRegistry` on Arc Testnet at `0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`,
+  `VerdiktScoreWriter` on Sepolia at `0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA`,
+  and `weather` / `weather-lite` registered with 10 USDC bonds and their own
+  `verdikt.eth` subnames.
+- Three verdicts written by DON-signed reports through the real
+  KeystoneForwarder — a PASS, and two FAILs that each name the clause that
+  broke. One broke `price-band` and refunded the full 1 USDC; the other broke
+  `current-weather-shape` and refunded 0.0025 USDC, because the cap is what was
+  actually paid.
 - The proxy relaying a real 402 from a live Proceeds paywall with its `payTo`
   verified, and blocking the same call once the address record was repointed.
-- The hourly aggregate computing `weather=1000/1000 weather-lite=0/1000` from
-  those events. All of it in [`docs/evidence/`](docs/evidence).
+- The hourly aggregate computing `weather=500/1000 weather-lite=0/1000` from
+  those events and publishing both to ENS, where they can be read back off
+  `<slug>.verdikt.eth`. All of it in [`docs/evidence/`](docs/evidence).
 
 **Simulated or blocked, and why:**
 

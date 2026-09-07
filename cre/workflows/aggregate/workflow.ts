@@ -62,9 +62,14 @@ export type Config = {
   gasLimit: string;
 };
 
+// These signatures are the log filter's topic, not just a decode hint: a field
+// added to VerdictWritten changes its topic hash, and a stale signature here
+// matches nothing. That failure is silent and reads as good news — an empty
+// window scores 1000, so every service looks perfect. Keep in step with
+// IVerdiktRegistry.
 const registryEvents = parseAbi([
   'event ServiceRegistered(bytes32 indexed serviceId, address indexed provider, string slug, uint256 deposit)',
-  'event VerdictWritten(bytes32 indexed serviceId, bytes32 indexed requestId, uint8 outcome, address payer, uint256 paidAmount)'
+  'event VerdictWritten(bytes32 indexed serviceId, bytes32 indexed requestId, uint8 outcome, address payer, uint256 paidAmount, bytes32 failedClause)'
 ]);
 
 const registryViews = parseAbi([
@@ -205,7 +210,16 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
       .result();
 
     const ok = txResult.txStatus === TxStatus.SUCCESS;
-    published.push(`${score.slug}=${score.conformance}/${score.availability}${ok ? '' : ' (write failed)'}`);
+    // The tx hash is in the output because its absence is what hid a silent
+    // failure for so long: the forwarder swallows a receiver revert and still
+    // mines, so `txStatus === SUCCESS` only means the forwarder ran, never that
+    // the score was written. A hash is the thread back to what actually
+    // happened on Sepolia.
+    published.push(
+      `${score.slug}=${score.conformance}/${score.availability}${ok ? '' : ' (write failed)'} tx=${
+        txResult.txHash ? bytesToHex(txResult.txHash) : 'none'
+      }`
+    );
   }
 
   return `window ${WINDOW_SECONDS}s ending ${headTimestamp}: ${published.join(' ') || 'no listed services'}`;

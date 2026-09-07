@@ -461,3 +461,53 @@ is acceptable *here specifically*: both ratios are display-only, recomputed
 hourly, and have no refund state behind them (`Specification.md` §1), so a
 verdict landing on the wrong side of the boundary costs a slightly stale number
 for one hour. It would not be acceptable anywhere a refund depended on it.
+
+### CRE-10 — the simulation forwarder is per-chain, and the wrong one fails silently
+
+CRE-8 established that a receiver must pin the *simulation* forwarder to accept
+a simulated report. What it did not establish is that the address differs per
+chain. It does:
+
+| chain | simulation forwarder | Chainlink's production forwarder |
+|---|---|---|
+| Arc Testnet | `0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1` | `0x76c9cf54…` |
+| Ethereum Sepolia | `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` | `0xF8344CFd…` |
+
+`0x6E9EE680…` has no code at all on Sepolia, so this is not one contract
+deployed twice at a shared address — the two are unrelated.
+
+`VerdiktScoreWriter` was first deployed pinned to Sepolia's *production*
+forwarder, and that mistake produced no error anywhere:
+
+- the aggregate reported `weather=1000/1000 weather-lite=0/1000` and no write
+  failure;
+- `txStatus` came back `SUCCESS`;
+- the transaction is on Sepolia with `status: 1`;
+- the ENS text records stayed empty.
+
+The forwarder swallows a receiver revert, emits its own event and mines anyway
+(CRE-8), so `SUCCESS` means *the forwarder ran*, never *the receiver wrote*. The
+revert is only visible by replaying the call:
+
+```
+$ cast call $SCORE_WRITER 'onReport(bytes,bytes)' $META $REPORT --from 0x15fC6ae9…
+Error: execution reverted: NotForwarder(0x15fC6ae953E024d975e77382eEeC56A9101f9F88)
+```
+
+That is what the address in the error is for: it names the caller the receiver
+actually saw, which is the simulation forwarder for that chain and can be pinned
+directly.
+
+Two consequences kept in the code:
+
+- The aggregate prints the **tx hash** of each publish. Without it there is
+  nothing to look up, and every observable signal says the write worked.
+- A receiver deployment is not finished when the deploy script returns. Read the
+  record back — for scores, `text(node, "conformance")`. Anything short of
+  reading the written value proves nothing.
+
+**Related, and the reason this took a second run to see:** the simulator signs
+chain writes with `CRE_ETH_PRIVATE_KEY` and caches its nonce. If that account
+sends transactions by another route mid-session — a deploy, an onboarding write
+— the next simulated write dies with `nonce too low: next nonce 26, tx nonce 25`
+and the whole run fails. Re-running picks up the current nonce.

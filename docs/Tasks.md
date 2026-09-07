@@ -676,11 +676,22 @@ day saved in Phase 4 here.
       everyone — the opposite of what the enclave exists for. It reaches the
       proxy in the workflow's return value, beside the body.
 
-      Proven end-to-end locally (`pnpm demo`, step 4). **The Arc deployment at
-      `0xa22440c1…` predates this** and decodes the five-field report; ABI
-      decoding ignores a trailing word, so it would accept the new report and
-      silently drop the clause rather than revert. Publishing this live is a
-      redeploy of both immutable receivers plus re-registering both services
+      Live on Arc: the registry was redeployed to
+      `0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af` (block 60860488) and both
+      services re-registered. Three real verdicts, two of them naming their
+      clause — transcript in
+      [`evidence/clause-detail-live.log`](./evidence/clause-detail-live.log).
+
+      Publishing it surfaced two things worth keeping:
+
+      - The **aggregate kept its own copy** of the `VerdictWritten` signature,
+        and that copy is the log filter's topic. A stale one matches nothing,
+        the window comes back empty, and an empty window scores 1000 — so the
+        symptom was every service reporting a perfect record. `workflow-abi.test.js`
+        now pins the two copies together, and fails on exactly that edit.
+      - The **score writer was pinned to the wrong forwarder** and had been
+        since it was deployed, which is why scores had never once published.
+        Recorded as CRE-10; the scores are now on ENS and read back off it
 
 > **Deliberately not done now, and the reason is the cost, not the difficulty.**
 > Closing it means adding a `bytes32 failedClause` to the report tuple, the

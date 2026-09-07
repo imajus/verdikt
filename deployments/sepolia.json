@@ -10,6 +10,6 @@
     "subnameRegistry": "0x3618849F8B562DcC9D25dCbA67cF0be5C8213A97",
     "resolver": "0x3d411f1bA3B11B630a2405F1Fb51f088Cc2E23C9"
   },
-  "$scoreWriter": "VerdiktScoreWriter, deployed by contracts/script/DeployScoreWriter.s.sol. It can only publish once the operator grants it the conformance and availability text roles PER KEY on each subname (authorizeTextRoles), never name-wide.",
-  "scoreWriter": "0xbd4a99ae4f0534f84089de2a21edb8dbfcae0deb"
+  "$scoreWriter": "VerdiktScoreWriter, deployed by contracts/script/DeployScoreWriter.s.sol. It can only publish once the operator grants it the conformance and availability text roles PER KEY on each subname (authorizeTextRoles), never name-wide. Pinned to the CRE SIMULATION forwarder (0x15fC6ae9\u2026), not Chainlink's production Sepolia one (0xF8344CFd\u2026) \u2014 the earlier 0xbD4A99AE\u2026 was pinned to production, so every simulated publish reverted NotForwarder and the forwarder swallowed it behind a successful transaction. That is why scores read \u2014 for so long.",
+  "scoreWriter": "0x542cb024d71e0cd0ef40ab7603779c89895effaa"
 }
