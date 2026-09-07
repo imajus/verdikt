@@ -73,11 +73,11 @@ contract VerdiktRegistryTest is Test {
     function _metadata(address owner, bytes10 name) internal pure returns (bytes memory meta) {
         meta = new bytes(ReportMetadata.LENGTH);
         for (uint256 i = 0; i < 10; ++i) {
-            meta[77 + i] = name[i];
+            meta[32 + i] = name[i];
         }
         bytes20 packed = bytes20(owner);
         for (uint256 i = 0; i < 20; ++i) {
-            meta[87 + i] = packed[i];
+            meta[42 + i] = packed[i];
         }
     }
 
@@ -197,11 +197,35 @@ contract VerdiktRegistryTest is Test {
         );
     }
 
+    /// @dev 45 bytes is the length of the prefix the forwarder strips, and was
+    ///      briefly what this contract expected to still be there — an earlier
+    ///      version read the DON's 109-byte signed-report header instead of the
+    ///      64-byte one a receiver is handed, and every delivery reverted
+    ///      silently (docs/spikes/cre.md, CRE-8).
     function test_onReportRejectsATruncatedHeader() public {
         _register();
         vm.prank(FORWARDER);
-        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.MalformedReportMetadata.selector, uint256(64)));
-        registry.onReport(new bytes(64), _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500));
+        vm.expectRevert(abi.encodeWithSelector(ReportReceiver.MalformedReportMetadata.selector, uint256(45)));
+        registry.onReport(new bytes(45), _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500));
+    }
+
+    /// @dev The exact bytes a KeystoneForwarder delivered on Arc Testnet, taken
+    ///      from a traced `cre workflow simulate --broadcast` run. Pinned as a
+    ///      literal so a future change to the offsets fails here rather than
+    ///      on-chain, where the forwarder swallows the revert.
+    function test_acceptsTheHeaderARealForwarderSent() public {
+        VerdiktRegistry simulated =
+            new VerdiktRegistry(FORWARDER, 0xaAaAaAaaAaAaAaaAaAAAAAAAAaaaAaAaAaaAaaAa, bytes10(0), DEPOSIT, REFUND);
+        vm.prank(provider);
+        simulated.register{value: DEPOSIT}(SLUG);
+
+        bytes memory observed =
+            hex"111111111111111111111111111111111111111111111111111111111111111162356236663831393637aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa0001";
+        assertEq(observed.length, 64);
+
+        vm.prank(FORWARDER);
+        simulated.onReport(observed, _report(serviceId, "r1", IVerdiktRegistry.Outcome.PASS, payer, 2500));
+        assertEq(uint8(simulated.getVerdict("r1").outcome), uint8(IVerdiktRegistry.Outcome.PASS));
     }
 
     function test_onReportRejectsAnOutcomeOrdinalOutsideTheEnum() public {

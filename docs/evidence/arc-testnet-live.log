@@ -1,0 +1,33 @@
+# Verdikt on Arc Testnet — the loop running on a public chain, 2026-09-07.
+#
+# Every verdict below was written by a Chainlink CRE workflow: the handler ran
+# in confidential mode, the DON signed its output into a report, and the
+# KeystoneForwarder verified those signatures and called onReport. No EOA wrote
+# a verdict; VerdiktRegistry has no function that would let one.
+#
+# Simulation, not a deployed workflow — CRE production enrollment is private
+# beta ("Deploy Access: Not enabled"). So the registry is deployed against the
+# SIMULATION forwarder and the workflowOwner simulation sends. Production swaps
+# both, and both are immutable.
+#
+# registry   0xa22440c1ae6ce9178b3341ee19b55b881eaeff76  (block 60839524)
+# forwarder  0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1  (CRE simulation)
+# provider   0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79
+
+== services ==
+weather  0x00840d14970f593887dc91256f2e2f1380aa176569b6c84f16d7f2ced5965666
+   getService -> (0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79, 1, 10000000000000000000 [1e19])
+weather-lite  0x899bec1a6fac1010f453e04f5b2827fdd8a3eeeabd5f39a1c54f9539a116a887
+   getService -> (0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79, 1, 9000000000000000000 [9e18])
+
+== verdicts ==
+PASS  requestId 0x..0301  weather, no SLA published -> status-only fallback
+(0x00840d14970f593887dc91256f2e2f1380aa176569b6c84f16d7f2ced5965666, 0, 0x1111111111111111111111111111111111111111, 2500, 0, 1788746160 [1.788e9])
+
+FAIL  requestId 0x..0401  weather-lite, violating SLA -> schema + latency clauses break
+(0x899bec1a6fac1010f453e04f5b2827fdd8a3eeeabd5f39a1c54f9539a116a887, 1, 0x1111111111111111111111111111111111111111, 2500000 [2.5e6], 1000000000000000000 [1e18], 1788746222 [1.788e9])
+
+== refund ==
+owed[0x1111...1111] = 1000000000000000000 [1e18]
+  paid 2500000 minor units (2.5 USDC); credited 1e18 native (1 USDC) = FIXED_REFUND,
+  i.e. min(FIXED_REFUND, paidAmount x 1e12, remaining deposit). The bond went 10e18 -> 9e18.

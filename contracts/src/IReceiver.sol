@@ -16,53 +16,54 @@ interface IERC165 {
 ///      CRE-2 in docs/spikes/cre.md). That is why `VerdiktRegistry` has no
 ///      `setVerdict` an EOA could call.
 interface IReceiver is IERC165 {
-    /// @param metadata 109-byte header the forwarder prepends, identifying the
-    ///        workflow that produced the report. Layout in `ReportMetadata`.
+    /// @param metadata 64-byte header identifying the workflow that produced
+    ///        the report. Layout in `ReportMetadata` — and note it is NOT the
+    ///        same header the DON signs.
     /// @param report the workflow's own ABI-encoded payload.
     function onReport(bytes calldata metadata, bytes calldata report) external;
 }
 
 /// @title ReportMetadata
-/// @notice Reads the KeystoneForwarder's report header.
+/// @notice Reads the header the KeystoneForwarder hands a receiver.
 ///
-/// @dev The forwarder is shared infrastructure — *any* CRE user on Arc can
-///      reach it — so `msg.sender == forwarder` is not access control on its
-///      own. Pinning `workflowOwner` is what actually restricts verdict-writing
-///      to Verdikt's own workflow (Spike B, CRE-2).
+/// @dev **There are two different headers, and confusing them costs every
+///      verdict.** The DON signs a 109-byte report header — version,
+///      executionId, timestamp, donId, donConfigVersion, then the four fields
+///      below. The forwarder verifies the signatures against that, strips the
+///      first 45 bytes, and passes only the remaining 64 to `onReport`:
 ///
-///      Layout, 109 bytes total:
+///      | offset | size | field         |
+///      |--------|------|---------------|
+///      |      0 |   32 | workflowId    |
+///      |     32 |   10 | workflowName  |
+///      |     42 |   20 | workflowOwner |
+///      |     62 |    2 | reportId      |
 ///
-///      | offset | size | field                 |
-///      |--------|------|-----------------------|
-///      |      0 |    1 | version               |
-///      |      1 |   32 | workflowExecutionId   |
-///      |     33 |    4 | timestamp             |
-///      |     37 |    4 | donId                 |
-///      |     41 |    4 | donConfigVersion      |
-///      |     45 |   32 | workflowId            |
-///      |     77 |   10 | workflowName          |
-///      |     87 |   20 | workflowOwner         |
-///      |    107 |    2 | reportId              |
+///      Observed directly, in a `cre workflow simulate --broadcast` delivery on
+///      Arc Testnet, traced to `MalformedReportMetadata(64)` against an earlier
+///      version of this file that expected 109. The 109-byte layout in the
+///      cre-sdk package's `report.js` is real but belongs to the *signed
+///      report*, which is why cross-checking against it validated the wrong
+///      artefact (docs/spikes/cre.md, CRE-8).
 ///
-///      Cross-checked field by field against the CRE SDK's own parser:
-///      `REPORT_METADATA_OFFSETS` in the cre-sdk package, `dist/sdk/report.js`,
-///      which reads the same header on the way back out. Every offset and size
-///      below matches it, including `bodyStart: 109`.
+///      `workflowName` is raw UTF-8, not a hash. In simulation it is a random
+///      per-run string and `workflowOwner` is `0xaAaA...aAaa`, so a receiver
+///      that pins production values will reject simulated reports —
+///      deliberately.
 ///
-///      `workflowName` is raw UTF-8, not a hash: the SDK decodes it with
-///      `TextDecoder('utf-8')`. So `bytes10(bytes("verdikt-verify"))` truncates
-///      to exactly the ten bytes the forwarder carries, and pinning the full
-///      name works without the caller having to truncate it by hand.
-///
-///      Still not observed against a live forwarder *delivery* — that needs a
-///      deployed workflow — but the residual risk is now a wrong header
-///      version, not a wrong offset.
+///      The forwarder is shared infrastructure — *any* CRE user can reach it —
+///      so `msg.sender == forwarder` is not access control on its own. Pinning
+///      `workflowOwner` is what actually restricts writing to Verdikt's own
+///      workflow (CRE-2). And the forwarder swallows a receiver revert: it
+///      emits its own event with a zero result and the transaction still
+///      succeeds, so a rejected report is silent on-chain and has to be found
+///      by tracing.
 library ReportMetadata {
-    uint256 internal constant LENGTH = 109;
+    uint256 internal constant LENGTH = 64;
 
-    uint256 private constant WORKFLOW_ID_OFFSET = 45;
-    uint256 private constant WORKFLOW_NAME_OFFSET = 77;
-    uint256 private constant WORKFLOW_OWNER_OFFSET = 87;
+    uint256 private constant WORKFLOW_ID_OFFSET = 0;
+    uint256 private constant WORKFLOW_NAME_OFFSET = 32;
+    uint256 private constant WORKFLOW_OWNER_OFFSET = 42;
 
     function workflowId(bytes calldata metadata) internal pure returns (bytes32) {
         return bytes32(metadata[WORKFLOW_ID_OFFSET:WORKFLOW_ID_OFFSET + 32]);

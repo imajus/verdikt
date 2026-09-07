@@ -393,13 +393,13 @@ Consequences worth stating:
   not in workflow config where it currently sits. It authenticates bytes that
   reach a paying agent.
 
-### CRE-8 — the report header offsets, confirmed against the SDK
+### CRE-8 — there are TWO report headers, and I used the wrong one
 
-`Tasks.md` §2.1 carried these as documentation-derived and unverified, on the
-grounds that a wrong `workflowOwner` offset rejects every verdict silently. They
-are now cross-checked field by field against
-`@chainlink/cre-sdk/dist/sdk/report.js`, which parses the same header on the way
-back out:
+`Tasks.md` §2.1 carried the header layout as documentation-derived and
+unverified, on the grounds that a wrong `workflowOwner` offset rejects every
+verdict silently. It was then "confirmed" against
+`@chainlink/cre-sdk`'s own parser, `REPORT_METADATA_OFFSETS` in
+`dist/sdk/report.js`, which matched field for field:
 
 | field | offset | size |
 |---|---|---|
@@ -412,21 +412,42 @@ back out:
 | workflowName | 77 | 10 |
 | workflowOwner | 87 | 20 |
 | reportId | 107 | 2 |
-| body | 109 | — |
 
-`contracts/src/IReceiver.sol` matches all of it. Two things this settles beyond
-the offsets:
+**That cross-check validated the wrong artefact.** Those 109 bytes are the
+header the DON *signs*. The KeystoneForwarder verifies the signatures against
+it, strips the first 45 bytes, and hands a receiver only the remaining 64:
 
-- **`workflowName` is raw UTF-8, not a hash** — the SDK decodes it with
-  `TextDecoder('utf-8')`. `bytes10(bytes("verdikt-verify"))` therefore truncates
-  to exactly the ten bytes the forwarder carries, so pinning the full workflow
-  name works and needs no hand-truncation. A name *shorter* than 10 bytes
-  depends on the forwarder's padding, which is untested — ours are 14 and 17
-  bytes, so the question does not arise.
-- **`workflowOwner` is an address**, `encodeHexLower` of 20 bytes.
+| field | offset | size |
+|---|---|---|
+| workflowId | 0 | 32 |
+| workflowName | 32 | 10 |
+| workflowOwner | 42 | 20 |
+| reportId | 62 | 2 |
 
-Not yet observed against a live delivery — that needs a deployed workflow — so
-the residual risk is a header *version* change, not a wrong offset.
+Found by tracing a real `cre workflow simulate --broadcast` delivery on Arc
+Testnet: `MalformedReportMetadata(64)`. Exactly the failure this finding was
+opened to prevent, and it survived a plausible-looking confirmation.
+
+**The lesson worth keeping:** the SDK parser reads a report on the way *out*;
+the receiver reads what the forwarder passes on the way *in*. Two structures,
+one name. Nothing short of an actual delivery would have caught it — and the
+forwarder made that expensive, because it swallows a receiver revert, emits its
+own event with a zero result, and lets the transaction succeed. The verdict
+simply never appeared, with a green transaction to look at.
+
+`contracts/test/VerdiktRegistry.t.sol` now pins the exact 64 bytes that
+forwarder sent, as a literal.
+
+Two further facts from the same trace, both load-bearing for a deployment:
+
+- **In simulation the header carries placeholders.** `workflowOwner` is
+  `0xaAaA…aAaa` and `workflowName` is a fresh random string per run. A receiver
+  pinning production values rejects every simulated report, so the Arc
+  deployment is configured with the simulation forwarder and that owner, and
+  `WORKFLOW_NAME` is left unpinned. Both are immutable; production redeploys.
+- **`workflowName` is raw UTF-8, not a hash** — the trace shows
+  `62356236663831393637` = `"b5b6f81967"`. So pinning the full name works and
+  Solidity's `bytes10()` truncation matches the ten bytes sent.
 
 ### CRE-7 — an EVM log carries no timestamp
 

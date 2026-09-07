@@ -70,15 +70,19 @@ const say = (message) => console.log(`\n${String(++step).padStart(2, ' ')}. ${me
 const detail = (message) => console.log(`    ${message}`);
 
 /**
- * The forwarder metadata a KeystoneForwarder would prepend. 109 bytes, with
- * `workflowOwner` at offset 87 — the field the registry pins, because the
+ * The header a KeystoneForwarder hands a receiver: 64 bytes, with
+ * `workflowOwner` at offset 42 — the field the registry pins, because the
  * forwarder is shared infrastructure and `msg.sender` alone is not access
  * control (Spike B, CRE-2).
+ *
+ * Not to be confused with the 109-byte header the DON signs; the forwarder
+ * strips its first 45 bytes before calling here. Confirmed by tracing a real
+ * `simulate --broadcast` delivery on Arc (CRE-8).
  */
 function metadata(workflowOwner) {
-  const bytes = new Uint8Array(109);
+  const bytes = new Uint8Array(64);
   const owner = workflowOwner.slice(2).match(/../g).map((byte) => parseInt(byte, 16));
-  bytes.set(owner, 87);
+  bytes.set(owner, 42);
   return `0x${Buffer.from(bytes).toString('hex')}`;
 }
 

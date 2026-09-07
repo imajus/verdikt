@@ -43,11 +43,11 @@ contract VerdiktScoreWriterTest is Test {
     function _metadata(address owner, bytes10 name) internal pure returns (bytes memory meta) {
         meta = new bytes(ReportMetadata.LENGTH);
         for (uint256 i = 0; i < 10; ++i) {
-            meta[77 + i] = name[i];
+            meta[32 + i] = name[i];
         }
         bytes20 packed = bytes20(owner);
         for (uint256 i = 0; i < 20; ++i) {
-            meta[87 + i] = packed[i];
+            meta[42 + i] = packed[i];
         }
     }
 
