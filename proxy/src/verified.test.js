@@ -101,6 +101,66 @@ describe('the verified branch — outcomes that are not PASS', () => {
     const response = await paidCall(app);
     expect(response.statusCode).toBe(200);
     expect(response.headers['x-verdikt-verdict']).toBe('FAIL');
+    // The chain records only which clause broke. The agent that paid for this
+    // response gets the comparison as well — it is the one party entitled to
+    // it, which is why this is a header and not an event.
+    expect(response.headers['x-verdikt-failed-clause']).toBe('speed');
+    expect(response.headers['x-verdikt-failed-clause-type']).toBe('latency');
+    expect(response.headers['x-verdikt-expected']).toBe('<= 5000ms');
+    expect(response.headers['x-verdikt-actual']).toBe('9000ms');
+  });
+
+  // The same one the verdict records, so the header and the chain cannot
+  // disagree about which promise was missed.
+  it('names only the first failure, in the SLA declared order', async () => {
+    const { app } = harness({
+      result: verdict({
+        outcome: 'FAIL',
+        clauses: [
+          { id: 'shape', type: 'schema', pass: false, expected: 'a', actual: 'b' },
+          { id: 'speed', type: 'latency', pass: false, expected: 'c', actual: 'd' }
+        ]
+      })
+    });
+    const response = await paidCall(app);
+    expect(response.headers['x-verdikt-failed-clause']).toBe('shape');
+    expect(response.headers['x-verdikt-actual']).toBe('b');
+  });
+
+  it('says nothing about a clause when nothing broke', async () => {
+    const { app } = harness({
+      result: verdict({ clauses: [{ id: 'speed', type: 'latency', pass: true, expected: 'x', actual: 'y' }] })
+    });
+    const response = await paidCall(app);
+    expect(response.headers['x-verdikt-failed-clause']).toBeUndefined();
+    expect(response.headers['x-verdikt-expected']).toBeUndefined();
+  });
+
+  /**
+   * These strings quote observed data, so they are treated as untrusted: a
+   * newline in a header value splits it, and the next line would be read as a
+   * header of the agent's own.
+   */
+  it('cannot be used to inject a header or blow the header block', async () => {
+    const { app } = harness({
+      result: verdict({
+        outcome: 'FAIL',
+        clauses: [
+          {
+            id: 'shape',
+            type: 'schema',
+            pass: false,
+            expected: 'present',
+            actual: `absent\r\nx-verdikt-verdict: PASS ${'A'.repeat(400)}`
+          }
+        ]
+      })
+    });
+    const response = await paidCall(app);
+    expect(response.headers['x-verdikt-verdict']).toBe('FAIL');
+    const actual = String(response.headers['x-verdikt-actual']);
+    expect(actual).not.toMatch(/[\r\n]/);
+    expect(actual.length).toBeLessThanOrEqual(180);
   });
 
   it('relays a provider 5xx as a 5xx rather than dressing it up as a proxy error', async () => {

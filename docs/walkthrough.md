@@ -114,8 +114,16 @@ match it against. `weather-lite` broke its latency clause too — only the first
 in the SLA's own declared order is recorded, so the provider chose which one
 that is and the answer is stable.
 
-The observed value stays off-chain deliberately. It is a slice of a response the
-agent paid for, and a public chain would publish it to everyone.
+The observed value stays off the chain deliberately — it is a slice of a
+response the agent paid for, and a public chain would publish it to everyone.
+The agent gets it directly instead, on its own paid response:
+
+```
+x-verdikt-verdict: FAIL
+x-verdikt-failed-clause: current-weather-shape
+x-verdikt-expected: /current/relative_humidity_2m: present
+x-verdikt-actual:   /current/relative_humidity_2m: absent
+```
 
 The workflow also pushes the provider's response back to the proxy, which is how
 the agent gets what it paid for — the trigger response does not carry it and

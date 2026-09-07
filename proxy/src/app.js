@@ -251,6 +251,49 @@ async function passthrough({ request, reply, record, upstream, doFetch, config }
 }
 
 /**
+ * Header-safe rendering of one field of a clause result.
+ *
+ * A newline in a header value splits it, and whatever follows is read as a
+ * header of the agent's own — so this flattens and bounds the value. These
+ * strings come from `@verdikt/sla` rather than from the provider, but they
+ * quote observed data (a JSON pointer into the response body), so they are
+ * treated as untrusted text.
+ *
+ * @param {string} value
+ */
+const headerSafe = (value) => {
+  const flat = value.replace(/[\r\n]+/g, ' ').replace(/[^\x20-\x7e]/g, '?');
+  return flat.length > 180 ? `${flat.slice(0, 177)}...` : flat;
+};
+
+/**
+ * Tell the agent *which* promise was missed, and by how much.
+ *
+ * The chain records only the clause id, and deliberately: the observed value is
+ * a slice of a response someone paid for, and a public chain would publish it
+ * to everyone. Here it goes to exactly one party — the agent that paid for that
+ * response and is still holding the connection. It already has the body; what
+ * it does not have is the provider's own declared bound and the comparison
+ * Verdikt made against it.
+ *
+ * The first failing clause only, in the SLA's declared order — the same one the
+ * verdict records, so the header and the chain cannot disagree.
+ *
+ * @param {SlaClauseResult[]} clauses
+ * @returns {Record<string, string>}
+ */
+function failureDetailHeaders(clauses) {
+  const broke = clauses.find((clause) => !clause.pass);
+  if (!broke) return {};
+  return {
+    'x-verdikt-failed-clause': headerSafe(broke.id),
+    'x-verdikt-failed-clause-type': headerSafe(broke.type),
+    'x-verdikt-expected': headerSafe(broke.expected),
+    'x-verdikt-actual': headerSafe(broke.actual)
+  };
+}
+
+/**
  * The paid leg (Specification.md §2, Tasks.md 4.3).
  *
  * The proxy relays and never evaluates. It hands the enclave everything the
@@ -325,6 +368,7 @@ async function verified({ request, reply, record, upstream, paymentHeader, decod
     'x-verdikt-verdict': result.outcome ?? 'NONE',
     'x-verdikt-mode': result.mode,
     'x-verdikt-request-id': requestId,
+    ...failureDetailHeaders(result.clauses),
     ...(result.tx ? { 'x-verdikt-tx': result.tx } : {}),
     // The Arc write missed but the enclave still has the response. Relaying it
     // and flagging the miss beats destroying a paid-for payload over

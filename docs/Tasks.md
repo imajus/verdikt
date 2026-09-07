@@ -671,10 +671,18 @@ day saved in Phase 4 here.
       clauses; and a hash matching nothing the SLA still declares, which means
       the provider edited it after the fact and is worth saying plainly.
 
-      The observed `actual` value stays off-chain on purpose. It is a slice of a
-      response the agent paid for, and a public chain would publish it to
-      everyone — the opposite of what the enclave exists for. It reaches the
-      proxy in the workflow's return value, beside the body.
+      `expected vs actual` is delivered too, but to the agent rather than to the
+      chain: `x-verdikt-failed-clause`, `-failed-clause-type`, `-expected` and
+      `-actual` on the paid response. That is the whole of the distinction. The
+      observed value is a slice of a response someone paid for, so publishing it
+      on a public chain would hand it to everyone — the opposite of what the
+      enclave exists for — whereas the agent that paid already holds the body
+      and is the one party entitled to the comparison. The header names the same
+      first-failing clause the verdict records, so the two cannot disagree.
+
+      Those values quote observed data, so they are flattened and length-capped
+      before going out: a newline in a header value splits it, and the rest
+      would be read as a header of the agent's own.
 
       Live on Arc: the registry was redeployed to
       `0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af` (block 60860488) and both
