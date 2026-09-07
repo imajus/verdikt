@@ -309,6 +309,41 @@ cannot be a CI check.
 4. **Nothing here blocks Phases 1 or 2's tests.** The evaluation engine and the
    registry's accounting are untouched by all of the above.
 
+### CRE-8 — the report header offsets, confirmed against the SDK
+
+`Tasks.md` §2.1 carried these as documentation-derived and unverified, on the
+grounds that a wrong `workflowOwner` offset rejects every verdict silently. They
+are now cross-checked field by field against
+`@chainlink/cre-sdk/dist/sdk/report.js`, which parses the same header on the way
+back out:
+
+| field | offset | size |
+|---|---|---|
+| version | 0 | 1 |
+| executionId | 1 | 32 |
+| timestamp | 33 | 4 |
+| donId | 37 | 4 |
+| donConfigVersion | 41 | 4 |
+| workflowId | 45 | 32 |
+| workflowName | 77 | 10 |
+| workflowOwner | 87 | 20 |
+| reportId | 107 | 2 |
+| body | 109 | — |
+
+`contracts/src/IReceiver.sol` matches all of it. Two things this settles beyond
+the offsets:
+
+- **`workflowName` is raw UTF-8, not a hash** — the SDK decodes it with
+  `TextDecoder('utf-8')`. `bytes10(bytes("verdikt-verify"))` therefore truncates
+  to exactly the ten bytes the forwarder carries, so pinning the full workflow
+  name works and needs no hand-truncation. A name *shorter* than 10 bytes
+  depends on the forwarder's padding, which is untested — ours are 14 and 17
+  bytes, so the question does not arise.
+- **`workflowOwner` is an address**, `encodeHexLower` of 20 bytes.
+
+Not yet observed against a live delivery — that needs a deployed workflow — so
+the residual risk is a header *version* change, not a wrong offset.
+
 ### CRE-7 — an EVM log carries no timestamp
 
 `FilterLogsReply.logs[]` has `blockNumber` but no `blockTimestamp`, and there is

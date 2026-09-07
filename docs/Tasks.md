@@ -295,11 +295,13 @@ Registrar and escrow in one contract for MVP.
 > ACTIVE once its deposit is back at `DEPOSIT_AMOUNT`. Waking it on dust would
 > leave it listed while every refund it owed was capped at that dust.
 
-> **Unverified — the 109-byte report header layout.** `ReportMetadata`'s
-> offsets come from the KeystoneForwarder's documented header and are
-> cross-checked against the 109-byte total the spike recorded, but have not been
-> observed against a live forwarder call. A wrong `workflowOwner` offset rejects
-> every verdict. Confirming it is an explicit step in 2.4.
+> **The 109-byte report header layout — now confirmed against the SDK.**
+> `ReportMetadata`'s offsets match `REPORT_METADATA_OFFSETS` in
+> `@chainlink/cre-sdk`'s own parser field for field (spike finding CRE-8). Also
+> settled there: `workflowName` is raw UTF-8, not a hash, so pinning the full
+> workflow name works — Solidity truncates it to the same ten bytes the
+> forwarder carries. Not yet seen on a live delivery, so the residual risk is a
+> header version change rather than a wrong offset.
 
 ### 2.2 Payout safety — pull payments
 
@@ -354,9 +356,13 @@ State machine, table-driven:
       supply either. Everything downstream that needs a deployed address is
       blocked with it (2.4's remaining boxes, 3.x's live writes, Phase 6)
 - [ ] Record addresses in `deployments/arc-testnet.json`
-- [ ] Confirm the `ReportMetadata` offsets against a real forwarder delivery
-      before trusting a live verdict — a wrong offset rejects every one of them
-      and the forwarder will not say why
+- [ ] Confirm the `ReportMetadata` offsets against a real forwarder delivery.
+      Much lower risk since CRE-8 matched them against the SDK's own parser, but
+      only a live delivery rules out a header version change — and the forwarder
+      will not say why a verdict was rejected
+- [ ] `cre account link-key` to establish `CRE_WORKFLOW_OWNER`. Currently
+      unlinked (`cre account list-key` reports none) and `cre whoami` shows
+      "Deploy Access: Not enabled", which is the private-beta gate
 
 ---
 

@@ -44,11 +44,19 @@ interface IReceiver is IERC165 {
 ///      |     87 |   20 | workflowOwner         |
 ///      |    107 |    2 | reportId              |
 ///
-///      Taken from the KeystoneForwarder's documented header and cross-checked
-///      against the 109-byte total the CRE spike recorded. It has NOT yet been
-///      observed against a live forwarder call — a wrong offset here rejects
-///      every verdict — so `docs/Tasks.md` §2.4 keeps confirming it as an
-///      explicit deploy-time step.
+///      Cross-checked field by field against the CRE SDK's own parser:
+///      `REPORT_METADATA_OFFSETS` in the cre-sdk package, `dist/sdk/report.js`,
+///      which reads the same header on the way back out. Every offset and size
+///      below matches it, including `bodyStart: 109`.
+///
+///      `workflowName` is raw UTF-8, not a hash: the SDK decodes it with
+///      `TextDecoder('utf-8')`. So `bytes10(bytes("verdikt-verify"))` truncates
+///      to exactly the ten bytes the forwarder carries, and pinning the full
+///      name works without the caller having to truncate it by hand.
+///
+///      Still not observed against a live forwarder *delivery* — that needs a
+///      deployed workflow — but the residual risk is now a wrong header
+///      version, not a wrong offset.
 library ReportMetadata {
     uint256 internal constant LENGTH = 109;
 

@@ -151,9 +151,10 @@ verification would be self-refuting.
   the payer that function returns, so it now *refuses to run* unless
   `VERDIKT_ALLOW_STUB_PAYMENT=true` is set explicitly. Shipping it unnoticed
   would send every refund to a fixture address.
-- **The KeystoneForwarder metadata offsets are unverified.** The 109-byte header
-  layout comes from documentation, not from a live forwarder delivery. A wrong
-  offset rejects every verdict, silently.
+- **The KeystoneForwarder metadata offsets are confirmed against the SDK's own
+  parser, but not against a live delivery.** Every offset matches
+  `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a
+  real forwarder call, so the residual risk is a header version change.
 - **Per-verdict clause detail is not on the dashboard.** Clause results never
   reach the chain; the detail view shows what a service promised beside what it
   delivered. [Tasks §5.2](docs/Tasks.md) records what closing it would take.
