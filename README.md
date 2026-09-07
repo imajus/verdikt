@@ -118,9 +118,17 @@ cd web && pnpm run deploy    # vite build && wrangler deploy — assets-only Clo
 docker compose up -d --build # from repo root — same build, served from nginx on a VPS
 ```
 
-Both default to demo mode (the seeded fixture data shown above). For live
-Arc/ENS reads, set `VITE_ARC_RPC_URL` and `VITE_SEPOLIA_RPC_URL` before
-building — Vite inlines them at build time, not at container or Worker start.
+Live at
+[verdikt-web.denis-perov.workers.dev](https://verdikt-web.denis-perov.workers.dev),
+reading Arc and ENS directly.
+
+Its config is `web/.env.local` (see `web/.env.example`), not the root `.env` —
+Vite reads env files only from `web/`. Unset, the dashboard serves seeded demo
+data and says so in its own header. Two things follow from the browser being
+the RPC client: the values are baked in at build time, so a deployed Worker
+cannot be repointed without rebuilding; and every `VITE_` value is public in
+the shipped bundle, so the endpoint must allow the page's origin by CORS and
+any key in it must be origin-restricted.
 
 ## Layout
 

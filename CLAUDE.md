@@ -49,9 +49,12 @@ pnpm dev                         # dashboard on :5173
 pnpm run deploy                  # vite build && wrangler deploy. NOT `pnpm deploy` — that is pnpm's own command
 ```
 
-`web` is static: no server-side logic, it reads both chains from the browser. So it ships as files, either as an assets-only Cloudflare Worker (`web/wrangler.jsonc`, no `main`) or from nginx via `web/Dockerfile` + `docker-compose.yml` at the root. The Dockerfile builds from the repo root because the pnpm workspace spans it — `@verdikt/web` cannot be built from its own directory alone.
+`web` is static: no server-side logic, it reads both chains from the browser. So it ships as files, either as an assets-only Cloudflare Worker (`web/wrangler.jsonc`, no `main`) — live at `verdikt-web.denis-perov.workers.dev` — or from nginx via `web/Dockerfile` + `docker-compose.yml` at the root. The Dockerfile builds from the repo root because the pnpm workspace spans it, and `.dockerignore` excludes every `.env` at any depth so an image takes its config from build args alone.
 
-Both paths take `VITE_ARC_RPC_URL` / `VITE_SEPOLIA_RPC_URL` at **build** time, never at run time: Vite inlines them, so a container or Worker cannot be repointed at a different chain without rebuilding. Unset, `web/src/source.js` falls back to seeded demo data rather than an empty marketplace.
+The dashboard's config is `web/.env.local`, **not** the root `.env`: Vite reads env files only from its own root, which is `web/`. `web/.env.example` is the template. Two consequences that are easy to get wrong:
+
+- **They are read at build time, never at run time.** Vite inlines them, so a deployed Worker or a running container cannot be repointed at another chain without rebuilding. Unset, `web/src/source.js` serves seeded demo data rather than an empty marketplace.
+- **Everything `VITE_`-prefixed is public**, inlined into the shipped bundle. So the browser is the RPC client, and the endpoint must send CORS headers for the page's origin — the Alchemy app allowlists `localhost:5173`, `localhost:4173` and the workers.dev origin. A key that is not origin-restricted does not belong here; non-prefixed vars in the root `.env` are never exposed.
 
 Foundry installs to `~/.foundry/bin` and its installer writes the `PATH` line to `~/.profile`, which zsh does not read. Use the absolute path or add it to `~/.zshrc`.
 
