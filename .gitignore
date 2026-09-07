@@ -18,6 +18,11 @@ cre/spike/**/.tmp/
 
 .DS_Store
 *.log
+# ...except the captured CRE simulate run. Production enrollment is private
+# beta, so that log IS the submission's evidence that the confidential workflow
+# runs — four documents link to it. `*.log` silently kept it out of the repo
+# once already.
+!docs/evidence/*.log
 
 # scripts/setup-ens.mjs output
 ens-setup-plan.json

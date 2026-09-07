@@ -33,6 +33,18 @@ that lives only in a `.ts` workflow is logic nothing tests on every commit.
 installed with bun and kept out of `pnpm-workspace.yaml`. Workspace packages are
 linked with `file:` plus a bun `overrides` entry.
 
+## Files in this directory
+
+| File | What it is |
+|---|---|
+| `project.yaml` | CRE project settings: the Arc and Sepolia RPCs both workflows resolve. |
+| `.env.example` | The CRE CLI's own env file — copy to `.env`. Only `CRE_ETH_PRIVATE_KEY`, and only `link-key`, `deploy` and `simulate --broadcast` need it. |
+| `secrets.yaml` | Empty and unreferenced today. Where provider request credentials go when the enclave needs them (Specification.md §2). |
+
+The CLI reads `.env` from the project root — this directory, the one holding
+`project.yaml` — not from the repo root. The repo-root `.env` is for everything
+else; nothing in the CLI reads it.
+
 ## Running them
 
 ```bash
