@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Script} from "forge-std/Script.sol";
 import {console} from "forge-std/console.sol";
+import {EnsNamehash} from "../src/EnsNamehash.sol";
 import {VerdiktScoreWriter} from "../src/VerdiktScoreWriter.sol";
 
 /// @notice Deploys VerdiktScoreWriter to Ethereum Sepolia (Tasks.md 3.2).
@@ -27,10 +28,13 @@ import {VerdiktScoreWriter} from "../src/VerdiktScoreWriter.sol";
 ///        CRE_WORKFLOW_NAME      — optional extra pin; empty disables the check.
 ///        ENS_RESOLVER_ADDRESS   — the PermissionedResolver serving
 ///                                 <slug>.verdikt.eth.
-///        ENS_PARENT_NODE        — namehash("verdikt.eth"). Passed in rather
-///                                 than computed on-chain, because namehash of a
-///                                 dotted name is not something to reimplement
-///                                 in Solidity for a constructor argument.
+///        ENS_PARENT_NAME        — e.g. "verdikt.eth". The node is derived from
+///                                 it here (EnsNamehash), not configured
+///                                 separately: a second setting holding a value
+///                                 wholly derived from this one could only ever
+///                                 disagree with it, and the failure would be a
+///                                 score writer publishing to a name nobody
+///                                 resolves.
 ///
 ///      **Deployment is not finished when this returns.** The contract can only
 ///      write once the resolver has granted it the two keys:
@@ -48,7 +52,8 @@ contract DeployScoreWriter is Script {
         address workflowOwner = vm.envAddress("CRE_WORKFLOW_OWNER");
         bytes10 workflowName = bytes10(bytes(vm.envOr("CRE_WORKFLOW_NAME", string(""))));
         address resolver = vm.envAddress("ENS_RESOLVER_ADDRESS");
-        bytes32 parentNode = vm.envBytes32("ENS_PARENT_NODE");
+        string memory parentName = vm.envString("ENS_PARENT_NAME");
+        bytes32 parentNode = EnsNamehash.namehash(parentName);
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
         writer = new VerdiktScoreWriter(forwarder, workflowOwner, workflowName, resolver, parentNode);
@@ -58,6 +63,8 @@ contract DeployScoreWriter is Script {
         console.log("forwarder:         ", forwarder);
         console.log("workflowOwner:     ", workflowOwner);
         console.log("resolver:          ", resolver);
+        console.log("parent:            ", parentName);
+        console.logBytes32(parentNode);
         console.log("");
         console.log("NOT DONE YET: grant this address the conformance and availability");
         console.log("text roles on each subname, per key, or every publish will revert.");
