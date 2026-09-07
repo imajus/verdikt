@@ -236,9 +236,12 @@ and then tampers with it.
       beside it. `proxy/src/app.test.js` runs the payTo check against it
 - [x] Provider 200 response — `PROVIDER_RESPONSE` in `fixtures/`, the Open-Meteo
       `current` block the demo SLAs are written against
-- [~] `X-PAYMENT` header — no longer needed as a frozen fixture for `eip3009`:
-      the tests sign their own, which is stronger. Still blocked with 0.4 for
-      `GatewayWalletBatched` and for the settlement receipt
+- [x] `X-PAYMENT` header and settlement receipt — for `eip3009`, both exist and
+      neither is a frozen fixture. `payment.test.js` signs its own headers,
+      which is stronger than replaying a captured one because it can then tamper
+      with them; and the settlement is a real transaction on Base Sepolia
+      (`0xc2e071e6…`, [`evidence/x402-payment-live.log`](./evidence/x402-payment-live.log)).
+      `GatewayWalletBatched` has neither and stays with 0.4
 - [x] Everything downstream develops against these — no live paid call needed
       to run a test. The one exception is the payment header itself, which is
       why `decodePayment` refuses to run without an explicit opt-in
