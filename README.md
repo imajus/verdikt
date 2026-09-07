@@ -114,6 +114,7 @@ the TEE banner, and the enclave-to-proxy callback round trip.
 | `cre/workflows` | The two CRE workflows — capability plumbing around `cre/lib`. |
 | `proxy` | The x402 relay. Holds no wallet and never evaluates. |
 | `web` | The marketplace dashboard. |
+| `deployments` | Verdikt's own deployed addresses, per network. Checked in: they are public and identical everywhere. |
 | `docs` | The specification, and the spikes that reshaped it. |
 
 `docs/` takes precedence over inference from code:

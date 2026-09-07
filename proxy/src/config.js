@@ -14,7 +14,6 @@ export function loadConfig(env = process.env) {
      * development and for tests, which have no wildcard DNS.
      */
     publicHost: env.PROXY_PUBLIC_HOST ?? 'verdikt.bond',
-    parentName: env.ENS_PARENT_NAME,
     /**
      * The unpaid leg resolves the same subname on every request. A short TTL
      * keeps a provider's `payTo` change visible quickly while not putting a

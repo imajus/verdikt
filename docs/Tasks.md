@@ -147,7 +147,7 @@ fixture test.
       pointing at the proxy
 - [x] **ENS parent name.** `verdikt.eth` is registered on Sepolia ENSv2
       (expires 2027-09-06) with a `PermissionedResolver` attached, so
-      `ENS_PARENT_NAME` stands as-is. Its subregistry is not deployed yet —
+      the parent name in `deployments/sepolia.json` stands as-is. Its subregistry is not deployed yet —
       that is onboarding work, not a naming decision
 
 ---
@@ -349,13 +349,32 @@ State machine, table-driven:
 
 ### 2.4 Deploy
 
+> **Decision — addresses are not configuration.** Three kinds of value were
+> tangled in `.env`, and only one of them belonged there:
+>
+> | | Where it lives now |
+> |---|---|
+> | Constants of someone else's deployment — ENSv2's protocol contracts, Chainlink's forwarders, Arc's chain id | code: `scripts/ens-sepolia.mjs`, `packages/sdk/{ens,arc}.js`, the deploy scripts |
+> | Verdikt's own deployed addresses | `deployments/*.json`, checked in |
+> | RPC URLs, keys, ports, timeouts | `.env` |
+>
+> A value nobody can change per environment is not configuration. Keeping one in
+> `.env` makes it something every contributor has to be handed out of band, that
+> nothing validates, and that can silently disagree with the code — which is how
+> `ENS_PARENT_NODE` and `ENS_SUBNAME_REGISTRY_ADDRESS` ended up as a hash nobody
+> checked and a variable nothing read. Solidity reads `deployments/` through
+> `vm.parseJson`, which is why `foundry.toml` grants read access to it.
+
 - [x] `contracts/script/Deploy.s.sol`, parameterised by forwarder, workflow
       owner, deposit and refund
 - [ ] **BLOCKED** — deploy to Arc Testnet. `ARC_RPC_URL` and a funded
       `DEPLOYER_PRIVATE_KEY` are both empty in `.env`; nothing in the repo can
       supply either. Everything downstream that needs a deployed address is
       blocked with it (2.4's remaining boxes, 3.x's live writes, Phase 6)
-- [ ] Record addresses in `deployments/arc-testnet.json`
+- [x] `deployments/arc-testnet.json` and `deployments/sepolia.json` exist and
+      are the source of truth for Verdikt's own addresses; `registry` is `null`
+      until the deploy runs. See the decision below
+- [ ] Record the deployed address there
 - [ ] Confirm the `ReportMetadata` offsets against a real forwarder delivery.
       Much lower risk since CRE-8 matched them against the SDK's own parser, but
       only a live delivery rules out a header version change — and the forwarder

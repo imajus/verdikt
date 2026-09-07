@@ -14,11 +14,11 @@ import {VerdiktRegistry} from "../src/VerdiktRegistry.sol";
 ///
 ///      Environment:
 ///        DEPLOYER_PRIVATE_KEY  — funded with native USDC on Arc
-///        CRE_FORWARDER_ADDRESS — KeystoneForwarder for the target chain.
-///                                Arc Testnet production:
-///                                0x76c9cf548b4179F8901cda1f8623568b58215E62
-///                                Simulation (`cre workflow simulate --broadcast`):
-///                                0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1
+///        CRE_FORWARDER_ADDRESS — optional. Defaults to Arc Testnet's
+///                                production forwarder, a constant of
+///                                Chainlink's deployment rather than a Verdikt
+///                                setting. Override for the simulation
+///                                forwarder or another chain.
 ///        CRE_WORKFLOW_OWNER    — the CRE account whose workflow may write
 ///                                verdicts. Required: the forwarder is shared,
 ///                                so this is the actual access control.
@@ -30,8 +30,15 @@ import {VerdiktRegistry} from "../src/VerdiktRegistry.sol";
 ///      Record the address in `deployments/arc-testnet.json` and in
 ///      `VERDIKT_REGISTRY_ADDRESS`.
 contract Deploy is Script {
+    /// @dev Chainlink's KeystoneForwarder on Arc Testnet. A constant of their
+    ///      deployment, public and identical for everyone, so it is code rather
+    ///      than configuration. The simulation forwarder used by
+    ///      `cre workflow simulate --broadcast` is
+    ///      0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1.
+    address internal constant ARC_TESTNET_FORWARDER = 0x76c9cf548b4179F8901cda1f8623568b58215E62;
+
     function run() external returns (VerdiktRegistry registry) {
-        address forwarder = vm.envAddress("CRE_FORWARDER_ADDRESS");
+        address forwarder = vm.envOr("CRE_FORWARDER_ADDRESS", ARC_TESTNET_FORWARDER);
         address workflowOwner = vm.envAddress("CRE_WORKFLOW_OWNER");
         bytes10 workflowName = bytes10(bytes(vm.envOr("CRE_WORKFLOW_NAME", string(""))));
         uint256 depositAmount = vm.envOr("DEPOSIT_AMOUNT", uint256(10e18));

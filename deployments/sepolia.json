@@ -1,0 +1,15 @@
+{
+  "$comment": "Verdikt's own deployed addresses on Ethereum Sepolia. Checked in on purpose: they are public, they do not vary between a developer's machine and CI, and an address that lives in .env is one every contributor has to be handed out of band. What belongs in .env is what genuinely differs per environment — an RPC URL, a key, a port. Written by `pnpm setup:ens`; ENSv2's own protocol addresses are NOT here, they are constants in scripts/ens-sepolia.mjs.",
+  "network": "ethereum-testnet-sepolia",
+  "chainId": 11155111,
+  "ens": {
+    "parentName": "verdikt.eth",
+    "$operator": "Owns parentName and operates its resolver. Resolver roles are per-account and do NOT move when the name is transferred, so this is a deliberate choice, not a consequence of ownership (Spike A).",
+    "operator": "0x4088f83b25Ff1dcc8bd1D88250e316ed5AB29AEE",
+    "$proxies": "Deployed once through the VerifiableFactory by `pnpm setup:ens`: the subname registry under parentName, and the per-account resolver every <slug>.verdikt.eth shares.",
+    "subnameRegistry": "0x3618849F8B562DcC9D25dCbA67cF0be5C8213A97",
+    "resolver": "0x3d411f1bA3B11B630a2405F1Fb51f088Cc2E23C9"
+  },
+  "$scoreWriter": "VerdiktScoreWriter, deployed by contracts/script/DeployScoreWriter.s.sol. null until Tasks.md 3.2 can deploy.",
+  "scoreWriter": null
+}

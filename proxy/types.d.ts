@@ -5,7 +5,6 @@ interface ProxyConfig {
   host: string;
   /** Agents call `<slug>.verdikt.bond`; the slug is the Host subdomain. */
   publicHost: string;
-  parentName?: string;
   ensCacheTtlMs: number;
   upstreamTimeoutMs: number;
   /** Off by default: a provider-authored `url` record is otherwise an SSRF primitive. */

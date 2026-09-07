@@ -108,7 +108,7 @@ export function buildApp(deps = {}) {
     /** @type {ServiceRecord} */
     let record;
     try {
-      record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs, parentName: config.parentName });
+      record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs });
     } catch (error) {
       // Distinct from "no records published": ENS being unreachable is our
       // outage, and the agent should retry rather than be told the service

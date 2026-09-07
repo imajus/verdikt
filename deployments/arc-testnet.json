@@ -1,0 +1,9 @@
+{
+  "$comment": "Verdikt's own deployed addresses on Arc Testnet. See deployments/sepolia.json for why these are checked in rather than kept in .env.",
+  "network": "arc-testnet",
+  "chainId": 5042002,
+  "$registry": "VerdiktRegistry, deployed by contracts/script/Deploy.s.sol. null because Tasks.md 2.4 is blocked on an RPC URL and a funded deployer key.",
+  "registry": null,
+  "$deployBlock": "Where log scans start. Without it every marketplace read scans Arc from genesis, which public RPCs refuse or crawl through.",
+  "deployBlock": null
+}

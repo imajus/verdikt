@@ -11,7 +11,8 @@
     "./payment": "./payment.js",
     "./registry": "./registry.js",
     "./arc": "./arc.js",
-    "./signing": "./signing.js"
+    "./signing": "./signing.js",
+    "./deployments": "./deployments.js"
   },
   "dependencies": {
     "@verdikt/fixtures": "workspace:*",

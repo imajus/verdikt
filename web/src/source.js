@@ -6,7 +6,7 @@
 // marketplace that is broken. The demo source makes the surface reviewable now
 // and is labelled in the header so nobody mistakes it for live data.
 
-import { ENS_BACKEND, createRegistryReader, resolveServiceRecord, serviceIdOf } from '@verdikt/sdk';
+import { ARC, ENS_BACKEND, createRegistryReader, resolveServiceRecord, serviceIdOf } from '@verdikt/sdk';
 import { SLA_TEXT } from '@verdikt/fixtures';
 
 /**
@@ -14,13 +14,15 @@ import { SLA_TEXT } from '@verdikt/fixtures';
  * @returns {{ mode: 'live'|'demo', deps: MarketplaceDeps }}
  */
 export function createSource(env) {
-  if (env.VITE_VERDIKT_REGISTRY_ADDRESS && env.VITE_ARC_RPC_URL) {
+  // The registry address is not a per-environment setting — it comes from
+  // deployments/arc-testnet.json, bundled at build time. All the dashboard
+  // needs told is which RPC to read it through.
+  const registryAddress = ARC.registry;
+  if (registryAddress && env.VITE_ARC_RPC_URL) {
     const registry = createRegistryReader({
       rpcUrl: env.VITE_ARC_RPC_URL,
-      address: env.VITE_VERDIKT_REGISTRY_ADDRESS,
-      deployBlock: env.VITE_VERDIKT_REGISTRY_DEPLOY_BLOCK
-        ? BigInt(env.VITE_VERDIKT_REGISTRY_DEPLOY_BLOCK)
-        : undefined
+      address: registryAddress,
+      deployBlock: ARC.deployBlock ? BigInt(ARC.deployBlock) : undefined
     });
     return {
       mode: 'live',

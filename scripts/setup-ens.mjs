@@ -75,6 +75,7 @@ import {
   rpc,
   startAnvil
 } from './ens-sepolia.mjs';
+import { SEPOLIA } from '@verdikt/sdk/deployments';
 
 function parseArgs(argv) {
   const valueOf = (name, fallback) => {
@@ -84,8 +85,8 @@ function parseArgs(argv) {
   return {
     send: argv.includes('--send'),
     full: argv.includes('--full'),
-    parentLabel: valueOf('parent', (process.env.ENS_PARENT_NAME ?? 'verdikt.eth').replace(/\.eth$/, '')),
-    operator: valueOf('operator', process.env.ENS_OPERATOR_ADDRESS),
+    parentLabel: valueOf('parent', SEPOLIA.ens.parentName.replace(/\.eth$/, '')),
+    operator: valueOf('operator', SEPOLIA.ens.operator),
     out: valueOf('out', 'ens-setup-plan.json'),
     rpcUrl: valueOf('rpc', process.env.SEPOLIA_RPC_URL || DEFAULT_SEPOLIA_RPC)
   };
@@ -410,8 +411,8 @@ function printPlan(txs, { parentLabel, operator, outPath, full }) {
       `Addresses above are what a live run will produce: a VerifiableFactory proxy\n` +
       `address is fixed by (factory, sender, salt), so the fork predicts it exactly.\n` +
       `Sign these from any wallet, or run with --send and skip the copying entirely.\n\n` +
-      `Afterwards, put the two deployed addresses in .env as\n` +
-      `ENS_RESOLVER_ADDRESS and ENS_SUBNAME_REGISTRY_ADDRESS, then confirm with\n` +
+      `Afterwards, put the two deployed addresses in deployments/sepolia.json as\n` +
+      `ens.resolver and ens.subnameRegistry, then confirm with\n` +
       `  pnpm spike:ens --read-only --parent ${parentLabel}`
   );
 }
@@ -419,7 +420,7 @@ function printPlan(txs, { parentLabel, operator, outPath, full }) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.operator) {
-    throw new Error('set ENS_OPERATOR_ADDRESS (or pass --operator 0x…)');
+    throw new Error('deployments/sepolia.json has no ens.operator (or pass --operator 0x…)');
   }
 
   let liveAccount = null;
@@ -504,9 +505,9 @@ async function main() {
   });
   await verify(publicClient, args.parentLabel, args.operator, live);
 
-  console.log('\nDone. Put these in .env:');
-  console.log(`  ENS_RESOLVER_ADDRESS=${live.resolverAddress}`);
-  console.log(`  ENS_SUBNAME_REGISTRY_ADDRESS=${live.subRegistryAddress}`);
+  console.log('\nDone. Put these in deployments/sepolia.json:');
+  console.log(`  "resolver": "${live.resolverAddress}"`);
+  console.log(`  "subnameRegistry": "${live.subRegistryAddress}"`);
   if (live.resolverAddress.toLowerCase() !== rehearsed.resolverAddress.toLowerCase()) {
     console.log(
       `\nNOTE  the live resolver differs from the rehearsed one` +

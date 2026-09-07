@@ -19,22 +19,21 @@ import {VerdiktScoreWriter} from "../src/VerdiktScoreWriter.sol";
 ///
 ///      Environment:
 ///        DEPLOYER_PRIVATE_KEY   — funded with Sepolia ETH
-///        CRE_SEPOLIA_FORWARDER  — KeystoneForwarder on Sepolia,
-///                                 0xF8344CFd5c43616a4366C34E3EEE75af79a74482
+///        CRE_SEPOLIA_FORWARDER  — optional. Defaults to Chainlink's Sepolia
+///                                 forwarder; override only for another chain.
 ///        CRE_WORKFLOW_OWNER     — the CRE account whose workflow may publish
 ///                                 scores. Required: the forwarder is shared, so
 ///                                 without this any CRE user could publish
 ///                                 Verdikt's reputation numbers.
 ///        CRE_WORKFLOW_NAME      — optional extra pin; empty disables the check.
-///        ENS_RESOLVER_ADDRESS   — the PermissionedResolver serving
-///                                 <slug>.verdikt.eth.
-///        ENS_PARENT_NAME        — e.g. "verdikt.eth". The node is derived from
-///                                 it here (EnsNamehash), not configured
-///                                 separately: a second setting holding a value
-///                                 wholly derived from this one could only ever
-///                                 disagree with it, and the failure would be a
-///                                 score writer publishing to a name nobody
-///                                 resolves.
+///
+///      The resolver and the parent name are NOT environment variables: they are
+///      Verdikt's own Sepolia deployment, read from `deployments/sepolia.json`,
+///      which is the same file the SDK and the ENS scripts read. The parent node
+///      is then derived from the name with `EnsNamehash` rather than configured
+///      separately — a second setting holding a value wholly implied by the
+///      first could only ever disagree with it, and the failure would be a score
+///      writer publishing to a name nobody resolves.
 ///
 ///      **Deployment is not finished when this returns.** The contract can only
 ///      write once the resolver has granted it the two keys:
@@ -47,12 +46,19 @@ import {VerdiktScoreWriter} from "../src/VerdiktScoreWriter.sol";
 ///      name-wide grant is one of the two routes that bypasses the per-key ACL
 ///      the whole ENSv2 choice rests on.
 contract DeployScoreWriter is Script {
+    /// @dev Chainlink's KeystoneForwarder on Ethereum Sepolia — a different
+    ///      address from Arc's, and getting them the wrong way round means every
+    ///      report is rejected with nothing said about why.
+    address internal constant SEPOLIA_FORWARDER = 0xF8344CFd5c43616a4366C34E3EEE75af79a74482;
+
     function run() external returns (VerdiktScoreWriter writer) {
-        address forwarder = vm.envAddress("CRE_SEPOLIA_FORWARDER");
+        address forwarder = vm.envOr("CRE_SEPOLIA_FORWARDER", SEPOLIA_FORWARDER);
         address workflowOwner = vm.envAddress("CRE_WORKFLOW_OWNER");
         bytes10 workflowName = bytes10(bytes(vm.envOr("CRE_WORKFLOW_NAME", string(""))));
-        address resolver = vm.envAddress("ENS_RESOLVER_ADDRESS");
-        string memory parentName = vm.envString("ENS_PARENT_NAME");
+
+        string memory deployment = vm.readFile("../deployments/sepolia.json");
+        address resolver = vm.parseJsonAddress(deployment, ".ens.resolver");
+        string memory parentName = vm.parseJsonString(deployment, ".ens.parentName");
         bytes32 parentNode = EnsNamehash.namehash(parentName);
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));

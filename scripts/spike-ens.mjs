@@ -61,6 +61,7 @@ import {
   startAnvil,
   universalResolverAbi
 } from './ens-sepolia.mjs';
+import { SEPOLIA } from '@verdikt/sdk/deployments';
 
 // Only this script registers a name, reads through the Universal Resolver, or
 // touches MockUSDC, so these stay here rather than in the shared module.
@@ -169,7 +170,7 @@ function parseArgs(argv) {
   return {
     live: flags.has('--live'),
     readOnly: flags.has('--read-only'),
-    parentLabel: valueOf('parent', (process.env.ENS_PARENT_NAME ?? 'verdikt.eth').replace(/\.eth$/, '')),
+    parentLabel: valueOf('parent', SEPOLIA.ens.parentName.replace(/\.eth$/, '')),
     slug: valueOf('slug', 'weather'),
     rpcUrl: valueOf('rpc', process.env.SEPOLIA_RPC_URL || DEFAULT_SEPOLIA_RPC)
   };

@@ -172,9 +172,9 @@ export function renderApp(marketplace, mode, selectedSlug) {
     ${
       mode === 'demo'
         ? `<p class="note warn">
-             Showing seeded data, not a live chain. The registry is not deployed
-             yet — set <code>VITE_ARC_RPC_URL</code> and
-             <code>VITE_VERDIKT_REGISTRY_ADDRESS</code> to read Arc directly.
+             Showing seeded data, not a live chain. Once the registry is
+             deployed and recorded in <code>deployments/arc-testnet.json</code>,
+             set <code>VITE_ARC_RPC_URL</code> to read Arc directly.
            </p>`
         : ''
     }

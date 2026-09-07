@@ -47,6 +47,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { packetToBytes } from 'viem/ens';
 import { SERVICE_RECORD } from '@verdikt/fixtures';
+import { SEPOLIA } from './deployments.js';
 import { serviceIdOf } from './registry.js';
 
 /** @type {Readonly<Record<string, EnsBackend>>} */
@@ -64,7 +65,11 @@ export const SEPOLIA_UNIVERSAL_RESOLVER = '0x4a1817d13e9cf196f471725176355c1234b
 
 export const DEFAULT_SEPOLIA_RPC = 'https://ethereum-sepolia-rpc.publicnode.com';
 
-export const DEFAULT_PARENT_NAME = 'verdikt.eth';
+/** From deployments/sepolia.json — the name Verdikt actually holds, not a guess. */
+export const DEFAULT_PARENT_NAME = SEPOLIA.ens.parentName;
+
+/** The PermissionedResolver every `<slug>.verdikt.eth` shares. */
+export const PARENT_RESOLVER_ADDRESS = SEPOLIA.ens.resolver;
 
 /** The text records Verdikt stores on a subname. `address` is not a text record. */
 export const TEXT_KEYS = Object.freeze(['url', 'sla', 'conformance', 'availability']);
@@ -186,7 +191,7 @@ const clientFor = (rpcUrl) =>
  * @returns {Promise<ServiceRecord>}
  */
 export async function resolveServiceRecord(slug, options = {}) {
-  const parentName = options.parentName ?? process.env.ENS_PARENT_NAME ?? DEFAULT_PARENT_NAME;
+  const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
   const rpcUrl = options.rpcUrl ?? process.env.SEPOLIA_RPC_URL ?? DEFAULT_SEPOLIA_RPC;
   const backend = options.backend ?? ENS_BACKEND.V2;
   const name = serviceName(slug, parentName);
@@ -313,7 +318,7 @@ export async function writeServiceScores(slug, scores, options) {
       throw new Error(`writeServiceScores: ${key} must be an integer 0..1000, got ${String(scores[key])}`);
     }
   }
-  const parentName = options.parentName ?? process.env.ENS_PARENT_NAME ?? DEFAULT_PARENT_NAME;
+  const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
   const rpcUrl = options.rpcUrl ?? process.env.SEPOLIA_RPC_URL ?? DEFAULT_SEPOLIA_RPC;
   const name = serviceName(slug, parentName);
   const node = namehash(name);
