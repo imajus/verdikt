@@ -669,7 +669,16 @@ day saved in Phase 4 here.
 
 ### 5.3 Stretch, in the spec's priority order
 
-- [ ] Provider self-serve dashboard (own history, balance, SLA editor)
+- [x] Provider self-serve dashboard — `?provider=0x…` on the same dashboard:
+      a filter, not a second app. Shows that provider's services, total bonded,
+      **what has been refunded out of their own bonds**, and an SLA editor
+
+> **The editor validates with the engine's own parser and sends nothing.** It
+> calls `parseSla` against the same `schema.json` the verifier enforces, so a
+> provider cannot be told a document is fine and then have a call judged by a
+> different rule. It then shows the `setText` transaction to sign rather than
+> submitting it — Verdikt holds no key of the provider's, which is the whole
+> reason the SLA lives on ENS and not on Arc.
 - [~] Machine-facing discovery API — `proxy/src/discovery.js` and the
       `/services`, `/services/:slug` routes, with filters on published
       conformance and availability, promised latency, price (integer minor

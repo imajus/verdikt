@@ -309,3 +309,57 @@ describe('rendering', () => {
     expect(renderDetail(services[0])).toContain('presumed healthy');
   });
 });
+
+describe('the provider view', () => {
+  const build = async () =>
+    loadMarketplace(
+      deps({
+        services: [service('weather', HONEST), service('other', FLAKY, { provider: '0xBoB' })],
+        verdicts: [verdict(HONEST, 'FAIL', '0x02')],
+        refunds: [
+          { serviceId: HONEST, requestId: '0x02', payer: '0x11', amount: 10n ** 18n, blockNumber: 1n }
+        ],
+        records: { weather: record({}), other: record({ slug: 'other', serviceId: FLAKY }) }
+      })
+    );
+
+  it('narrows to one provider rather than being a second app', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xA11ce00000000000000000000000000000000001');
+    expect(html).toContain('weather');
+    expect(html).not.toContain('>other<');
+  });
+
+  it('shows what has been refunded out of that provider’s own bonds', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xA11ce00000000000000000000000000000000001');
+    expect(html).toContain('refunded from your bonds');
+    expect(html).toContain('1 USDC');
+  });
+
+  it('matches the address case-insensitively', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xa11ce00000000000000000000000000000000001');
+    expect(html).toContain('weather');
+  });
+
+  it('says so plainly when an address owns nothing', async () => {
+    expect(renderApp(await build(), 'demo', null, '0xdead')).toContain('No services registered');
+  });
+
+  // The editor validates with the engine's own parser, so a provider cannot be
+  // told a document is fine and then have a call judged by a different rule.
+  it('accepts a valid SLA and offers the transaction to sign', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xA11ce00000000000000000000000000000000001', SLA_TEXT.honest);
+    expect(html).toContain('Valid.');
+    expect(html).toContain('setText(bytes32,string,string)');
+  });
+
+  it('rejects an invalid SLA and never offers a transaction for it', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xA11ce00000000000000000000000000000000001', '{"version":1,"clauses":[]}');
+    expect(html).not.toContain('Valid.');
+    expect(html).not.toContain('setText(bytes32,string,string)');
+  });
+
+  it('never offers to send anything itself — Verdikt holds no provider key', async () => {
+    const html = renderApp(await build(), 'demo', null, '0xA11ce00000000000000000000000000000000001', SLA_TEXT.honest);
+    expect(html).toContain('Nothing is sent');
+  });
+});

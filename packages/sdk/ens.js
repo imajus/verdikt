@@ -369,3 +369,29 @@ async function resolverAddressFor(client, name) {
     throw error;
   }
 }
+
+/**
+ * The transaction a provider signs to publish a record itself.
+ *
+ * Returned as `{ to, data }` rather than sent: the provider holds the key, and
+ * Verdikt deliberately never does. The dashboard shows this so a provider can
+ * paste it into a wallet without Verdikt brokering the write — which is the
+ * whole point of the SLA living on ENS and not on Arc.
+ *
+ * @param {string} slug
+ * @param {'sla'|'url'} key the two records a provider is scoped to
+ * @param {string} value
+ * @param {{ parentName?: string, resolverAddress?: string }} [options]
+ * @returns {{ to: string, data: string, node: string, name: string }}
+ */
+export function setTextCalldata(slug, key, value, options = {}) {
+  const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
+  const name = serviceName(slug, parentName);
+  const node = namehash(name);
+  return {
+    to: options.resolverAddress ?? PARENT_RESOLVER_ADDRESS,
+    data: encodeFunctionData({ abi: resolverRecordsAbi, functionName: 'setText', args: [node, key, value] }),
+    node,
+    name
+  };
+}

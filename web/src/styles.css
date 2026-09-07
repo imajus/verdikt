@@ -138,3 +138,14 @@ table.kv th { text-align: left; font-weight: 500; color: var(--muted); padding: 
 .outcome.down { color: var(--fair); }
 
 footer { margin-top: 32px; padding-top: 16px; border-top: 1px solid var(--line); }
+
+textarea {
+  width: 100%; min-height: 220px; padding: 12px 14px; margin-bottom: 10px;
+  background: var(--bg); color: var(--ink);
+  border: 1px solid var(--line); border-radius: var(--radius);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; line-height: 1.5;
+  resize: vertical;
+}
+textarea:focus { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: -1px; }
+code.wrap { overflow-wrap: anywhere; }
+a { color: var(--accent); }

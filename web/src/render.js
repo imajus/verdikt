@@ -2,6 +2,8 @@
 // a stats strip, and a framework would be the largest dependency in the repo
 // for markup that fits in one file.
 
+import { setTextCalldata } from '@verdikt/sdk';
+import { parseSla } from '@verdikt/sla';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 
 /** @param {unknown} value */
@@ -152,12 +154,117 @@ export function renderDetail(listing) {
 }
 
 /**
+ * The provider's own view (Specification.md §5, stretch 1).
+ *
+ * A filter rather than a separate app: the same data, narrowed to one address.
+ * The SLA editor validates against the engine's own `schema.json` — the one the
+ * verifier enforces, so a provider cannot be told a document is fine and then
+ * judged against a different rule — and produces the transaction to sign
+ * WITHOUT sending it. Verdikt holds no key on the provider's behalf; the SLA
+ * lives on ENS precisely so publishing needs no Verdikt backend.
+ *
+ * @param {Listing[]} owned
+ * @param {string} provider
+ * @param {string} draft
+ */
+function renderProvider(owned, provider, draft) {
+  const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
+  const refunded = owned.reduce(
+    (total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n),
+    0n
+  );
+  const target = owned[0];
+  const source = draft || target?.slaRaw || '';
+
+  /** @type {{ ok: boolean, message: string }} */
+  let check = { ok: false, message: 'Paste an SLA to validate it.' };
+  if (source.trim()) {
+    try {
+      const parsed = parseSla(source);
+      check = { ok: true, message: `Valid. ${parsed.clauses.length} clause(s); the verifier would enforce all of them.` };
+    } catch (error) {
+      check = { ok: false, message: /** @type {Error} */ (error).message };
+    }
+  }
+
+  let call = null;
+  if (check.ok && target) {
+    try {
+      call = setTextCalldata(target.slug, 'sla', source);
+    } catch {
+      call = null;
+    }
+  }
+
+  return `
+    <header class="top">
+      <div>
+        <h1>Provider</h1>
+        <p class="muted"><code>${escape(provider)}</code> · <a href="?">back to the marketplace</a></p>
+      </div>
+      <span class="badge live">${owned.length} service${owned.length === 1 ? '' : 's'}</span>
+    </header>
+
+    <section class="stats">
+      <div class="stat"><span class="value">${owned.length}</span><span class="label">services</span></div>
+      <div class="stat"><span class="value">${escape(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div>
+      <div class="stat"><span class="value fail">${escape(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div>
+      <div class="stat"><span class="value">${owned.reduce((n, l) => n + l.history.length, 0)}</span><span class="label">verdicts</span></div>
+    </section>
+
+    ${
+      owned.length === 0
+        ? '<p class="empty">No services registered by this address.</p>'
+        : `<div class="layout"><section class="listing">
+             <div class="row head">
+               <span class="cell name">Service</span>
+               <span class="cell num">Conformance</span>
+               <span class="cell num">Availability</span>
+               <span class="cell num">Bond</span>
+               <span class="cell status">Status</span>
+             </div>
+             ${owned.map((listing) => listingRow(listing, false)).join('')}
+           </section>
+           <section class="detail">${renderDetail(/** @type {Listing} */ (target))}</section></div>`
+    }
+
+    <section class="detail" style="margin-top:24px">
+      <h3>SLA editor <small class="muted">${target ? escape(target.name) : ''}</small></h3>
+      <p class="muted small">
+        Validated against the same <code>schema.json</code> the verifier enforces, so
+        this cannot tell you a document is fine and then have a call judged by a
+        different rule. Nothing is sent: Verdikt holds no key of yours, which is
+        why the SLA lives on ENS and not on Arc.
+      </p>
+      <textarea id="sla-draft" spellcheck="false" rows="14">${escape(source)}</textarea>
+      <p class="note ${check.ok ? '' : 'warn'}">${escape(check.message)}</p>
+      ${
+        call
+          ? `<h3>Transaction to sign</h3>
+             <table class="kv">
+               <tr><th>to</th><td><code>${escape(call.to)}</code></td></tr>
+               <tr><th>function</th><td><code>setText(bytes32,string,string)</code></td></tr>
+               <tr><th>data</th><td><code class="wrap">${escape(call.data)}</code></td></tr>
+             </table>
+             <p class="muted small">Send from the address that owns ${escape(call.name)}. It is scoped to <code>sla</code> and <code>url</code> only — writing <code>conformance</code> reverts.</p>`
+          : ''
+      }
+    </section>`;
+}
+
+/**
  * @param {Marketplace} marketplace
  * @param {'live'|'demo'} mode
  * @param {string|null} selectedSlug
+ * @param {string|null} [provider]
+ * @param {string} [slaDraft]
  */
-export function renderApp(marketplace, mode, selectedSlug) {
+export function renderApp(marketplace, mode, selectedSlug, provider = null, slaDraft = '') {
   const { stats, services } = marketplace;
+  if (provider) {
+    const owned = services.filter((listing) => listing.provider.toLowerCase() === provider.toLowerCase());
+    return renderProvider(owned, provider, slaDraft);
+  }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 
   return `
@@ -215,5 +322,10 @@ export function renderApp(marketplace, mode, selectedSlug) {
       <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events.
       A verdict is final: there is no dispute layer, by design.
       ${formatWhen(Math.floor(Date.now() / 1000))}
+      ${
+        services.length > 0
+          ? `· <a href="?provider=${escape(services[0].provider)}">provider view</a>`
+          : ''
+      }
     </footer>`;
 }
