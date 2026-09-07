@@ -24,7 +24,7 @@ an account, a key, or a person, and each is one step:
 | Base Sepolia USDC | 0.4 — a live x402 payment | Fund an address, then `VERDIKT_PAYER_PRIVATE_KEY=0x… node scripts/pay-x402.mjs <paywall-url> --send`. The protocol work is done and the header already round-trips against the live challenge |
 | A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
 | Your myproceeds.xyz account | 6.1 — point the paywall at Open-Meteo | Configure the upstream there. The workflow calls Open-Meteo directly meanwhile |
-| A person at a screen | 6.3 — the recorded walkthrough | [`walkthrough.md`](./walkthrough.md) is the script: same order, real commands, the numbers to expect |
+| A person at a screen | 6.3 — the recorded walkthrough | [`shot-list.md`](./shot-list.md) is the 3-minute cut: seven shots, timed, with the lines to say. [`walkthrough.md`](./walkthrough.md) is the long version |
 
 Two items are marked `[~]` rather than `[ ]`, meaning *delivered, with a
 boundary that is deliberate and documented at the task*: per-verdict failure
@@ -900,5 +900,8 @@ itself, a real forwarder, and a real payment.
 - [x] Written walkthrough — [walkthrough.md](./walkthrough.md). Every command
       in it has been run and every output is real, with the transcripts in
       `evidence/`
-- [ ] **Recorded walkthrough** — needs a human at a screen; the doc above is the
-      script for one, in order, with the numbers to expect
+- [ ] **Recorded walkthrough** — needs a human at a screen. Two scripts exist so
+      that is the only part left: [`shot-list.md`](./shot-list.md) is the
+      3-minute submission cut — seven timed shots, what is on screen, the lines
+      to say, and the one sentence about what is simulated — and
+      [`walkthrough.md`](./walkthrough.md) is the long version it was cut from
