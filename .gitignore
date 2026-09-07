@@ -26,3 +26,7 @@ cre/spike/**/.tmp/
 
 # scripts/setup-ens.mjs output
 ens-setup-plan.json
+
+# Claude Code worktrees. Real git worktrees checked out under the repo, so they
+# show as untracked here — committing one would nest a whole second checkout.
+.claude/worktrees/
