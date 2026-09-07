@@ -8,6 +8,14 @@
       name="description"
       content="A marketplace of x402 API services whose delivery is verified per call, with refunds enforced on-chain."
     />
+    <!-- The only external request the page makes. Every face has a system
+         fallback in styles.css, so offline the page is plainer, not broken. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
+    />
   </head>
   <body>
     <main id="app"></main>
@@ -15,7 +23,7 @@
          reads as something being broken. -->
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232f5fd0'/%3E%3Cpath d='M8 10l8 13 8-13' fill='none' stroke='white' stroke-width='3.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23191713'/%3E%3Cpath d='M8 9l8 14 8-14' fill='none' stroke='%23f6f4ee' stroke-width='2.6' stroke-linejoin='miter'/%3E%3C/svg%3E"
     />
     <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.js"></script>
