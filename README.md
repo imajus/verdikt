@@ -172,16 +172,19 @@ verification would be self-refuting.
   the simulation forwarder. The simulator says it plainly: *"The simulator is not
   a real TEE."*
 - **`decodePayment` handles half of x402, and refuses the other half.** The
-  `exact`/`eip3009` scheme is implemented and *verified* — the payer is
-  recovered from an ERC-3009 signature, so swapping the payer or inflating the
-  amount invalidates it, which the tests demonstrate by doing exactly that to
-  headers they signed. Circle's `GatewayWalletBatched` — the option the demo
-  paywall offers on Arc — is not published, so it refuses rather than guessing,
-  unless `VERDIKT_ALLOW_STUB_PAYMENT=true` is set explicitly. The verdicts above
-  therefore carry a fixture payer.
-- **No paid call has been verified end to end.** The header names its scheme but
-  not its asset, and the EIP-712 domain needs one, so verification requires the
-  challenge that payment answers — which the proxy does not currently keep.
+  `exact`/`eip3009` scheme is implemented and *verified*: the payer is recovered
+  from an ERC-3009 signature, so swapping the payer or inflating the amount
+  invalidates it. Verdikt signs a header the USDC contract itself accepts —
+  [`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)
+  on Base Sepolia settled one, which is what proves the binding rather than
+  asserting it ([`evidence/x402-payment-live.log`](docs/evidence/x402-payment-live.log)).
+  Circle's `GatewayWalletBatched` is not published, so it refuses rather than
+  guessing.
+- **No paid call runs end to end, and that gap is the provider's.** The demo
+  paywall advertises `eip3009` and then answers 402 to a payment the token
+  contract accepts. So the verdicts above carry a fixture payer. The proxy also
+  does not yet keep the challenge a payment answers, which verification needs —
+  the header names its scheme but not its asset.
 - **The KeystoneForwarder metadata offsets are confirmed against the SDK's own
   parser, but not against a live delivery.** Every offset matches
   `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a

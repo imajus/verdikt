@@ -16,14 +16,14 @@ and "built, but the last step needs a credential nobody in this repo holds".
 Those are not the same state and reading them as one makes the plan look
 stalled when it is finished. So, explicitly:
 
-**Nothing is left that can be done from this checkout.** Everything below needs
-an account, a key, or a person, and each is one step:
+**Nothing is left that can be done from this checkout.** What remains needs a
+third party to act, or a person at a screen:
 
 | Needs | Task | The step |
 |---|---|---|
-| Base Sepolia USDC | 0.4 — a live x402 payment | Fund an address, then `VERDIKT_PAYER_PRIVATE_KEY=0x… node scripts/pay-x402.mjs <paywall-url> --send`. The protocol work is done and the header already round-trips against the live challenge |
+| A provider that honours `eip3009` | 0.4 — a paid call end to end | Verdikt's side is done: it signs a header the USDC contract itself accepts (`0xc2e071e6…`). The demo paywall advertises the scheme and then refuses it, so this needs Proceeds to implement it, another x402 provider, or the Circle wallet for their own scheme |
 | A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
-| Your myproceeds.xyz account | 6.1 — point the paywall at Open-Meteo | Configure the upstream there. The workflow calls Open-Meteo directly meanwhile |
+| *(done)* | 6.1 — two paywalls, one per service | Configured, and the ENS `url` records now point each service at its own |
 | A person at a screen | 6.3 — the recorded walkthrough | [`shot-list.md`](./shot-list.md) is the 3-minute cut: seven shots, timed, with the lines to say. [`walkthrough.md`](./walkthrough.md) is the long version |
 
 Two items are marked `[~]` rather than `[ ]`, meaning *delivered, with a
@@ -151,36 +151,38 @@ Every refund depends on recovering the payer and the amount from the header.
 > which is specified end to end in public. Treating the whole spike as blocked
 > on a live capture conflated the two.
 
-- [ ] **Making a live payment is BLOCKED on funding — nothing else.** The
-      protocol half is done and the tooling is written; what is missing is USDC.
+- [x] **A real X-PAYMENT header exists, and it settles.** Not captured from
+      somebody else — *produced*, which is stronger, because it can be produced
+      again at will. `scripts/pay-x402.mjs` builds and signs one for the live
+      challenge, and the authorization inside it was submitted straight to Base
+      Sepolia USDC, which accepted it:
+      [`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061).
+      The token contract itself is the authority on whether that signature binds
+      the payer, and it said yes.
 
-      Two routes, and the second is the one that survives scrutiny:
+      > **Do not verify a domain against `DOMAIN_SEPARATOR()`.** That getter on
+      > Base Sepolia USDC returns a *cached* value that matches no combination of
+      > the token's own `name()`/`version()`/chainId. FiatTokenV2_2 recomputes the
+      > separator per call, so the cached one is a red herring — and chasing it
+      > looks exactly like a signing bug. The domain that works is the obvious
+      > one: `name` and `version` straight from the challenge's `extra`, `chainId`
+      > from the CAIP-2 network, `verifyingContract` = the asset.
 
-      1. *Circle's `GatewayWalletBatched`.* `circle gateway deposit --method
-         direct` does list `ARC-TESTNET` and `circle services pay` would pay the
-         paywall's 1 minor unit ($0.000001) — but from a **Circle-managed agent
-         wallet**, and standing one up is `circle wallet create` +
-         `circle wallet login`, which is email + OTP, plus a Terms-of-Use
-         acceptance (`CIRCLE_ACCEPT_TERMS=1`) that is a legal act in the
-         operator's name. Hand-signing the burn intent instead is still
-         circular: its payload is the thing a capture would teach us.
-      2. *The same challenge's `eip3009` option.* No Circle wallet, and no gas
-         in the payer's account either — the facilitator submits the transfer.
-         `scripts/pay-x402.mjs` builds and signs a real one and its header
-         round-trips through `decodePayment` against the **live** challenge.
-         It needs USDC on Base Sepolia at the paying address, and every account
-         in this checkout holds zero.
+- [ ] **A paid call end-to-end is blocked on the provider, not on us.** The
+      demo paywall advertises `eip3009` in its `accepts` and then refuses a
+      cryptographically valid one — the same header whose authorization the USDC
+      contract accepted above still comes back 402. It is not the request shape:
+      `POST` answers 405 so `GET` is right, and `x402Version` 1 and 2 behave
+      identically. The reasonable reading is that Proceeds implements only
+      `GatewayWalletBatched` and advertises `eip3009` regardless.
 
-      A dry run against the live paywall also closed off learning anything from
-      failures. It answers an identical bare 402 for *all* of: no header,
-      unparseable garbage, a well-formed envelope with a nonsense signature, and
-      a well-formed envelope correctly signed by an unfunded account. No error
-      body, no `x-payment-response` header. So there is no cheap probe that
-      reveals the settlement shape — only a payment that actually settles does,
-      which is precisely why this is a funding blocker and not a protocol one.
+      So the last mile needs one of: Proceeds honouring the scheme it
+      advertises, a different x402 provider that does, or the Circle-managed
+      wallet (`circle wallet create` + `login`, email + OTP, plus a
+      Terms-of-Use acceptance that is the operator's to give) for
+      `GatewayWalletBatched` — whose payload Circle does not publish, so
+      inventing it would still prove nothing.
 
-      **To finish it:** fund an address with Base Sepolia USDC, then
-      `VERDIKT_PAYER_PRIVATE_KEY=0x… node scripts/pay-x402.mjs <url> --send`
 - [x] Decode it; extract payer address and paid amount — **done for `eip3009`**,
       against the spec rather than a capture. The envelope is x402's own
       (base64 of `{x402Version, scheme, network, payload}`) and the payload is
@@ -860,16 +862,13 @@ day saved in Phase 4 here.
       `eip155:5042002` at 1 minor unit, paying to
       `0x5c33f235…16505`, which is the address a service's ENS `address` record
       has to match for the proxy to relay its challenge
-- [ ] Point it at Open-Meteo and pair it with a violating twin — the paywall
-      currently fronts a placeholder resource ("Access to Test")
-
-### 6.2 Scripted end-to-end run
-
-`pnpm demo` — [scripts/demo.mjs](../scripts/demo.mjs). Runs today, on a
-throwaway `anvil` rather than Arc, because 2.4 is blocked. Same bytecode, same
-report encoding, same refund arithmetic; what it does not exercise is Arc
-itself, a real forwarder, and a real payment.
-
+- [x] Point it at Open-Meteo and pair it with a violating twin — **done**, as
+      two separate paywalls rather than one. `weather` bills 1 minor unit,
+      `weather-lite` bills 1 000 000, and the ENS `url` record on each subname
+      points at its own. `honest.json`'s price band was widened to `1..10000` to
+      match what its paywall actually charges: an SLA whose price clause
+      excludes the provider's own price would fail every real call, which is a
+      self-inflicted FAIL rather than a demonstration of anything
 - [x] Register both, fund bonds
 - [x] Happy path calls → PASS, no credit, deposit untouched
 - [x] Violating calls → FAIL → refund credited, asserted against the cap

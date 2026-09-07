@@ -7,18 +7,40 @@
       "type": "schema",
       "schema": {
         "type": "object",
-        "required": ["latitude", "longitude", "current"],
+        "required": [
+          "latitude",
+          "longitude",
+          "current"
+        ],
         "properties": {
-          "latitude": { "type": "number" },
-          "longitude": { "type": "number" },
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
           "current": {
             "type": "object",
-            "required": ["time", "temperature_2m", "wind_speed_10m"],
+            "required": [
+              "time",
+              "temperature_2m",
+              "wind_speed_10m"
+            ],
             "properties": {
-              "time": { "type": "string", "minLength": 1 },
-              "interval": { "type": "integer", "minimum": 0 },
-              "temperature_2m": { "type": "number" },
-              "wind_speed_10m": { "type": "number" }
+              "time": {
+                "type": "string",
+                "minLength": 1
+              },
+              "interval": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "temperature_2m": {
+                "type": "number"
+              },
+              "wind_speed_10m": {
+                "type": "number"
+              }
             }
           }
         }
@@ -32,9 +54,9 @@
     },
     {
       "id": "price-band",
-      "description": "$0.001 to $0.01 per call, in USDC minor units.",
+      "description": "The paywall charges 1 minor unit. The floor is that price and the ceiling is what the service promises never to exceed \u2014 a band the provider can actually honour.",
       "type": "priceRange",
-      "minMinorUnits": "1000",
+      "minMinorUnits": "1",
       "maxMinorUnits": "10000",
       "asset": "USDC"
     }

@@ -210,15 +210,13 @@ and a forwarder that swallows receiver reverts will report success either way.
 
 ## What this does not show
 
-- **A real x402 payment.** No live header was ever captured:
-  `GatewayWalletBatched` debits a pre-funded Circle Gateway balance, which we do
-  not have, and standing one up is an email-OTP login plus a terms acceptance in
-  the operator's name. The verdicts above carry a fixture payer.
-
-  `decodePayment` is no longer a stub for the *standard* half, though. x402's
-  `exact` scheme over ERC-3009 is specified in public, so it is implemented and
-  the signature is checked — edit the payer or the amount and it stops
-  verifying. Circle's scheme still refuses rather than guessing.
+- **A paid call end to end.** Verdikt's own half works: it builds and signs a
+  real `exact`/`eip3009` header from the live challenge, and Base Sepolia USDC
+  accepted the authorization inside it
+  ([`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)).
+  The paywall then answers 402 to that same header — it advertises the scheme
+  and appears not to implement it. So the verdicts above carry a fixture payer,
+  and the gap is on the provider's side, not in the decoding.
 - **A deployed workflow.** Simulation, not production enrollment.
 - **A real attested enclave.** The simulator says so itself: *"The simulator is
   not a real TEE, and is meant to debug."*
