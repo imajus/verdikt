@@ -657,12 +657,30 @@ day saved in Phase 4 here.
 - [x] Service list: slug, conformance, availability, deposit, status
 - [x] Service detail: rendered SLA clauses, verdict history, refund per verdict
 - [x] Platform stats: services registered, verdict breakdown, bonded, refunded
-- [ ] **Per-verdict failure detail — which clause failed, expected vs actual.**
-      Not reachable from chain data: `VerdictWritten` carries the outcome, payer
-      and amount, and the clause results exist only in the workflow's return
-      value, which goes to the proxy. The detail view shows what a service
-      *promised* — the SLA clauses from ENS — beside what it delivered, which
-      answers "what am I buying" but not "which clause broke on call 47"
+- [~] **Per-verdict failure detail — which clause failed, expected vs actual.**
+      *Which clause* now reaches the chain; *expected vs actual* deliberately
+      does not.
+
+      The verdict carries `keccak256(clauseId)` — one word, added to the report
+      tuple, the `Verdict` struct and `VerdictWritten`. A hash rather than the
+      string because the id is provider-authored and unbounded, and a reader
+      already holds the SLA from ENS to match it against (`matchFailedClause`).
+      Four readings, all distinct and all shown as such: the clause id; the
+      implicit `delivery` clause, matched by name since no SLA declares it; the
+      zero word, meaning judgement fell back to status alone and evaluated no
+      clauses; and a hash matching nothing the SLA still declares, which means
+      the provider edited it after the fact and is worth saying plainly.
+
+      The observed `actual` value stays off-chain on purpose. It is a slice of a
+      response the agent paid for, and a public chain would publish it to
+      everyone — the opposite of what the enclave exists for. It reaches the
+      proxy in the workflow's return value, beside the body.
+
+      Proven end-to-end locally (`pnpm demo`, step 4). **The Arc deployment at
+      `0xa22440c1…` predates this** and decodes the five-field report; ABI
+      decoding ignores a trailing word, so it would accept the new report and
+      silently drop the clause rather than revert. Publishing this live is a
+      redeploy of both immutable receivers plus re-registering both services
 
 > **Deliberately not done now, and the reason is the cost, not the difficulty.**
 > Closing it means adding a `bytes32 failedClause` to the report tuple, the

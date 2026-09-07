@@ -166,7 +166,11 @@ public events, needs no enclave, writes no verdict and settles no refund.
 - **A deployed workflow.** Simulation, not production enrollment.
 - **A real attested enclave.** The simulator says so itself: *"The simulator is
   not a real TEE, and is meant to debug."*
-- **Per-verdict clause detail on the dashboard.** Clause results never reach the
-  chain; the detail view shows what a service promised beside what it delivered.
+- **Per-verdict clause detail, on *these* verdicts.** A verdict now names the
+  clause that broke, and the dashboard resolves it — but the registry above was
+  deployed before that field existed, so the two verdicts on it carry no clause.
+  `pnpm demo` shows the round trip locally. The observed value stays off-chain
+  by design: it is a slice of a paid response, and a public chain would publish
+  it to everyone.
 
 Everything else above is on a public chain and can be re-read from it.
