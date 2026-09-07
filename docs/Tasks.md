@@ -116,22 +116,55 @@ Two findings reshape work downstream, both detailed in
 
 Every refund depends on recovering the payer and the amount from the header.
 
-- [ ] **BLOCKED (needs a human), and here is exactly where.** The Circle CLI is
-      installed and does support this — `circle gateway deposit --method direct`
-      lists `ARC-TESTNET`, and `circle services pay` would pay the paywall for
-      its 1 minor unit ($0.000001). But it pays from a **Circle-managed agent
-      wallet**, and standing one up is `circle wallet create` + `circle wallet
-      login`, which is email + OTP. There is also a Terms-of-Use acceptance
+> **The captured challenge offers two different things, and only one of them
+> was ever unknowable.** `fixtures/x402/challenge-402.json` has three `accepts`
+> entries, all `scheme: "exact"`. Two are Circle's `GatewayWalletBatched`; the
+> third is `extra.assetTransferMethod: "eip3009"` — plain x402 over ERC-3009,
+> which is specified end to end in public. Treating the whole spike as blocked
+> on a live capture conflated the two.
+
+- [ ] **Capturing a live header is BLOCKED (needs a human), and here is exactly
+      where.** The Circle CLI is installed and does support this —
+      `circle gateway deposit --method direct` lists `ARC-TESTNET`, and
+      `circle services pay` would pay the paywall for its 1 minor unit
+      ($0.000001). But it pays from a **Circle-managed agent wallet**, and
+      standing one up is `circle wallet create` + `circle wallet login`, which
+      is email + OTP. There is also a Terms-of-Use acceptance
       (`CIRCLE_ACCEPT_TERMS=1`) that is a legal act in the operator's name, not
       an agent's to make.
-      The alternative — hand-signing a `GatewayWalletBatched` burn intent with
-      `cast` — is circular: the payload format is the thing this spike exists to
-      learn, so inventing it proves nothing
-- [ ] Decode it; extract payer address and paid amount — blocked on the above
-- [ ] **Verify those fields are cryptographically bound** — signed by the
-      payer, not merely asserted in a JSON blob. The refund target is read
-      out of this header, so if the binding is weak, anyone can name a
-      different payer and redirect refunds. Blocked on the above
+      For `GatewayWalletBatched` the old objection still holds: hand-signing a
+      burn intent is circular, because its payload format is the thing a capture
+      would teach us and Circle does not publish it
+- [x] Decode it; extract payer address and paid amount — **done for `eip3009`**,
+      against the spec rather than a capture. The envelope is x402's own
+      (base64 of `{x402Version, scheme, network, payload}`) and the payload is
+      ERC-3009's `{signature, authorization}`. `GatewayWalletBatched` still
+      refuses rather than guessing
+- [x] **Verify those fields are cryptographically bound** — **answered, and
+      enforced.** For `eip3009` the payer is *recovered* from an ERC-3009
+      signature over the exact
+      `(from, to, value, validAfter, validBefore, nonce)` tuple, never read out
+      of a JSON field. `payment.test.js` proves it by signing real headers and
+      then editing them: swapping the payer, inflating the amount, or moving the
+      validity window each invalidates the signature. A payment validly signed
+      to a *different* recipient is refused too — that is a good signature over
+      the wrong payment, and crediting it would let an agent claim a refund on a
+      call the provider was never paid for.
+
+      Two constraints fell out of doing it, both real rather than incidental:
+
+      - **The header is not self-describing.** It names its scheme and network
+        but not the asset, and the EIP-712 domain needs the asset as
+        `verifyingContract` plus the token's `name` and `version`. Those are in
+        the *challenge*, so verification requires the matching `accepts` entry
+        in hand — which is why `decodePayment` takes it as a required argument
+        and refuses without it, rather than trusting an unverified payer.
+      - **The proxy therefore cannot verify a paid call today**, because it does
+        not keep the challenge it relayed. Wiring that up means either caching
+        challenges per service or re-fetching one per paid call, which is a real
+        cost for a path the demo does not exercise — the demo's Arc option is
+        `GatewayWalletBatched`. Left as an explicit follow-on rather than
+        decided here
 - [x] Confirm the amount is in known minor units — **answered from the
       challenge alone**, without a paid call. The captured
       `GatewayWalletBatched` option carries
@@ -140,7 +173,9 @@ Every refund depends on recovering the payer and the amount from the header.
       view, which is what `VerdiktRegistry.NATIVE_PER_MINOR_UNIT` converts from
 
 Deliverable: `packages/sdk/payment.js` with `decodePayment(header)` plus a
-fixture test.
+test — done, and not a fixture test. A pasted fixture can assert a binding but
+cannot demonstrate one, so `payment.test.js` signs each header with a real key
+and then tampers with it.
 
 > **Fallback.** If payer/amount aren't verifiable from the header alone,
 > take them from the settlement receipt instead and have the enclave
@@ -153,7 +188,9 @@ fixture test.
       beside it. `proxy/src/app.test.js` runs the payTo check against it
 - [x] Provider 200 response — `PROVIDER_RESPONSE` in `fixtures/`, the Open-Meteo
       `current` block the demo SLAs are written against
-- [ ] `X-PAYMENT` header and settlement receipt — blocked with 0.4
+- [~] `X-PAYMENT` header — no longer needed as a frozen fixture for `eip3009`:
+      the tests sign their own, which is stronger. Still blocked with 0.4 for
+      `GatewayWalletBatched` and for the settlement receipt
 - [x] Everything downstream develops against these — no live paid call needed
       to run a test. The one exception is the payment header itself, which is
       why `decodePayment` refuses to run without an explicit opt-in

@@ -210,10 +210,15 @@ and a forwarder that swallows receiver reverts will report success either way.
 
 ## What this does not show
 
-- **A real x402 payment.** Spike C never ran: `GatewayWalletBatched` debits a
-  pre-funded Circle Gateway balance, which we do not have. `decodePayment` is
-  still a fixture stub and *refuses to run* without an explicit opt-in, so it
-  cannot ship unnoticed. The verdicts above carry a fixture payer.
+- **A real x402 payment.** No live header was ever captured:
+  `GatewayWalletBatched` debits a pre-funded Circle Gateway balance, which we do
+  not have, and standing one up is an email-OTP login plus a terms acceptance in
+  the operator's name. The verdicts above carry a fixture payer.
+
+  `decodePayment` is no longer a stub for the *standard* half, though. x402's
+  `exact` scheme over ERC-3009 is specified in public, so it is implemented and
+  the signature is checked — edit the payer or the amount and it stops
+  verifying. Circle's scheme still refuses rather than guessing.
 - **A deployed workflow.** Simulation, not production enrollment.
 - **A real attested enclave.** The simulator says so itself: *"The simulator is
   not a real TEE, and is meant to debug."*

@@ -171,11 +171,17 @@ verification would be self-refuting.
   (`cre whoami` → *Deploy Access: Not enabled*), so both receivers are pinned to
   the simulation forwarder. The simulator says it plainly: *"The simulator is not
   a real TEE."*
-- **`decodePayment` is a stub.** Spike C — decoding a real
-  `GatewayWalletBatched` `X-PAYMENT` header — has not run. Every refund targets
-  the payer that function returns, so it now *refuses to run* unless
-  `VERDIKT_ALLOW_STUB_PAYMENT=true` is set explicitly. Shipping it unnoticed
-  would send every refund to a fixture address.
+- **`decodePayment` handles half of x402, and refuses the other half.** The
+  `exact`/`eip3009` scheme is implemented and *verified* — the payer is
+  recovered from an ERC-3009 signature, so swapping the payer or inflating the
+  amount invalidates it, which the tests demonstrate by doing exactly that to
+  headers they signed. Circle's `GatewayWalletBatched` — the option the demo
+  paywall offers on Arc — is not published, so it refuses rather than guessing,
+  unless `VERDIKT_ALLOW_STUB_PAYMENT=true` is set explicitly. The verdicts above
+  therefore carry a fixture payer.
+- **No paid call has been verified end to end.** The header names its scheme but
+  not its asset, and the EIP-712 domain needs one, so verification requires the
+  challenge that payment answers — which the proxy does not currently keep.
 - **The KeystoneForwarder metadata offsets are confirmed against the SDK's own
   parser, but not against a live delivery.** Every offset matches
   `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a
