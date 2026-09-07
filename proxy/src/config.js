@@ -27,8 +27,6 @@ export function loadConfig(source = process.env) {
     return { triggerUrl, workflowId, privateKey, callbackUrl, timeoutMs: Number(env('PROXY_VERIFY_TIMEOUT_MS') ?? 45_000) };
   };
   return {
-    port: Number(env('PROXY_PORT') ?? 8402),
-    host: env('PROXY_HOST') ?? '0.0.0.0',
     /**
      * Agents call `<slug>.verdikt.bond/<path>`, so the slug arrives in the Host
      * header in production. The `/:slug/*` path form stays supported for local

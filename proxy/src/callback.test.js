@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildApp } from './app.js';
+import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, createPendingRegistry, createWorkflowClient } from './verification.js';
 import { decodeTriggerJwt } from './jwt.js';
@@ -34,7 +34,7 @@ const result = (overrides = {}) => ({
 /** @param {{ token?: string|null }} [options] */
 function harness({ token = TOKEN } = {}) {
   const pending = createPendingRegistry();
-  const app = buildApp({
+  const deps = /** @type {ProxyDeps} */ ({
     config: { ...config, callbackToken: token ?? undefined },
     registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
     resolveServiceRecord: async () => {
@@ -47,13 +47,13 @@ function harness({ token = TOKEN } = {}) {
    * @param {Record<string, string>} [headers]
    */
   const post = (body, headers = { authorization: `Bearer ${TOKEN}` }) =>
-    app.inject({
+    call(deps, {
       method: 'POST',
       url: '/internal/verification-callback',
       headers: { 'content-type': 'application/json', ...headers },
-      payload: typeof body === 'string' ? body : JSON.stringify(body)
+      payload: body
     });
-  return { app, pending, post };
+  return { deps, pending, post };
 }
 
 describe('the verification callback', () => {

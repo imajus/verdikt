@@ -199,7 +199,9 @@ export function createWorkflowClient(options) {
         // Release the waiter registered above, or it sits until the timeout for
         // an error already known. Swallow its rejection — `failure` is thrown.
         waiting.catch(() => {});
-        pending.cancel(request.requestId, failure);
+        // Awaited so a DO-backed registry's network round trip completes
+        // before this function returns; a no-op await for the in-memory one.
+        await pending.cancel(request.requestId, failure);
         throw failure;
       }
 

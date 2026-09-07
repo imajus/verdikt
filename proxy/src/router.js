@@ -1,4 +1,8 @@
-// The Verdikt proxy (Specification.md §2, Tasks.md Phase 4).
+// The Verdikt proxy (Specification.md §2, Tasks.md Phase 4), as a plain
+// Request → Response function rather than a framework app. Cloudflare Workers
+// have no long-lived process to host a Fastify server on, so `handleRequest`
+// is what `worker.js` calls from its `fetch` handler, and what tests call
+// directly with a constructed `Request` — the same seam `buildApp` used to be.
 //
 // Deliberately small: no wallet, no signing, no correlation store. The agent
 // signs its own payment, and payer and amount ride in the payment payload, so
@@ -9,7 +13,6 @@
 // enclave boundary.
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
-import Fastify from 'fastify';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkChallenge } from './challenge.js';
 import { discover, toListing } from './discovery.js';
@@ -20,36 +23,46 @@ import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './
 /** Mirrors `VerdiktRegistry._assertValidSlug`. */
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
+/** @param {unknown} body @param {number} [status] @param {Record<string,string>} [headers] */
+const json = (body, status = 200, headers = {}) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
+
 /**
  * Agents call `<slug>.verdikt.bond/<path>`; the path form exists so local
- * development and tests work without wildcard DNS. The Host header wins when it
+ * development and tests work without wildcard DNS. The hostname wins when it
  * is a subdomain of the public host, because that is the production route.
  *
- * @param {import('fastify').FastifyRequest} request
+ * Read off `request.url`'s own hostname rather than a `Host` header: a
+ * Worker's `Request.url` already carries the hostname the request actually
+ * arrived on, and reading it that way needs no header (some `fetch`
+ * implementations refuse to let a constructed `Request` set `Host` at all).
+ *
+ * @param {Request} request
  * @param {ProxyConfig} config
  * @returns {{ slug: string, rest: string } | null}
  */
 export function routeOf(request, config) {
-  const host = String(request.headers.host ?? '').split(':')[0].toLowerCase();
+  const url = new URL(request.url);
+  const host = url.hostname.toLowerCase();
   const suffix = `.${config.publicHost.toLowerCase()}`;
-  const path = request.url.split('?')[0];
 
   if (host.endsWith(suffix)) {
     const slug = host.slice(0, -suffix.length);
     if (!SLUG.test(slug)) return null;
-    return { slug, rest: path.replace(/^\/+/, '') };
+    return { slug, rest: url.pathname.replace(/^\/+/, '') };
   }
 
-  const [, slug, ...rest] = path.split('/');
+  const [, slug, ...rest] = url.pathname.split('/');
   if (!slug || !SLUG.test(slug)) return null;
   return { slug, rest: rest.join('/') };
 }
 
 /**
+ * @param {Request} request
  * @param {ProxyDeps} [deps]
- * @returns {import('fastify').FastifyInstance}
+ * @returns {Promise<Response>}
  */
-export function buildApp(deps = {}) {
+export async function handleRequest(request, deps = {}) {
   const config = deps.config ?? loadConfig();
   const resolve = deps.resolveServiceRecord ?? resolveServiceRecord;
   const registry = deps.registry ?? createRegistryReader(config.arc);
@@ -62,135 +75,109 @@ export function buildApp(deps = {}) {
   // instead of the relay refusing to start.
   const marketplace = deps.marketplace ?? null;
 
-  const app = Fastify({ logger: deps.logger ?? false });
+  const url = new URL(request.url);
 
-  // Bodies are relayed byte-for-byte. Fastify's JSON parser would re-serialise
-  // them, which changes what the provider — and therefore the SLA's schema
-  // clause — actually sees.
-  app.removeAllContentTypeParsers();
-  app.addContentTypeParser('*', { parseAs: 'buffer' }, (_request, body, done) =>
-    done(null, body.length > 0 ? body : undefined)
-  );
-
-  app.get('/healthz', async () => ({ ok: true }));
+  if (request.method === 'GET' && url.pathname === '/healthz') {
+    return json({ ok: true });
+  }
 
   // The machine-facing marketplace (Specification.md §5, stretch 2). Exact
-  // routes, so they are matched ahead of the `/*` service catch-all.
-  app.get('/services', async (request, reply) => {
+  // routes, so they are matched ahead of the service catch-all below.
+  if (request.method === 'GET' && url.pathname === '/services') {
     if (!marketplace) {
-      return reply.code(503).send({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' });
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
     }
     try {
       const { services } = await marketplace();
-      return discover(services, /** @type {Record<string, string|undefined>} */ (request.query), config.publicHost);
+      return json(discover(services, Object.fromEntries(url.searchParams), config.publicHost));
     } catch (error) {
-      return reply.code(503).send({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message });
+      return json({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message }, 503);
     }
-  });
+  }
 
-  app.get('/services/:slug', async (request, reply) => {
-    const { slug } = /** @type {{ slug: string }} */ (request.params);
+  const servicesSlug = request.method === 'GET' ? url.pathname.match(/^\/services\/([^/]+)$/) : null;
+  if (servicesSlug) {
+    const slug = servicesSlug[1];
     if (!marketplace) {
-      return reply.code(503).send({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' });
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
     }
     const { services } = await marketplace();
     const found = services.find((listing) => listing.slug === slug);
-    if (!found) return reply.code(404).send({ error: 'unknown_service', slug });
-    return toListing(found, config.publicHost);
-  });
+    if (!found) return json({ error: 'unknown_service', slug }, 404);
+    return json(toListing(found, config.publicHost));
+  }
 
   // Where the enclave pushes a finished verification (docs/spikes/cre.md,
-  // CRE-9). An exact route, so it is matched ahead of the `/*` service catch-all
+  // CRE-9). An exact route, so it is matched ahead of the service catch-all
   // and can never be mistaken for a slug.
-  //
-  // Two things authenticate it, and both matter. The bearer is a shared secret
-  // the workflow holds; `requestId` is 32 random bytes this process issued and
-  // has not yet answered. Forging a callback would put attacker-chosen bytes in
-  // front of a paying agent — it could not fake the on-chain verdict, which the
-  // DON signs, but the agent would still be handed the wrong response.
-  app.post('/internal/verification-callback', async (request, reply) => {
-    if (!config.callbackToken || !bearerMatches(request.headers.authorization, config.callbackToken)) {
-      return reply.code(401).send({ error: 'unauthorized' });
-    }
-    let payload;
-    try {
-      payload = JSON.parse(Buffer.from(/** @type {Buffer} */ (request.body) ?? Buffer.alloc(0)).toString('utf8'));
-    } catch {
-      return reply.code(400).send({ error: 'malformed_callback' });
-    }
-    const requestId = payload?.requestId;
-    if (typeof requestId !== 'string') return reply.code(400).send({ error: 'missing_request_id' });
+  if (request.method === 'POST' && url.pathname === '/internal/verification-callback') {
+    return handleCallback(request, { config, workflow });
+  }
 
-    // Unknown means already answered, timed out, or never issued here. Accepting
-    // it would be accepting a result nobody asked for.
-    const delivered = workflow?.pending?.settle(requestId, parseWorkflowResult(payload));
-    if (!delivered) return reply.code(409).send({ error: 'no_such_pending_request', requestId });
-    return { ok: true };
-  });
+  const route = routeOf(request, config);
+  if (!route) {
+    return json({ error: 'unknown_service', detail: 'no valid service slug in the host or path' }, 404);
+  }
+  const { slug, rest } = route;
 
-  app.all('/*', async (request, reply) => {
-    const route = routeOf(request, config);
-    if (!route) {
-      return reply.code(404).send({ error: 'unknown_service', detail: 'no valid service slug in the host or path' });
-    }
-    const { slug, rest } = route;
+  /** @type {ServiceRecord} */
+  let record;
+  try {
+    record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs });
+  } catch (error) {
+    // Distinct from "no records published": ENS being unreachable is our
+    // outage, and the agent should retry rather than be told the service
+    // does not exist.
+    return json({ error: 'naming_layer_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
 
-    /** @type {ServiceRecord} */
-    let record;
-    try {
-      record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs });
-    } catch (error) {
-      // Distinct from "no records published": ENS being unreachable is our
-      // outage, and the agent should retry rather than be told the service
-      // does not exist.
-      return reply
-        .code(503)
-        .send({ error: 'naming_layer_unavailable', detail: /** @type {Error} */ (error).message });
-    }
+  if (!record.url) {
+    return json({ error: 'no_endpoint', detail: `${record.name} has published no url record` }, 502);
+  }
 
-    if (!record.url) {
-      return reply
-        .code(502)
-        .send({ error: 'no_endpoint', detail: `${record.name} has published no url record` });
-    }
+  /** @type {ServiceState} */
+  let state;
+  try {
+    state = await registry.getService(record.serviceId);
+  } catch (error) {
+    return json({ error: 'registry_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
 
-    /** @type {ServiceState} */
-    let state;
-    try {
-      state = await registry.getService(record.serviceId);
-    } catch (error) {
-      return reply.code(503).send({ error: 'registry_unavailable', detail: /** @type {Error} */ (error).message });
-    }
-
-    // Checked on the unpaid leg too, not just before a payment: an agent that
-    // never receives a challenge for a suspended service cannot pay one.
-    if (state.status !== 'ACTIVE') {
-      return reply.code(503).send({
+  // Checked on the unpaid leg too, not just before a payment: an agent that
+  // never receives a challenge for a suspended service cannot pay one.
+  if (state.status !== 'ACTIVE') {
+    return json(
+      {
         error: 'service_not_active',
         status: state.status,
         detail:
           state.status === 'SUSPENDED'
             ? 'refunds drained this service’s bond; it is not routing until topped up'
             : `service is ${state.status}`
-      });
-    }
+      },
+      503
+    );
+  }
 
-    let upstream;
-    try {
-      upstream = joinUpstream(assertRelayableUrl(record.url, config.allowPrivateUpstream), rest, request.url.includes('?') ? `?${request.url.split('?').slice(1).join('?')}` : '');
-    } catch (error) {
-      return reply.code(502).send({ error: 'bad_upstream', detail: /** @type {Error} */ (error).message });
-    }
+  let upstream;
+  try {
+    upstream = joinUpstream(assertRelayableUrl(record.url, config.allowPrivateUpstream), rest, url.search);
+  } catch (error) {
+    return json({ error: 'bad_upstream', detail: /** @type {Error} */ (error).message }, 502);
+  }
 
-    const paymentHeader = request.headers['x-payment'];
-    if (typeof paymentHeader === 'string' && paymentHeader.length > 0) {
-      return verified({ request, reply, record, upstream, paymentHeader, decode, workflow, newRequestId });
-    }
+  // Bodies are relayed byte-for-byte, buffered once here rather than streamed:
+  // re-serialising them would change what the provider — and therefore the
+  // SLA's schema clause — actually sees, and there is no method here that
+  // needs the original body streamed rather than replayed whole.
+  const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
 
-    return passthrough({ request, reply, record, upstream, doFetch, config });
-  });
+  const paymentHeader = request.headers.get('x-payment');
+  if (paymentHeader) {
+    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId });
+  }
 
-  return app;
+  return passthrough({ request, record, upstream, body, doFetch, config });
 }
 
 /**
@@ -198,26 +185,26 @@ export function buildApp(deps = {}) {
  * `payTo` to sign against.
  *
  * @param {{
- *   request: import('fastify').FastifyRequest,
- *   reply: import('fastify').FastifyReply,
+ *   request: Request,
  *   record: ServiceRecord,
  *   upstream: URL,
+ *   body: ArrayBuffer|undefined,
  *   doFetch: typeof fetch,
  *   config: ProxyConfig
  * }} args
  */
-async function passthrough({ request, reply, record, upstream, doFetch, config }) {
+async function passthrough({ request, record, upstream, body, doFetch, config }) {
   let response;
   try {
     response = await doFetch(upstream, {
       method: request.method,
-      headers: forwardRequestHeaders(request.headers),
-      body: /** @type {BodyInit|undefined} */ (request.body ?? undefined),
+      headers: forwardRequestHeaders(Object.fromEntries(request.headers)),
+      body,
       signal: AbortSignal.timeout(config.upstreamTimeoutMs),
       redirect: 'manual'
     });
   } catch (error) {
-    return reply.code(502).send({ error: 'upstream_unreachable', detail: /** @type {Error} */ (error).message });
+    return json({ error: 'upstream_unreachable', detail: /** @type {Error} */ (error).message }, 502);
   }
 
   const headers = forwardResponseHeaders(response.headers);
@@ -225,29 +212,32 @@ async function passthrough({ request, reply, record, upstream, doFetch, config }
   if (response.status !== 402) {
     // Nothing to verify on a non-challenge response: no payment is being
     // proposed, so there is no payTo to spoof.
-    const body = Buffer.from(await response.arrayBuffer());
-    return reply.code(response.status).headers(headers).send(body);
+    return new Response(await response.arrayBuffer(), { status: response.status, headers });
   }
 
-  const body = await response.text();
-  const verdict = checkChallenge(body, record.address);
+  const challengeBody = await response.text();
+  const verdict = checkChallenge(challengeBody, record.address);
   if (!verdict.ok) {
     // The challenge is deliberately NOT relayed. Passing it on with a warning
     // would still put a spoofed payTo in front of an agent that might sign it,
     // and a payment to a spoofed address leaves no bond to reclaim from.
-    return reply.code(502).headers({ 'x-verdikt-block': verdict.reason }).send({
-      error: 'pay_to_mismatch',
-      reason: verdict.reason,
-      detail: verdict.detail,
-      service: record.name,
-      expectedPayTo: record.address
-    });
+    return json(
+      {
+        error: 'pay_to_mismatch',
+        reason: verdict.reason,
+        detail: verdict.detail,
+        service: record.name,
+        expectedPayTo: record.address
+      },
+      502,
+      { 'x-verdikt-block': verdict.reason }
+    );
   }
 
-  return reply
-    .code(402)
-    .headers({ ...headers, 'x-verdikt-pay-to-verified': 'true' })
-    .send(body);
+  return new Response(challengeBody, {
+    status: 402,
+    headers: { ...headers, 'x-verdikt-pay-to-verified': 'true' }
+  });
 }
 
 /**
@@ -305,8 +295,7 @@ function failureDetailHeaders(clauses) {
  * Nothing may silently swallow what they bought.
  *
  * @param {{
- *   request: import('fastify').FastifyRequest,
- *   reply: import('fastify').FastifyReply,
+ *   request: Request,
  *   record: ServiceRecord,
  *   upstream: URL,
  *   paymentHeader: string,
@@ -315,12 +304,12 @@ function failureDetailHeaders(clauses) {
  *   newRequestId: () => string
  * }} args
  */
-async function verified({ request, reply, record, upstream, paymentHeader, decode, workflow, newRequestId }) {
+async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId }) {
   if (!workflow) {
-    return reply.code(503).send({
+    return json({
       error: 'verification_unavailable',
       detail: 'the proxy is not configured with a workflow endpoint, so no paid call can be verified'
-    });
+    }, 503);
   }
 
   /** @type {DecodedPayment} */
@@ -330,7 +319,7 @@ async function verified({ request, reply, record, upstream, paymentHeader, decod
   } catch (error) {
     // Refused before the workflow is triggered: every refund targets the payer
     // this returns, so a proxy that cannot decode a payment must not verify one.
-    return reply.code(500).send({ error: 'payment_undecodable', detail: /** @type {Error} */ (error).message });
+    return json({ error: 'payment_undecodable', detail: /** @type {Error} */ (error).message }, 500);
   }
 
   const requestId = newRequestId();
@@ -352,16 +341,17 @@ async function verified({ request, reply, record, upstream, paymentHeader, decod
     // Deliberately visible, and deliberately not a 502-that-looks-like-the-
     // provider's-fault. The agent has paid; a swallowed error here is
     // indistinguishable from a service that took the money and returned nothing.
-    return reply
-      .code(failure === VERIFICATION_FAILURE.TIMEOUT ? 504 : 502)
-      .headers({ 'x-verdikt-request-id': requestId })
-      .send({
+    return json(
+      {
         error: failure,
         detail: /** @type {Error} */ (error).message,
         requestId,
         paid: true,
         advice: 'the payment settled; the response could not be delivered. Keep this requestId.'
-      });
+      },
+      failure === VERIFICATION_FAILURE.TIMEOUT ? 504 : 502,
+      { 'x-verdikt-request-id': requestId }
+    );
   }
 
   const headers = {
@@ -381,23 +371,50 @@ async function verified({ request, reply, record, upstream, paymentHeader, decod
   // The provider's own status is relayed, not rewritten. A provider 5xx is an
   // SLA failure that `evaluate` has already judged — turning it into a proxy
   // error would hide from the agent what it actually bought.
-  return reply
-    .code(result.status ?? 502)
-    .headers({ ...result.headers, ...headers })
-    .send(result.body);
+  return new Response(result.body, { status: result.status ?? 502, headers: { ...result.headers, ...headers } });
+}
+
+/**
+ * Two things authenticate a callback, and both matter. The bearer is a shared
+ * secret the workflow holds; `requestId` is 32 random bytes this process
+ * issued and has not yet answered. Forging a callback would put
+ * attacker-chosen bytes in front of a paying agent — it could not fake the
+ * on-chain verdict, which the DON signs, but the agent would still be handed
+ * the wrong response.
+ *
+ * @param {Request} request
+ * @param {{ config: ProxyConfig, workflow: WorkflowClient|null }} deps
+ */
+async function handleCallback(request, { config, workflow }) {
+  if (!config.callbackToken || !bearerMatches(request.headers.get('authorization'), config.callbackToken)) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+  let payload;
+  try {
+    payload = await request.json();
+  } catch {
+    return json({ error: 'malformed_callback' }, 400);
+  }
+  const requestId = /** @type {{ requestId?: unknown }} */ (payload)?.requestId;
+  if (typeof requestId !== 'string') return json({ error: 'missing_request_id' }, 400);
+
+  // Unknown means already answered, timed out, or never issued here. Accepting
+  // it would be accepting a result nobody asked for.
+  const delivered = await workflow?.pending?.settle(requestId, parseWorkflowResult(payload));
+  if (!delivered) return json({ error: 'no_such_pending_request', requestId }, 409);
+  return json({ ok: true });
 }
 
 /**
  * Constant-time bearer comparison. A plain `===` leaks the shared secret one
  * character at a time to anyone who can time the endpoint.
  *
- * @param {string|string[]|undefined} header
+ * @param {string|null} header
  * @param {string} expected
  */
 function bearerMatches(header, expected) {
-  const value = Array.isArray(header) ? header[0] : header;
-  if (typeof value !== 'string' || !value.startsWith('Bearer ')) return false;
-  const given = Buffer.from(value.slice(7), 'utf8');
+  if (typeof header !== 'string' || !header.startsWith('Bearer ')) return false;
+  const given = Buffer.from(header.slice(7), 'utf8');
   const want = Buffer.from(expected, 'utf8');
   return given.length === want.length && timingSafeEqual(given, want);
 }

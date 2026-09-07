@@ -48,7 +48,7 @@ Nothing in Phases 1–5 is safe to build until 0.2–0.4 have answers.
   - `packages/sla/` — evaluation engine (JS, ESM)
   - `packages/sdk/` — Arc + ENS read wrapper (spec §3)
   - `cre/` — the two workflows
-  - `proxy/` — Fastify
+  - `proxy/` — Cloudflare Worker
   - `web/` — dashboard
   - `fixtures/` — recorded challenges, payloads, responses
 - [x] Vitest at the root; JS + ESM throughout except where the CRE SDK

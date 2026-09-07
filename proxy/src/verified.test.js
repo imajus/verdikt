@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SERVICE_RECORD, SLA_TEXT } from '@verdikt/fixtures';
-import { buildApp } from './app.js';
+import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
 
@@ -32,7 +32,7 @@ function harness({ result, noWorkflow = false, paymentError } = {}) {
     if (result instanceof Error) throw result;
     return result ?? verdict();
   });
-  const app = buildApp({
+  const deps = /** @type {ProxyDeps} */ ({
     config,
     resolveServiceRecord: async () => ({
       ...SERVICE_RECORD,
@@ -46,14 +46,18 @@ function harness({ result, noWorkflow = false, paymentError } = {}) {
       return { payer: PAYER, amount: 2500n };
     },
     workflow: noWorkflow ? null : { verify },
-    newRequestId: () => REQUEST_ID
+    newRequestId: () => REQUEST_ID,
+    // Only reached by the one test that sends no X-PAYMENT and falls through
+    // to passthrough; every other test here takes the verified branch, which
+    // never calls it.
+    fetch: async () => new Response('unused', { status: 200 })
   });
-  return { app, verify };
+  return { deps, verify };
 }
 
-/** @param {import('fastify').FastifyInstance} app */
-const paidCall = (app) =>
-  app.inject({
+/** @param {ProxyDeps} deps */
+const paidCall = (deps) =>
+  call(deps, {
     method: 'GET',
     url: '/weather/current?lat=52',
     headers: { host: 'proxy.local', 'x-payment': 'eyJzY2hlbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCJ9' }
@@ -61,8 +65,8 @@ const paidCall = (app) =>
 
 describe('the verified branch — the happy path', () => {
   it('relays the provider’s payload with the verdict attached', async () => {
-    const { app } = harness();
-    const response = await paidCall(app);
+    const { deps } = harness();
+    const response = await paidCall(deps);
 
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('{"current":{"temperature_2m":12.5}}');
@@ -72,8 +76,8 @@ describe('the verified branch — the happy path', () => {
   });
 
   it('hands the enclave the SLA it resolved, so the workflow never touches ENS', async () => {
-    const { app, verify } = harness();
-    await paidCall(app);
+    const { deps, verify } = harness();
+    await paidCall(deps);
     const sent = verify.mock.lastCall?.[0];
     expect(sent?.sla).toBe(SLA_TEXT.honest);
     expect(sent?.payer).toBe(PAYER);
@@ -91,14 +95,14 @@ describe('the verified branch — the happy path', () => {
 
 describe('the verified branch — outcomes that are not PASS', () => {
   it('relays a FAIL response with the verdict and the failing clause detail', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: verdict({
         outcome: 'FAIL',
         status: 200,
         clauses: [{ id: 'speed', type: 'latency', pass: false, expected: '<= 5000ms', actual: '9000ms' }]
       })
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(200);
     expect(response.headers['x-verdikt-verdict']).toBe('FAIL');
     // The chain records only which clause broke. The agent that paid for this
@@ -113,7 +117,7 @@ describe('the verified branch — outcomes that are not PASS', () => {
   // The same one the verdict records, so the header and the chain cannot
   // disagree about which promise was missed.
   it('names only the first failure, in the SLA declared order', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: verdict({
         outcome: 'FAIL',
         clauses: [
@@ -122,16 +126,16 @@ describe('the verified branch — outcomes that are not PASS', () => {
         ]
       })
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.headers['x-verdikt-failed-clause']).toBe('shape');
     expect(response.headers['x-verdikt-actual']).toBe('b');
   });
 
   it('says nothing about a clause when nothing broke', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: verdict({ clauses: [{ id: 'speed', type: 'latency', pass: true, expected: 'x', actual: 'y' }] })
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.headers['x-verdikt-failed-clause']).toBeUndefined();
     expect(response.headers['x-verdikt-expected']).toBeUndefined();
   });
@@ -142,7 +146,7 @@ describe('the verified branch — outcomes that are not PASS', () => {
    * header of the agent's own.
    */
   it('cannot be used to inject a header or blow the header block', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: verdict({
         outcome: 'FAIL',
         clauses: [
@@ -156,7 +160,7 @@ describe('the verified branch — outcomes that are not PASS', () => {
         ]
       })
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.headers['x-verdikt-verdict']).toBe('FAIL');
     const actual = String(response.headers['x-verdikt-actual']);
     expect(actual).not.toMatch(/[\r\n]/);
@@ -166,8 +170,8 @@ describe('the verified branch — outcomes that are not PASS', () => {
   it('relays a provider 5xx as a 5xx rather than dressing it up as a proxy error', async () => {
     // It is an SLA failure the engine has already judged; rewriting it would
     // hide from the agent what it actually bought.
-    const { app } = harness({ result: verdict({ outcome: 'FAIL', status: 503, body: 'upstream down' }) });
-    const response = await paidCall(app);
+    const { deps } = harness({ result: verdict({ outcome: 'FAIL', status: 503, body: 'upstream down' }) });
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(503);
     expect(response.body).toBe('upstream down');
     expect(response.headers['x-verdikt-verdict']).toBe('FAIL');
@@ -175,18 +179,18 @@ describe('the verified branch — outcomes that are not PASS', () => {
 
   it('reports NONE when the fallback declined to write a verdict, and still delivers', async () => {
     // No verdict is not the same as no delivery: the agent paid for the 4xx.
-    const { app } = harness({
+    const { deps } = harness({
       result: verdict({ outcome: null, mode: 'status-only', reason: 'sla record unreadable', status: 404, tx: null })
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(404);
     expect(response.headers['x-verdikt-verdict']).toBe('NONE');
     expect(response.headers['x-verdikt-fallback-reason']).toBe('sla record unreadable');
   });
 
   it('flags a truncated payload rather than letting it look complete', async () => {
-    const { app } = harness({ result: verdict({ bodyTruncated: true }) });
-    expect((await paidCall(app)).headers['x-verdikt-body-truncated']).toBe('true');
+    const { deps } = harness({ result: verdict({ bodyTruncated: true }) });
+    expect((await paidCall(deps)).headers['x-verdikt-body-truncated']).toBe('true');
   });
 });
 
@@ -194,8 +198,8 @@ describe('the verified branch — failure modes (Tasks.md 4.4)', () => {
   it('still relays the payload when the Arc write missed, and flags it', async () => {
     // The agent paid for the response; the verdict can be rewritten, the
     // response cannot be refetched — an x402 payment settles once.
-    const { app } = harness({ result: verdict({ tx: null }) });
-    const response = await paidCall(app);
+    const { deps } = harness({ result: verdict({ tx: null }) });
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(200);
     expect(response.body).toBe('{"current":{"temperature_2m":12.5}}');
     expect(response.headers['x-verdikt-verdict-unwritten']).toBe('true');
@@ -203,49 +207,49 @@ describe('the verified branch — failure modes (Tasks.md 4.4)', () => {
   });
 
   it('surfaces a workflow timeout distinctly, never silently', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: new VerificationError(VERIFICATION_FAILURE.TIMEOUT, 'no result within 45000ms')
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(504);
     expect(response.json()).toMatchObject({ error: 'workflow_timeout', paid: true, requestId: REQUEST_ID });
   });
 
   it('surfaces a rejected trigger as its own failure', async () => {
-    const { app } = harness({
+    const { deps } = harness({
       result: new VerificationError(VERIFICATION_FAILURE.TRIGGER_REJECTED, 'gateway returned 401')
     });
-    const response = await paidCall(app);
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(502);
     expect(response.json().error).toBe('trigger_rejected');
   });
 
   it('names the requestId on every failure, so a paying agent has something to quote', async () => {
-    const { app } = harness({ result: new Error('something unexpected') });
-    const response = await paidCall(app);
+    const { deps } = harness({ result: new Error('something unexpected') });
+    const response = await paidCall(deps);
     expect(response.headers['x-verdikt-request-id']).toBe(REQUEST_ID);
     expect(response.json().requestId).toBe(REQUEST_ID);
   });
 
   it('refuses to verify at all when it cannot decode the payment', async () => {
     // Every refund targets the payer this returns, so guessing is not an option.
-    const { app, verify } = harness({ paymentError: new Error('NOT_IMPLEMENTED (Spike C)') });
-    const response = await paidCall(app);
+    const { deps, verify } = harness({ paymentError: new Error('NOT_IMPLEMENTED (Spike C)') });
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(500);
     expect(response.json().error).toBe('payment_undecodable');
     expect(verify).not.toHaveBeenCalled();
   });
 
   it('refuses a paid call when no workflow is configured, rather than relaying it unverified', async () => {
-    const { app } = harness({ noWorkflow: true });
-    const response = await paidCall(app);
+    const { deps } = harness({ noWorkflow: true });
+    const response = await paidCall(deps);
     expect(response.statusCode).toBe(503);
     expect(response.json().error).toBe('verification_unavailable');
   });
 
   it('does not take the paid branch for an empty X-PAYMENT header', async () => {
-    const { app, verify } = harness();
-    await app.inject({ method: 'GET', url: '/weather/current', headers: { host: 'proxy.local', 'x-payment': '' } });
+    const { deps, verify } = harness();
+    await call(deps, { method: 'GET', url: '/weather/current', headers: { host: 'proxy.local', 'x-payment': '' } });
     expect(verify).not.toHaveBeenCalled();
   });
 });

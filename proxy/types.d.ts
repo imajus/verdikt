@@ -1,8 +1,6 @@
 // Ambient types for @verdikt/proxy. Global by design — no `export` in this file.
 
 interface ProxyConfig {
-  port: number;
-  host: string;
   /** Agents call `<slug>.verdikt.bond`; the slug is the Host subdomain. */
   publicHost: string;
   ensCacheTtlMs: number;
@@ -22,7 +20,7 @@ interface ProxyConfig {
   arc: { rpcUrl?: string; address?: string; deployBlock?: bigint };
 }
 
-/** Everything the app reaches outside itself, injectable so tests need no network. */
+/** Everything the router reaches outside itself, injectable so tests need no network. */
 interface ProxyDeps {
   config?: ProxyConfig;
   resolveServiceRecord?: (slug: string, options?: ResolveOptions) => Promise<ServiceRecord>;
@@ -35,7 +33,31 @@ interface ProxyDeps {
   newRequestId?: () => string;
   /** Backs the discovery API. Absent means /services answers 503. */
   marketplace?: (() => Promise<Marketplace>) | null;
-  logger?: unknown;
+}
+
+/** A Durable Object stub: the client-side handle `namespace.get(id)` returns. */
+interface DurableObjectStub {
+  fetch(input: string, init?: RequestInit): Promise<Response>;
+}
+
+/** Opaque — only ever round-tripped through `idFromName` and `get`. */
+type DurableObjectId = unknown;
+
+/** The one binding shape this proxy needs; not the full Workers Durable Object API. */
+interface DurableObjectNamespace {
+  idFromName(name: string): DurableObjectId;
+  get(id: DurableObjectId): DurableObjectStub;
+}
+
+/**
+ * What `wrangler.jsonc` hands `worker.js`'s `fetch(request, env)`: the
+ * `PENDING_VERIFICATION` Durable Object binding, plus everything
+ * `loadConfig` reads — the same env-var names as `.env`, just sourced from
+ * Workers vars/secrets instead of `process.env`.
+ */
+interface WorkerEnv {
+  PENDING_VERIFICATION: DurableObjectNamespace;
+  [key: string]: string | DurableObjectNamespace | undefined;
 }
 
 type VerificationFailure = 'workflow_timeout' | 'trigger_rejected' | 'run_failed';
@@ -74,12 +96,18 @@ interface VerificationResult {
   bodyTruncated?: boolean;
 }
 
-/** Requests waiting on a callback from the enclave, keyed by requestId. */
+/**
+ * Requests waiting on a callback from the enclave, keyed by requestId.
+ *
+ * `settle`/`cancel` return a `boolean` from the in-memory implementation and a
+ * `Promise<boolean>` from the Durable-Object-backed one (pending-do.js) — a
+ * network round trip either way, so every call site awaits it.
+ */
 interface PendingRegistry {
   readonly size: number;
   await(requestId: string, timeoutMs: number): Promise<VerificationResult>;
-  settle(requestId: string, result: VerificationResult): boolean;
-  cancel(requestId: string, error: Error): boolean;
+  settle(requestId: string, result: VerificationResult): boolean | Promise<boolean>;
+  cancel(requestId: string, error: Error): boolean | Promise<boolean>;
 }
 
 interface WorkflowClient {

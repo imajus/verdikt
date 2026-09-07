@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildApp } from './app.js';
+import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 import { discover, toListing } from './discovery.js';
 
@@ -114,27 +114,26 @@ describe('discover — filtering', () => {
 });
 
 describe('the routes', () => {
-  /** @param {(() => Promise<Marketplace>)|null} marketplace */
-  const app = (marketplace) =>
-    buildApp({
-      config,
-      marketplace,
-      registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
-      resolveServiceRecord: async () => {
-        throw new Error('unused');
-      }
-    });
+  /** @param {(() => Promise<Marketplace>)|null} marketplace @returns {ProxyDeps} */
+  const deps = (marketplace) => ({
+    config,
+    marketplace,
+    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
+    resolveServiceRecord: async () => {
+      throw new Error('unused');
+    }
+  });
 
   const ok = async () => ({ services: [listing()], stats: /** @type {never} */ ({}) });
 
   it('lists the marketplace', async () => {
-    const response = await app(ok).inject({ method: 'GET', url: '/services', headers: { host: 'proxy.local' } });
+    const response = await call(deps(ok), { method: 'GET', url: '/services', headers: { host: 'proxy.local' } });
     expect(response.statusCode).toBe(200);
     expect(response.json().services[0].slug).toBe('weather');
   });
 
   it('applies query filters', async () => {
-    const response = await app(ok).inject({
+    const response = await call(deps(ok), {
       method: 'GET',
       url: '/services?minAvailability=990',
       headers: { host: 'proxy.local' }
@@ -143,23 +142,23 @@ describe('the routes', () => {
   });
 
   it('serves one service, and 404s an unknown slug', async () => {
-    const instance = app(ok);
-    expect((await instance.inject({ method: 'GET', url: '/services/weather', headers: { host: 'proxy.local' } })).json().slug).toBe('weather');
-    expect((await instance.inject({ method: 'GET', url: '/services/nope', headers: { host: 'proxy.local' } })).statusCode).toBe(404);
+    const instance = deps(ok);
+    expect((await call(instance, { method: 'GET', url: '/services/weather', headers: { host: 'proxy.local' } })).json().slug).toBe('weather');
+    expect((await call(instance, { method: 'GET', url: '/services/nope', headers: { host: 'proxy.local' } })).statusCode).toBe(404);
   });
 
   it('is matched ahead of the service catch-all, not read as a slug', async () => {
     // Without exact routes, `/services` would be relayed to a provider named
     // "services" — or 404 as an unknown one.
-    const response = await app(ok).inject({ method: 'GET', url: '/services', headers: { host: 'proxy.local' } });
+    const response = await call(deps(ok), { method: 'GET', url: '/services', headers: { host: 'proxy.local' } });
     expect(response.json().count).toBe(1);
   });
 
   it('503s rather than pretending the marketplace is empty', async () => {
-    expect((await app(null).inject({ method: 'GET', url: '/services', headers: { host: 'proxy.local' } })).statusCode).toBe(503);
+    expect((await call(deps(null), { method: 'GET', url: '/services', headers: { host: 'proxy.local' } })).statusCode).toBe(503);
     const broken = async () => {
       throw new Error('arc down');
     };
-    expect((await app(broken).inject({ method: 'GET', url: '/services', headers: { host: 'proxy.local' } })).statusCode).toBe(503);
+    expect((await call(deps(broken), { method: 'GET', url: '/services', headers: { host: 'proxy.local' } })).statusCode).toBe(503);
   });
 });

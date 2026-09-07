@@ -58,9 +58,9 @@ describe('joinUpstream', () => {
     expect(joinUpstream(base, '', '?a=1').toString()).toBe('https://provider.example/weather?a=1');
   });
 
-  // A real Node server hands the raw path through without normalising it, so
-  // this is reachable in production even though fastify's test injector
-  // collapses dot-segments first.
+  // A real upstream server sees the raw path a client sent, so this is
+  // reachable in production even though the URL parser used to build a
+  // request in a router-level test collapses dot-segments first.
   it('refuses a path that climbs out of the provider’s own prefix', () => {
     for (const rest of ['../admin', '../../admin', 'a/../../admin']) {
       expect(() => joinUpstream(base, rest, ''), rest).toThrow(/escapes/);

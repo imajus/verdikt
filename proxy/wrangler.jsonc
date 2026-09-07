@@ -1,0 +1,43 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "verdikt-proxy",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-09-07",
+  // node:crypto (createHash, randomUUID, randomBytes, timingSafeEqual) and
+  // Buffer, used by jwt.js and router.js's constant-time bearer check.
+  "compatibility_flags": ["nodejs_compat"],
+  "durable_objects": {
+    "bindings": [{ "name": "PENDING_VERIFICATION", "class_name": "PendingVerification" }]
+  },
+  // Non-secret config, read by loadConfig (proxy/src/config.js) the same way
+  // `.env` is. `CRE_TRIGGER_PRIVATE_KEY` and `CRE_CALLBACK_TOKEN` are NOT
+  // here — those are credentials, set with `wrangler secret put`. An empty
+  // string is treated as unset (packages/sdk/env.js), same as a bare key in
+  // `.env.example`, so the code-level default still applies until filled in.
+  "vars": {
+    // All three required together, or the paid leg refuses every call rather
+    // than relaying one unverified — see CLAUDE.md.
+    "CRE_TRIGGER_URL": "",
+    "CRE_WORKFLOW_ID": "",
+    // This Worker's own public URL, `/internal/verification-callback` —
+    // where the enclave pushes a finished verification back to.
+    "CRE_CALLBACK_URL": "",
+
+    // Arc's public default RPC has no embedded credential, so it's fine here.
+    "ARC_RPC_URL": "https://rpc.testnet.arc.network",
+    // Same Alchemy key `web/.env.local` already bakes into the dashboard's
+    // public bundle (CLAUDE.md), so it's no more exposed here than it already
+    // is there.
+    "SEPOLIA_RPC_URL": "https://eth-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
+  },
+  "migrations": [
+    // SQLite-backed: this class uses no `state.storage` at all — every
+    // object is in-memory for the life of one verification — but the
+    // storage backend still has to be declared, and SQLite is what a
+    // Workers Free plan can run.
+    { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] }
+  ]
+  // No `routes` block yet: this deploys to workers.dev, same as `web`. Wiring
+  // `*.verdikt.bond/*` needs the zone added to the Cloudflare account first
+  // (docs/Tasks.md 0.6) — a Cloudflare-dashboard step, not a code change.
+}

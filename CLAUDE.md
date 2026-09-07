@@ -49,7 +49,17 @@ pnpm dev                         # dashboard on :5173
 pnpm run deploy                  # vite build && wrangler deploy. NOT `pnpm deploy` — that is pnpm's own command
 ```
 
+```bash
+cd proxy
+pnpm dev                         # wrangler dev — local Workers runtime, real Durable Objects
+pnpm run deploy                  # wrangler deploy
+```
+
 `web` is static: no server-side logic, it reads both chains from the browser. So it ships as files, either as an assets-only Cloudflare Worker (`web/wrangler.jsonc`, no `main`) — live at `verdikt-web.denis-perov.workers.dev` — or from nginx via `web/Dockerfile` + `docker-compose.yml` at the root. The Dockerfile builds from the repo root because the pnpm workspace spans it, and `.dockerignore` excludes every `.env` at any depth so an image takes its config from build args alone.
+
+`proxy` is a Cloudflare Worker too (`proxy/wrangler.jsonc`), but not a static one: it has server-side secrets (`CRE_TRIGGER_PRIVATE_KEY`, `CRE_CALLBACK_TOKEN`) that must never reach a browser bundle the way `web`'s `VITE_` vars deliberately do, so local dev reads them from `proxy/.dev.vars` (gitignored, not `web/.env.local`'s pattern) and a real deployment sets them with `wrangler secret put`. Deploys to `workers.dev` today; routing `*.verdikt.bond/*` to it needs the zone added to the Cloudflare account first (Tasks.md 0.6), which is an infra step, not a code change.
+
+The proxy's pending-callback rendezvous (`proxy/src/verification.js`'s trigger waits, `/internal/verification-callback` settles it) used to be an in-process `Map` — safe on a long-lived Node process, unsafe on Workers, where two HTTP requests are not guaranteed to land on the same isolate. `proxy/src/pending-do.js` replaces it with one `PendingVerification` Durable Object per `requestId`, addressed by `idFromName` so the trigger's `/wait` and the callback's `/settle` always reach the same instance regardless of which isolate handled either request. `verification.js` itself does not know the difference — the DO-backed registry implements the same `PendingRegistry` shape as the in-memory one it replaces in production.
 
 The dashboard's config is `web/.env.local`, **not** the root `.env`: Vite reads env files only from its own root, which is `web/`. `web/.env.example` is the template. Two consequences that are easy to get wrong:
 
