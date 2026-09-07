@@ -15,6 +15,7 @@
   },
   "main": "lib/judge.js",
   "exports": {
+    "./config": "./lib/config.js",
     "./judge": "./lib/judge.js",
     "./reputation": "./lib/reputation.js"
   }
