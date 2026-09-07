@@ -739,8 +739,9 @@ day saved in Phase 4 here.
 >    rule is pointing at: a marketplace read is not relaying, and the proxy is
 >    the wrong host for it.
 >
-> Until it is decided, `/services` answers 503 naming the reason, which beats a
-> marketplace that looks empty.
+> Tracked as [#21](https://github.com/imajus/verdikt/issues/21). Until it is
+> decided, `/services` answers 503 naming the reason, which beats a marketplace
+> that looks empty.
 
 ---
 
