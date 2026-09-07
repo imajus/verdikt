@@ -70,7 +70,7 @@ Fire a trigger; let the Nitro banner show.
 
 Point at the clause output: two clauses broke, the first is what's recorded.
 
-### 6 · The loop closes — 2:20–2:45 · terminal
+### 6 · The loop closes — 2:20–2:40 · terminal
 
 ```bash
 cast call $RESOLVER 'text(bytes32,string)(string)' \
@@ -81,7 +81,7 @@ cast call $RESOLVER 'text(bytes32,string)(string)' \
 > them back to ENS. **500** — one pass, one fail. That's the number the
 > marketplace ranks on, and it came from the verdicts, not from us."
 
-### 7 · The line — 2:45–3:00
+### 7 · The line — 2:40–3:00
 
 > "Pay through Verdikt and the SLA is enforced per call, from the provider's own
 > bond, with no dispute step — because there's nothing to dispute. The provider
@@ -91,9 +91,18 @@ cast call $RESOLVER 'text(bytes32,string)(string)' \
 
 **Say what isn't real.** One line, and it buys more credit than it costs:
 
-> "The enclave is simulated — CRE deploy access is still in early access — and
-> the x402 payment leg carries a fixture payer, because settling a live one
-> needs a Circle-managed wallet. Everything else is on a public testnet."
+> "The enclave is simulated — CRE deploy access is still early access — and
+> these verdicts carry a fixture payer, because the demo paywall advertises the
+> open payment scheme and then refuses it. Everything else is on a public
+> testnet."
+
+**If a judge asks about the payment leg** — this is a strong answer, so have it
+ready rather than in the cut:
+
+> "We sign a real x402 header, and Base Sepolia USDC accepted the authorization
+> inside it — that transaction is in the repo. The payer is *recovered* from
+> that signature, not read out of JSON, which matters because it decides who a
+> refund goes to. Our provider just doesn't honour the scheme it advertises."
 
 **Avoid on camera:** `.env`, any private key, the `cre` login. Verdict request
 ids are fine — they're public.
