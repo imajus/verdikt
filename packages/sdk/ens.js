@@ -296,10 +296,11 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
  * Sepolia contracts.
  *
  * NOTE — this is the *EOA* write path, used by the seed and operational
- * scripts. The hourly CRE workflow cannot use it: a CRE workflow holds no key
- * and its only on-chain write is a DON-signed report delivered to an
- * `IReceiver` (Spike B, CRE-2). It writes through `VerdiktScoreWriter` on
- * Sepolia instead, which holds the key-scoped roles and calls `setText` itself.
+ * scripts, and its signer is `ENS_SCORE_SIGNER_PRIVATE_KEY`. The hourly CRE
+ * workflow cannot use it: a CRE workflow holds no key and its only on-chain
+ * write is a DON-signed report delivered to an `IReceiver` (Spike B, CRE-2). It
+ * writes through `VerdiktScoreWriter` on Sepolia instead, which holds the
+ * key-scoped roles and calls `setText` itself.
  *
  * @param {string} slug
  * @param {{ conformance: number, availability: number }} scores 0–1000 integers

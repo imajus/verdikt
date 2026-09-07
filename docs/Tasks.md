@@ -410,6 +410,19 @@ paid amount, and the raw `sla` record.
 > the key-scoped EAC roles and calls `setText` itself. The report carries the
 > **slug**, not a node, and the node is derived from an immutable parent — so a
 > report can only ever address a child of `verdikt.eth`.
+>
+> Deployed by `contracts/script/DeployScoreWriter.s.sol`. Deployment alone is
+> not enough: the operator must then grant it `conformance` and `availability`
+> **per key** with `authorizeTextRoles` on each subname. Never name-wide with
+> `authorizeNameRoles` — Spike A found that grant is one of the two routes that
+> bypasses the per-key ACL the ENSv2 choice rests on.
+
+> **Naming — there is no "verifier" address any more.** `VERIFIER_PRIVATE_KEY`
+> named a role that no longer exists: Spike B moved the Arc verdict write to
+> DON-signed reports, and the score writer above took the ENS write. It is now
+> `ENS_SCORE_SIGNER_PRIVATE_KEY`, an EOA scoped to the two score keys for
+> `writeServiceScores` and for the spike's ACL assertion — an out-of-band path,
+> not how scores reach ENS in production.
 
 > **Approximation — log timestamps.** An EVM log carries `blockNumber` but no
 > timestamp, and a header read per block would be thousands of calls an hour.

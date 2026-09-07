@@ -196,11 +196,11 @@ async function main() {
     const keys = [
       process.env.ENS_DEPLOYER_PRIVATE_KEY,
       process.env.PROVIDER_PRIVATE_KEY,
-      process.env.VERIFIER_PRIVATE_KEY
+      process.env.ENS_SCORE_SIGNER_PRIVATE_KEY
     ];
     if (keys.some((k) => !k)) {
       throw new Error(
-        '--live needs ENS_DEPLOYER_PRIVATE_KEY, PROVIDER_PRIVATE_KEY and VERIFIER_PRIVATE_KEY'
+        '--live needs ENS_DEPLOYER_PRIVATE_KEY, PROVIDER_PRIVATE_KEY and ENS_SCORE_SIGNER_PRIVATE_KEY'
       );
     }
     accounts = [...keys.map((k) => privateKeyToAccount(k)), privateKeyToAccount(forkKey('stranger'))];
