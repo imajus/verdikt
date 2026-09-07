@@ -95,21 +95,6 @@ agent's behalf. Payer address and paid amount are both recoverable from the
 payment payload, so a refund needs no session state correlating request to
 payment — the verdict carries everything the registrar needs.
 
-Recoverable, and *bound*: both are fields of the EIP-3009
-`TransferWithAuthorization` struct the agent signs, so the enclave recovers the
-signer and refuses to name a payer the signature does not cover — naming someone
-else's address would mean forging their signature (Spike C, Tasks §0.4).
-
-**A signed payload is an intent to pay, not a payment.** It stays valid for about
-seven days and says nothing about whether Gateway moved the money, so the enclave
-confirms the settlement receipt on the paid response before writing anything: no
-settlement, no verdict — not even a `DOWN`, which is otherwise exactly the shape
-a payer would use to farm refunds against authorizations it made sure would never
-settle. The receipt is unsigned, so it is evidence of settlement only; the refund
-target stays the recovered signer. The authorization's `nonce` is the `requestId`
-the registry records (§3) — inside the signed struct, and already enforced
-single-use by the facilitator.
-
 ### Two CRE workflows
 
 The per-request workflow above is confidential (it touches the provider's real
@@ -130,41 +115,61 @@ non-confidential logic in the TEE.
 - **Permissionless registration** — `register(slug)` posts the required deposit.
   `serviceId = keccak256(slug)`, a human-chosen slug reused verbatim as the
   `<slug>.verdikt.bond` route and the `<slug>.verdikt.eth` ENS subname (§4).
+  Because one string is three identifiers, the registry validates it as a label
+  both DNS and ENS accept (lowercase alphanumeric and hyphen, no leading or
+  trailing hyphen, ≤63 bytes), and never lets a deregistered slug be
+  re-registered — verdict history is keyed by `serviceId`, so reuse would hand a
+  new provider the previous one's record.
 - **Deposit/bond** — held in escrow keyed by `serviceId`, in **native USDC**
   (Arc's gas token, so escrow holds value directly — no `approve`/`transferFrom`,
   no token address), a **fixed amount** for MVP. Paid directly to escrow, not
   through the proxy. This is the pool refunds draw from.
 - **No SLA on Arc** — the registry struct has no SLA field and no `setSLA`. The
   SLA lives only on the ENS subname (§4); the workflow reads it at run time.
-- **One role per service** — verifier only (the CRE callback signer, may
-  `setVerdict`). Neither provider nor Verdikt can write a verdict, enforced at
-  the contract level; the provider's authorship happens on the ENS side (§4).
+- **One role per service, and it is not an address Verdikt holds** — a CRE
+  workflow holds no key and sends no transaction. It ABI-encodes a payload, has
+  the DON sign it into a *report*, and the Chainlink KeystoneForwarder calls
+  `onReport(metadata, report)` on the registry, which implements `IReceiver`.
+  There is no `setVerdict` an EOA can call. The forwarder is shared
+  infrastructure, so `msg.sender == forwarder` is not access control on its own:
+  the registry also pins the `workflowOwner` carried in the report header, which
+  is what restricts verdict-writing to Verdikt's own workflow. Neither provider
+  nor Verdikt can write a verdict, and there is no admin able to grant that
+  power; the provider's authorship happens on the ENS side (§4). Upstream of the
+  chain, the workflow's HTTP trigger is itself signature-gated (a JWT signed by
+  a key listed in `authorizedKeys`), so an unauthorised caller cannot even
+  produce a report to deliver.
 - **Refund, auto-executed, no dispute** — a `FAIL` or `DOWN` on a paid request
   credits a refund from that service's deposit to the payer. The verdict carries
   payer and paid amount out of the payment payload (§2), so the registrar needs
-  no correlation table; it records the `requestId` — the payment authorization's
-  own nonce, which the facilitator already enforces single-use — so a second
-  refund against the same request reverts. The paid amount arrives in the payment
-  asset's minor units (USDC: 6 decimals) while the deposit is native USDC (18),
-  so it is scaled before the cap below compares the two; unscaled, `paidAmount`
-  wins every comparison and refunds a trillionth of what was paid. Refund and payment are the same asset on the same chain
-  (§6) — no cross-chain correlation between the two legs. The availability
-  *score* never moves a deposit (§1, §5); a `DOWN` refunds because that one call
-  took payment and delivered nothing, not because a score crossed a threshold.
-- **Pull payments, never push** — `setVerdict` books `owed[payer] += amount`; the
+  no correlation table; it records the `requestId`, and a second report against
+  the same request writes nothing and pays nothing. Refund and payment are the
+  same asset on the same chain (§6) — no cross-chain correlation between the two
+  legs. The availability *score* never moves a deposit (§1, §5); a `DOWN`
+  refunds because that one call took payment and delivered nothing, not because
+  a score crossed a threshold.
+- **A declined report is emitted, not reverted** — `onReport` returns nothing
+  and the forwarder does not surface a revert usefully, so a report that
+  authenticates but has nothing to record (duplicate `requestId`, unknown or
+  deregistered service) emits `VerdictRejected` and returns. Reverting would
+  make the decline invisible. Authentication failures and malformed reports
+  still revert: those are bugs, not outcomes.
+- **Pull payments, never push** — `onReport` books `owed[payer] += amount`; the
   agent calls `withdraw()` to collect. Pushing value here would let a payer
   address that rejects transfers revert the whole call and erase its own `FAIL` —
   which a provider farming its own service through a reverting contract could use
   to hold a spotless conformance ratio while failing real calls. Booking a credit
   decouples recording a verdict from paying anyone, and removes the reentrancy
-  surface an external call inside `setVerdict` would open.
+  surface an external call inside the verdict path would open.
 - **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
   penalty on top. With no dispute layer, a refund larger than the payment would
   make induced failure profitable; capping at the payment makes griefing
   break-even-minus-gas — the griefer recovers only what it spent.
 - **Auto-suspend at zero** — when refunds drain a service's deposit to 0, status
-  flips to SUSPENDED and the proxy stops routing new payments to it until topped
-  up.
+  flips to SUSPENDED and the proxy stops routing new payments to it. Topping up
+  reinstates it only once the bond is back at the full required deposit: waking
+  a service on dust would leave it listed while every refund it then owed was
+  capped at that dust, which is the bond meaning nothing.
 - **Deregistration** — `deregister(serviceId)`, provider-only; delists and
   returns the remaining deposit. Blocked while SUSPENDED, so a provider can't
   deregister to dodge an outstanding refund obligation.
@@ -198,7 +203,12 @@ an accepted scope decision for a two-week build.
   call — maps directly to `provider-name.verdikt.eth` with no lookup table.
 - At mint, EAC roles are set once: the provider's address scoped to the `sla`
   key; the CRE signer scoped to the `conformance` and `availability` keys.
-- The subname carries four records:
+- The subname carries five records:
+  - **`url`** — the provider's upstream endpoint, where the proxy relays
+    `<slug>.verdikt.bond/*`. Provider-authored and not consensus-significant, so
+    it belongs on the side that already has a per-key ACL for provider writes;
+    putting it on Arc would cost a chain write per URL change and an Arc read on
+    the unpaid leg that is otherwise unnecessary.
   - **`sla`** — written directly by the provider, any time, no Arc involvement;
     the sole copy of the SLA (§3).
   - **`conformance`** and **`availability`** — the two ratios (0–1000, §1),
@@ -207,10 +217,15 @@ an accepted scope decision for a two-week build.
     `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
   - **address** — owner-controlled, set to the provider's payout wallet.
 - On the unpaid leg the proxy resolves the address record and compares it against
-  the live 402 challenge's `payTo` before relaying (§2). A mismatch blocks
+  the live 402 challenge's `payTo` before relaying (§2) — every option the
+  challenge offers, since the agent may pick any of them. A mismatch blocks
   pre-payment, not post-hoc like §1's checks, since a spoofed `payTo` leaves no
-  bonded deposit to reclaim from. Runs outside the enclave — the challenge is
-  public.
+  bonded deposit to reclaim from; so does a challenge that will not parse or
+  carries no `payTo` at all. Runs outside the enclave — the challenge is public.
+- Because the proxy dials the `url` record from Verdikt's own network, a
+  provider-authored URL is a server-side-request-forgery primitive unless it is
+  constrained. Private, loopback and link-local hosts are refused before any
+  request is made.
 - The workflow reads the live `sla` record straight from the Permissioned
   Resolver as its verification input, with no IPFS pointer or Arc-side copy to
   drift out of sync.
@@ -239,10 +254,8 @@ Two chains, each chosen for what only it provides:
   refund are one asset on one chain: the agent pays on Arc and, on a `FAIL` or
   `DOWN` verdict, is refunded on Arc from the same-asset bond, with no
   cross-chain correlation between the two legs. x402 settles via **Circle
-  Gateway**'s batched flow, which debits a pre-funded Gateway balance
-  (`GatewayWalletBatched` is the EIP-712 domain that flow signs under, not a
-  scheme name — the x402 scheme string is `exact`, the same one vanilla x402
-  uses, so one decoder covers both); the bond is held as native USDC, so a refunded agent receives
+  Gateway** (batched `GatewayWalletBatched` scheme), which debits a pre-funded
+  Gateway balance; the bond is held as native USDC, so a refunded agent receives
   native USDC rather than Gateway credit.
 - **Identity / SLA: Ethereum Sepolia** — the only network with an ENSv2
   Permissioned Registry/Resolver deployment, which the SLA and reputation layer
@@ -288,8 +301,6 @@ response-body retention or logging)
 Chainlink CRE Confidential Workflow (TEE) -- per-request run
    - replays the agent's payment against the provider from inside the
      enclave (x402 settles on Arc via Circle Gateway -- §6)
-   - recovers payer + paid amount from the signed authorization, and
-     confirms the settlement receipt -- no settlement, no verdict (§2)
    - resolves provider's live SLA from the ENS Permissioned Resolver
      (Sepolia, verdikt.eth) -- the sole copy, nothing on Arc to drift
    - classifies the paid call -> PASS / FAIL / DOWN (diffs the observed
@@ -304,9 +315,7 @@ On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
    - auto-refund on per-request FAIL or DOWN: min(fixedRefund, paidAmount), paid
      in native USDC from the bond, same chain the call was paid on
-     (paidAmount scaled from the asset's 6 decimals to Arc's native 18)
-   - requestId = the payment authorization's nonce; a second refund on the
-     same request reverts
+   - requestId recorded; a second refund on the same request reverts
    - auto-suspend at zero deposit
 
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days

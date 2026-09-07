@@ -44,7 +44,6 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { packetToBytes } from 'viem/ens';
 import { parseAbi } from 'viem';
 import {
   ALL_ROLES,
@@ -52,14 +51,17 @@ import {
   RESOLVER_ROLES_VERDIKT_NEEDS,
   RESOLVER_ROLE_SET_TEXT,
   SEPOLIA_ENSV2,
+  dnsEncode,
   factoryAbi,
   proxySalt,
   readNameState,
   registryAbi,
   resolverAbi,
   rpc,
-  startAnvil
+  startAnvil,
+  universalResolverAbi
 } from './ens-sepolia.mjs';
+import { SEPOLIA } from '@verdikt/sdk/deployments';
 
 // Only this script registers a name, reads through the Universal Resolver, or
 // touches MockUSDC, so these stay here rather than in the shared module.
@@ -73,10 +75,6 @@ const registrarAbi = parseAbi([
   'function MIN_COMMITMENT_AGE() view returns (uint64)'
 ]);
 
-const universalResolverAbi = parseAbi([
-  'function resolve(bytes name, bytes data) view returns (bytes, address)'
-]);
-
 const erc20Abi = parseAbi([
   'function mint(address to, uint256 amount)',
   'function approve(address spender, uint256 amount) returns (bool)'
@@ -86,9 +84,6 @@ const erc20Abi = parseAbi([
 const REGISTRY_ROLE_SET_RESOLVER = 1n << 24n;
 /** PermissionedRegistry ROLE_SET_SUBREGISTRY. */
 const REGISTRY_ROLE_SET_SUBREGISTRY = 1n << 20n;
-
-/** DNS wire format — what the resolver's `authorize*` functions take. */
-const dnsEncode = (name) => toHex(packetToBytes(name));
 
 const ONE_YEAR = 31_536_000n;
 
@@ -175,7 +170,7 @@ function parseArgs(argv) {
   return {
     live: flags.has('--live'),
     readOnly: flags.has('--read-only'),
-    parentLabel: valueOf('parent', (process.env.ENS_PARENT_NAME ?? 'verdikt.eth').replace(/\.eth$/, '')),
+    parentLabel: valueOf('parent', SEPOLIA.ens.parentName.replace(/\.eth$/, '')),
     slug: valueOf('slug', 'weather'),
     rpcUrl: valueOf('rpc', process.env.SEPOLIA_RPC_URL || DEFAULT_SEPOLIA_RPC)
   };
@@ -202,11 +197,11 @@ async function main() {
     const keys = [
       process.env.ENS_DEPLOYER_PRIVATE_KEY,
       process.env.PROVIDER_PRIVATE_KEY,
-      process.env.VERIFIER_PRIVATE_KEY
+      process.env.ENS_SCORE_SIGNER_PRIVATE_KEY
     ];
     if (keys.some((k) => !k)) {
       throw new Error(
-        '--live needs ENS_DEPLOYER_PRIVATE_KEY, PROVIDER_PRIVATE_KEY and VERIFIER_PRIVATE_KEY'
+        '--live needs ENS_DEPLOYER_PRIVATE_KEY, PROVIDER_PRIVATE_KEY and ENS_SCORE_SIGNER_PRIVATE_KEY'
       );
     }
     accounts = [...keys.map((k) => privateKeyToAccount(k)), privateKeyToAccount(forkKey('stranger'))];

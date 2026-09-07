@@ -9,7 +9,11 @@
     ".": "./index.js",
     "./ens": "./ens.js",
     "./payment": "./payment.js",
-    "./registry": "./registry.js"
+    "./registry": "./registry.js",
+    "./arc": "./arc.js",
+    "./signing": "./signing.js",
+    "./deployments": "./deployments.js",
+    "./env": "./env.js"
   },
   "dependencies": {
     "@verdikt/fixtures": "workspace:*",

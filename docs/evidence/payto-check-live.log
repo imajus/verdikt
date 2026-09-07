@@ -1,0 +1,30 @@
+# The payTo check, against live data on both chains — 2026-09-07.
+#
+# ENS record on Sepolia vs the payTo in a live 402 from the demo provider.
+# This is the one Verdikt check that must happen BEFORE the fact: a payment
+# to a spoofed address never touches the bonded service, so there is nothing
+# to reclaim it from.
+
+## weather — ENS address matches the provider's payTo
+$ curl -sD - http://localhost:8404/weather
+HTTP/1.1 402 Payment Required
+content-type: application/json; charset=utf-8
+x-verdikt-pay-to-verified: true
+
+   relayed unchanged: the agent gets the provider's real challenge to sign.
+
+## weather-lite — address record repointed to 0x…dEaD
+$ curl -sD - http://localhost:8404/weather-lite
+HTTP/1.1 502 Bad Gateway
+x-verdikt-block: pay_to_mismatch
+
+{
+    "error": "pay_to_mismatch",
+    "reason": "pay_to_mismatch",
+    "detail": "challenge pays to 0x5c33f23555313256b71f2b0a7ea1938425516505, 0x5c33f23555313256b71f2b0a7ea1938425516505, 0x5c33f23555313256b71f2b0a7ea1938425516505, but the service published 0x000000000000000000000000000000000000dEaD",
+    "service": "weather-lite.verdikt.eth",
+    "expectedPayTo": "0x000000000000000000000000000000000000dEaD"
+}
+
+   blocked. The response carries no 'accepts', so no signable challenge
+   reaches the agent — only prose naming both addresses for an operator.

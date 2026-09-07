@@ -31,27 +31,39 @@ interface SlaObservation {
    * (USDC has 6, so 2500n = $0.0025). Never a float, never a decimal string:
    * price clauses compare with integer semantics only (Specification.md §1).
    *
-   * This is the seam that keeps the engine independent of the wire format:
-   * `decodePayment` normalises whatever the `X-PAYMENT` header encodes to this
-   * before the engine ever sees it. Spike C (Tasks.md 0.4) settled that the
-   * amount is readable from the header itself, bound to the payer's signature.
-   *
-   * Note these are the *asset's* minor units, not the deposit's — the bond is
-   * Arc native USDC at 18 decimals. The engine never needs the difference; the
-   * registry does, via `toArcNativeUnits`.
+   * This is the seam that keeps the engine independent of Spike C (Tasks.md
+   * 0.4). However the `X-PAYMENT` header turns out to encode an amount —
+   * and whether the amount ends up being read from the header or from the
+   * settlement receipt — `decodePayment` normalises it to this before the
+   * engine ever sees it.
    */
   paidAmount: bigint;
   /** Populated when `status` is null; surfaced by the dashboard as the failure reason. */
   transportError?: string;
 }
 
+/**
+ * Clause types as they appear in a *result*. `delivery` is the implicit
+ * predicate `evaluate` prepends to every evaluation — no provider declares it
+ * and `id: 'delivery'` is rejected at validation time.
+ */
+type SlaClauseResultType = SlaClauseType | 'delivery';
+
 interface SlaClauseResult {
   id: string;
-  type: SlaClauseType;
+  type: SlaClauseResultType;
   pass: boolean;
   /** Human-readable bound from the SLA, for the dashboard's per-verdict detail. */
   expected: string;
   /** Human-readable observed value. */
+  actual: string;
+}
+
+/** First failure found by the JSON Schema subset, in a fixed traversal order. */
+interface SchemaFailure {
+  /** JSON pointer into the observed value; `''` is the root. */
+  pointer: string;
+  expected: string;
   actual: string;
 }
 
@@ -113,4 +125,13 @@ interface SlaPriceRangeClause extends SlaClauseBase {
   minMinorUnits: string;
   maxMinorUnits: string;
   asset: string;
+}
+
+/** The two marketplace ratios plus the tallies they came from (Specification.md §1). */
+interface ReputationScores {
+  /** 0–1000. `PASS / (PASS + FAIL)`, floored. 1000 when nothing arrived. */
+  conformance: number;
+  /** 0–1000. `(PASS + FAIL) / all`, floored. 1000 for an empty window. */
+  availability: number;
+  counts: { pass: number; fail: number; down: number; total: number };
 }

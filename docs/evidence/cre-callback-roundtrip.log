@@ -1,0 +1,84 @@
+# The enclave pushing a finished verification back to the proxy, 2026-09-07.
+#
+# This closes CRE-9 in docs/spikes/cre.md. The proxy cannot poll for a
+# workflow's result — Chainlink documents no endpoint for reading one — so the
+# workflow POSTs it to a callback the proxy serves, correlated by requestId.
+# This is that round trip, run for real: `cre workflow simulate verify --listen`
+# in confidential mode, a trigger carrying a callbackUrl, and the proxy's own
+# callback route receiving it.
+#
+# What it demonstrates:
+#   - the enclave can reach an outbound URL and authenticate with a bearer;
+#   - `requestId` correlates the callback to the waiting request;
+#   - the provider's response body arrives intact at the proxy, which is what
+#     the paid leg relays to the agent.
+#
+# ============================ proxy side ============================
+
+proxy callback listening on http://127.0.0.1:8402/internal/verification-callback
+
+CALLBACK RECEIVED — the enclave pushed its result back:
+{
+  "outcome": "PASS",
+  "mode": "status-only",
+  "reason": "sla record unreadable",
+  "clauses": [],
+  "tx": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "status": 200,
+  "headers": {},
+  "body": "{\"latitude\":52.52,\"longitude\":13.419998,\"generationtime_ms\":0.042319297790527344,\"utc_offs…",
+  "bodyTruncated": false
+}
+
+# ========================== simulator side ==========================
+
+Initializing...
+Loading settings...
+! Using default private key for chain write simulation. To use your own key, set CRE_ETH_PRIVATE_KEY in your .env file or system environment.
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: 30e4d73f6a0942186f184560bbee7d3960894c6c2ddb90f5fb1bb6d44cbe1b5f
+  Config hash: 6ef9826511145acbea1aec6cc82b10bd90237853d77c4170a551a69681aadb96
+
+No input detected for http-trigger. Supply the payload using one of:
+  1. POST JSON to the local trigger server, example:
+       curl -X POST http://localhost:2000/trigger \
+            -H 'Content-Type: application/json' \
+            -d '{"input":{"key":"value"}}'
+  2. Re-run with --http-payload flag:
+       --http-payload '{"key":"value"}'          (inline JSON)
+       --http-payload ./payload.json             (path to a JSON file)
+
+2026-09-07T06:04:23Z [SIMULATION] Simulator Initialized
+
+Waiting for HTTP request to start execution (listening on http://localhost:2000/trigger)...
+2026-09-07T06:04:50Z [SIMULATION] Running trigger trigger=http-trigger@1.0.0-alpha
+╭────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ Trigger requested TEE Execution your trigger will run in one of the following Tees:                │
+│     - AWS Nitro in us-west-2                                                                       │
+│ The simulator is not a real TEE, and is meant to debug.                                            │
+│ Do not use it for sensitive information.                                                           │
+│ During real execution, user logs for this trigger will not be visible, and will not leave the TEE. │
+│ They are presented in the simulator for debugging only.                                            │
+│                                                                                                    │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+✓ Workflow Simulation Result:
+"{\"requestId\":\"0xabababababababababababababababababababababababababababababababab\",\"status\":200,\"body\":\"{\\\"latitude\\\":52.52,\\\"longitude\\\":13.419998,\\\"generationtime_ms\\\":0.042319297790527344,\\\"utc_offset_seconds\\\":0,\\\"timezone\\\":\\\"GMT\\\",\\\"timezone_abbreviation\\\":\\\"GMT\\\",\\\"elevation\\\":38.0,\\\"current_units\\\":{\\\"time\\\":\\\"iso8601\\\",\\\"interval\\\":\\\"seconds\\\",\\\"temperature_2m\\\":\\\"°C\\\"},\\\"current\\\":{\\\"time\\\":\\\"2026-09-07T01:00\\\",\\\"interval\\\":900,\\\"temperature_2m\\\":13.8}}\",\"bodyTruncated\":false,\"outcome\":\"PASS\",\"mode\":\"status-only\",\"reason\":\"sla record unreadable\",\"clauses\":[],\"tx\":\"0x0000000000000000000000000000000000000000000000000000000000000000\",\"writeError\":null}"
+
+2026-09-07T06:04:52Z [SIMULATION] Execution finished signal received
+
+Listen: ready for next request (run #2)
+Waiting for HTTP request to start execution (listening on http://localhost:2000/trigger)...
+2026-09-07T06:05:33Z [SIMULATION] Received interrupt signal, stopping execution
+2026-09-07T06:05:33Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

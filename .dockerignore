@@ -1,0 +1,32 @@
+node_modules
+**/node_modules
+.git
+.github
+.claude
+.agents
+
+dist
+**/dist
+coverage
+
+# Every env file, at any depth. web/.env.local would otherwise be copied in and
+# read by `vite build`, so an image would bake in whatever the developer had
+# locally instead of the build args it was given.
+**/.env
+**/.env.*
+*.log
+
+# foundry
+contracts/out
+contracts/cache
+contracts/broadcast
+contracts/lib
+
+# cre
+cre/.cre
+cre/spike/**/.tmp
+
+docs
+README.md
+skills-lock.json
+ens-setup-plan.json

@@ -1,0 +1,64 @@
+{
+  "version": 1,
+  "clauses": [
+    {
+      "id": "current-weather-shape",
+      "description": "Every response carries a current reading with a numeric temperature and wind speed.",
+      "type": "schema",
+      "schema": {
+        "type": "object",
+        "required": [
+          "latitude",
+          "longitude",
+          "current"
+        ],
+        "properties": {
+          "latitude": {
+            "type": "number"
+          },
+          "longitude": {
+            "type": "number"
+          },
+          "current": {
+            "type": "object",
+            "required": [
+              "time",
+              "temperature_2m",
+              "wind_speed_10m"
+            ],
+            "properties": {
+              "time": {
+                "type": "string",
+                "minLength": 1
+              },
+              "interval": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "temperature_2m": {
+                "type": "number"
+              },
+              "wind_speed_10m": {
+                "type": "number"
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "responds-within-5s",
+      "description": "Upstream is a cached forecast, so five seconds is generous.",
+      "type": "latency",
+      "maxMs": 5000
+    },
+    {
+      "id": "price-band",
+      "description": "The paywall charges 1 minor unit. The floor is that price and the ceiling is what the service promises never to exceed \u2014 a band the provider can actually honour.",
+      "type": "priceRange",
+      "minMinorUnits": "1",
+      "maxMinorUnits": "10000",
+      "asset": "USDC"
+    }
+  ]
+}

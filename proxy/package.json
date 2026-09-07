@@ -6,12 +6,14 @@
   "description": "x402 relay — passthrough branch checks payTo, verified branch triggers the enclave",
   "comment": "@verdikt/sla is deliberately NOT a dependency. The proxy relays and never evaluates (Specification.md §2); if it needs the engine, something has moved to the wrong side of the enclave boundary.",
   "scripts": {
-    "dev": "node --watch src/server.js",
-    "start": "node src/server.js"
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@verdikt/sdk": "workspace:*",
-    "dotenv": "^17.4.2",
-    "fastify": "^5.12.3"
+    "@verdikt/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@verdikt/fixtures": "workspace:*",
+    "wrangler": "^4.129.0"
   }
 }

@@ -6,3 +6,6 @@ packages:
   - proxy
   - scripts
   - web
+allowBuilds:
+  esbuild: true
+  workerd: true

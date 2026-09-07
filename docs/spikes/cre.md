@@ -23,12 +23,24 @@ in Phase 3:
   `IVerdiktRegistry.sol` declares it. Writes arrive via the KeystoneForwarder
   as `onReport(metadata, report)`. Phase 2's contract shape changes.
 - **CRE-3** — whether the proxy gets the workflow's return value back on the
-  same HTTP call is **unresolved**, and Chainlink's own docs contradict each
-  other on it. `Specification.md` §2's request path depends on the answer.
+  same HTTP call was **unresolved**, with Chainlink's own docs contradicting
+  each other. **Now settled by observation, restrictively:** it does not. The
+  proxy triggers and then blocks on the execution result.
 
 ## Findings
 
-### CRE-1 — `cre workflow simulate` requires a logged-in CRE account
+### CRE-1 — `cre workflow simulate` requires a logged-in CRE account — **RESOLVED**
+
+> **Update, 2026-09-07.** The one-time human step has been taken, and
+> `cre workflow simulate` now runs from this checkout. Both workflows in
+> `cre/workflows/` execute end to end, and **confidential mode simulates** — the
+> run prints the TEE banner ("Trigger requested TEE Execution … AWS Nitro in
+> us-west-2") and the handler completes inside it. The two unchecked boxes in
+> `Tasks.md` §0.3 are closed.
+>
+> The finding below stands for anyone starting from a clean machine, and for CI:
+> simulation still cannot be an unattended check, because the login is
+> interactive.
 
 The spike's headline deliverable ("`cre/spike/` green under `simulate`") cannot
 be produced unattended. Every `cre` subcommand that touches a workflow,
@@ -105,7 +117,46 @@ the decoded report.
 so a rejected verdict is silent. Phase 2 should emit on every path, including
 the ones that decline to write.
 
-### CRE-3 — whether the trigger response carries the payload back is unresolved
+### CRE-3 — the trigger response does **not** carry the payload back
+
+> **Update, 2026-09-07 — settled by observation, in the restrictive direction.**
+>
+> `cre workflow simulate verify --listen`, driven by a real POST to the local
+> trigger server:
+>
+> ```
+> $ curl -s -w '%{http_code} in %{time_total}s' -X POST http://localhost:2000/trigger \
+>        -H 'Content-Type: application/json' -d '{"input":{…}}'
+> 200 in 0.000344s          # empty body
+> ```
+>
+> and roughly a second later, in the simulator's own output:
+>
+> ```
+> ✓ Workflow Simulation Result:
+> "{\"outcome\":\"PASS\",\"mode\":\"status-only\",…}"
+> ```
+>
+> The handler's return value exists and is well-formed, but it reaches the
+> *simulator*, not the HTTP caller. The trigger POST is acknowledged
+> immediately with no body — the fire-and-forget shape from "Triggering deployed
+> workflows", not the "sent back as the HTTP response" shape from
+> "Configuration & handler".
+>
+> **Caveat on how far this generalises.** This is the simulator's local trigger
+> server, which the CLI presents as a debugging harness, not the production
+> gateway. It is the strongest evidence available without a deployed workflow,
+> and it agrees with one of the two contradicting doc pages, so **Verdikt is
+> built on the restrictive reading**: the proxy must not assume it gets the
+> payload back on the same request. Re-check against a deployed workflow if
+> production enrollment ever opens.
+>
+> **Consequence for Phase 4.** Option 2 below is taken — the proxy triggers and
+> then blocks on the execution result — because option 1 moves the reading of
+> the provider's response out of the enclave and weakens the argument §2 is
+> built on. See `proxy/src/verification.js`.
+
+The original finding, for the record:
 
 **This is the one that can invalidate a design, and the docs disagree with
 themselves.**
@@ -238,21 +289,225 @@ Checked off from `Tasks.md` §0.3:
       decoded report tuple
 - [x] **HTTP trigger** — wired and typechecked, with the authorization model
       understood (CRE-4)
-- [ ] **`cre workflow simulate` green** — blocked on CRE-1, needs a human to
-      `cre login` once
-- [ ] **Confidential mode simulates** — same blocker
+- [x] **`cre workflow simulate` green** — both workflows run; the login has
+      been done once (CRE-1)
+- [x] **Confidential mode simulates** — the `verify` run prints the TEE banner
+      and completes the handler inside it
 
-The last two are the same one-time human step. Everything else has evidence
-that reruns from a clean checkout with `bun run test` and `bun run compile`.
+Everything except the two above reruns from a clean checkout with
+`bun run compile`; simulation needs the one-time interactive login, so it still
+cannot be a CI check.
 
 ## Follow-ups this opens
 
-1. **Settle CRE-3** with one logged-in `--listen` simulate. Highest priority:
-   it decides the proxy's shape and it is quick.
-2. **Amend `Specification.md` §3 and `IVerdiktRegistry.sol`** for the
-   forwarder/`onReport` entry point (CRE-2) before Phase 2 starts on the
-   contract.
-3. **Amend `Specification.md` §2** once CRE-3 is settled, and add the proxy's
-   trigger-signing key (CRE-4) to it and to `.env.example`.
+1. ~~**Settle CRE-3**~~ — done, see the update above. The proxy blocks on the
+   execution result.
+2. ~~**Amend `Specification.md` §3 and `IVerdiktRegistry.sol`**~~ — done. The
+   registry implements `IReceiver` through `ReportReceiver`.
+3. ~~**Amend `Specification.md` §2**~~ — done, along with the proxy's
+   trigger-signing key (CRE-4) in `.env.example`.
 4. **Nothing here blocks Phases 1 or 2's tests.** The evaluation engine and the
    registry's accounting are untouched by all of the above.
+
+### CRE-9 — the gateway's trigger contract, and how the paid leg gets its result back
+
+> **Resolved.** Option 2 below was taken and then demonstrated end to end:
+> `docs/evidence/cre-callback-roundtrip.log` is a real
+> `cre workflow simulate verify --listen` run, in confidential mode, where the
+> enclave POSTs its finished verification to the proxy's callback route and the
+> proxy's waiting request picks it up by `requestId`. The provider's response
+> body arrives intact, which is the thing the paid leg exists to relay.
+
+CRE-3 settled *that* the trigger response does not carry the handler's return
+value. `proxy/src/verification.js` was then written to trigger and poll, before
+the gateway's actual contract had been read. Reading it
+([triggering deployed workflows](https://docs.chain.link/cre/guides/workflow/using-triggers/http-trigger/triggering-deployed-workflows))
+confirms one third of that design and breaks the rest.
+
+**Right.** The gateway is real and speaks JSON-RPC:
+
+| | |
+|---|---|
+| public (onchain) registry | `https://01.gateway.zone-a.cre.chain.link` |
+| private registry | `https://01.enterprise-gateway.zone-a.cre.chain.link/` |
+| method | `workflows.execute` |
+| params | `params.input` (your payload), `params.workflow.workflowID` (64 chars) |
+
+The client currently posts `{ input }` at the top level. Wrong shape; cheap fix.
+
+**Wrong — the auth token cannot be a token.** The header is
+`Authorization: Bearer <JWT>`, but the JWT is minted per request: an ECDSA
+signature over `base64url(header).base64url(payload)`, and the payload carries
+`digest`, the SHA256 of *that exact JSON-RPC body*. A credential that depends on
+the request body cannot be a fixed string in an env file.
+The setting has to become the proxy's private key, with the client signing a
+fresh short-lived JWT per call — now `CRE_TRIGGER_PRIVATE_KEY`, implemented in
+`proxy/src/jwt.js` and checked by recovering the signature back to the issuer.
+The exact shape: header `{"alg":"ETH","typ":"JWT"}`; payload `digest` (SHA256 of
+the body, `0x`-prefixed), `iss` (the signing address), `iat`, `exp` (at most 5
+minutes after `iat`), `jti` (UUID v4); signature an EIP-191 `personal_sign` over
+`base64url(header).base64url(payload)`, base64url-encoded as `r ‖ s ‖ v`. This is consistent with CRE-4, which
+said "the proxy needs a signing key" — the config simply did not follow it.
+
+**Open, and it is the load-bearing one.** *There is no documented HTTP endpoint
+for reading an execution's result.* Chainlink documents `workflow_execution_id`
+in the trigger response, the CRE UI, and `cre execution status <uuid>` on the
+CLI. None of those is something a proxy can call per request.
+
+That mattered more than the other two, because the paid leg's whole shape rests
+on it: the enclave holds the only copy of what the agent bought (an x402 payment
+settles once), and polling an execution was the assumed way to get it back. The
+options were:
+
+1. **Find the undocumented API the CRE UI itself calls.** Most likely to exist;
+   depends on an interface Chainlink has not committed to.
+2. **Have the workflow push the result out** — a confidential HTTP call from
+   inside the enclave to a proxy callback, correlated by `requestId`. Keeps the
+   payload out of CRE's execution store, and the proxy is already holding the
+   agent's connection open. Adds an inbound endpoint the proxy must authenticate.
+3. **Fall back to CRE-3's option 1** — the proxy makes the paid call and the
+   enclave verifies afterwards. Rejected before because it moves the reading of
+   the provider's response out of the enclave, and is unavailable anyway: the
+   payment settles once.
+
+**Option 2 was taken**, and needed nothing undocumented. The workflow POSTs to a
+`callbackUrl` passed in the trigger input; the proxy serves
+`/internal/verification-callback` and correlates by `requestId`. Two things
+authenticate it — a shared bearer the workflow holds, and the `requestId` being
+32 random bytes the proxy issued and has not yet answered. Forging a callback
+could not fake the on-chain verdict, which the DON signs, but it would hand a
+paying agent the wrong bytes, which is why the route refuses everything when no
+token is configured.
+
+Consequences worth stating:
+
+- **The proxy is stateful for the life of a request.** In-memory only, since an
+  entry is meaningless once the connection it refers to is gone — but a restart
+  loses in-flight calls, and more than one proxy instance needs the callback to
+  reach the same one.
+- **The push is best-effort.** A failed callback does not throw inside the
+  workflow: the verdict is already on Arc by then, and throwing would lose the
+  response body the agent paid for to report a delivery problem the proxy
+  notices anyway when it times out.
+- **The callback token belongs in `secrets.yaml`**, released by the Vault DON,
+  not in workflow config where it currently sits. It authenticates bytes that
+  reach a paying agent.
+
+### CRE-8 — there are TWO report headers, and I used the wrong one
+
+`Tasks.md` §2.1 carried the header layout as documentation-derived and
+unverified, on the grounds that a wrong `workflowOwner` offset rejects every
+verdict silently. It was then "confirmed" against
+`@chainlink/cre-sdk`'s own parser, `REPORT_METADATA_OFFSETS` in
+`dist/sdk/report.js`, which matched field for field:
+
+| field | offset | size |
+|---|---|---|
+| version | 0 | 1 |
+| executionId | 1 | 32 |
+| timestamp | 33 | 4 |
+| donId | 37 | 4 |
+| donConfigVersion | 41 | 4 |
+| workflowId | 45 | 32 |
+| workflowName | 77 | 10 |
+| workflowOwner | 87 | 20 |
+| reportId | 107 | 2 |
+
+**That cross-check validated the wrong artefact.** Those 109 bytes are the
+header the DON *signs*. The KeystoneForwarder verifies the signatures against
+it, strips the first 45 bytes, and hands a receiver only the remaining 64:
+
+| field | offset | size |
+|---|---|---|
+| workflowId | 0 | 32 |
+| workflowName | 32 | 10 |
+| workflowOwner | 42 | 20 |
+| reportId | 62 | 2 |
+
+Found by tracing a real `cre workflow simulate --broadcast` delivery on Arc
+Testnet: `MalformedReportMetadata(64)`. Exactly the failure this finding was
+opened to prevent, and it survived a plausible-looking confirmation.
+
+**The lesson worth keeping:** the SDK parser reads a report on the way *out*;
+the receiver reads what the forwarder passes on the way *in*. Two structures,
+one name. Nothing short of an actual delivery would have caught it — and the
+forwarder made that expensive, because it swallows a receiver revert, emits its
+own event with a zero result, and lets the transaction succeed. The verdict
+simply never appeared, with a green transaction to look at.
+
+`contracts/test/VerdiktRegistry.t.sol` now pins the exact 64 bytes that
+forwarder sent, as a literal.
+
+Two further facts from the same trace, both load-bearing for a deployment:
+
+- **In simulation the header carries placeholders.** `workflowOwner` is
+  `0xaAaA…aAaa` and `workflowName` is a fresh random string per run. A receiver
+  pinning production values rejects every simulated report, so the Arc
+  deployment is configured with the simulation forwarder and that owner, and
+  `WORKFLOW_NAME` is left unpinned. Both are immutable; production redeploys.
+- **`workflowName` is raw UTF-8, not a hash** — the trace shows
+  `62356236663831393637` = `"b5b6f81967"`. So pinning the full name works and
+  Solidity's `bytes10()` truncation matches the ten bytes sent.
+
+### CRE-7 — an EVM log carries no timestamp
+
+`FilterLogsReply.logs[]` has `blockNumber` but no `blockTimestamp`, and there is
+no batch header read. A literal trailing-7-day window would need one
+`headerByNumber` per block, which is thousands of calls an hour.
+
+The aggregate reads the head once and dates each log from
+`headTimestamp - (headNumber - logBlock) * blockTimeSeconds`. The approximation
+is acceptable *here specifically*: both ratios are display-only, recomputed
+hourly, and have no refund state behind them (`Specification.md` §1), so a
+verdict landing on the wrong side of the boundary costs a slightly stale number
+for one hour. It would not be acceptable anywhere a refund depended on it.
+
+### CRE-10 — the simulation forwarder is per-chain, and the wrong one fails silently
+
+CRE-8 established that a receiver must pin the *simulation* forwarder to accept
+a simulated report. What it did not establish is that the address differs per
+chain. It does:
+
+| chain | simulation forwarder | Chainlink's production forwarder |
+|---|---|---|
+| Arc Testnet | `0x6E9EE680ef59ef64Aa8C7371279c27E496b5eDc1` | `0x76c9cf54…` |
+| Ethereum Sepolia | `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` | `0xF8344CFd…` |
+
+`0x6E9EE680…` has no code at all on Sepolia, so this is not one contract
+deployed twice at a shared address — the two are unrelated.
+
+`VerdiktScoreWriter` was first deployed pinned to Sepolia's *production*
+forwarder, and that mistake produced no error anywhere:
+
+- the aggregate reported `weather=1000/1000 weather-lite=0/1000` and no write
+  failure;
+- `txStatus` came back `SUCCESS`;
+- the transaction is on Sepolia with `status: 1`;
+- the ENS text records stayed empty.
+
+The forwarder swallows a receiver revert, emits its own event and mines anyway
+(CRE-8), so `SUCCESS` means *the forwarder ran*, never *the receiver wrote*. The
+revert is only visible by replaying the call:
+
+```
+$ cast call $SCORE_WRITER 'onReport(bytes,bytes)' $META $REPORT --from 0x15fC6ae9…
+Error: execution reverted: NotForwarder(0x15fC6ae953E024d975e77382eEeC56A9101f9F88)
+```
+
+That is what the address in the error is for: it names the caller the receiver
+actually saw, which is the simulation forwarder for that chain and can be pinned
+directly.
+
+Two consequences kept in the code:
+
+- The aggregate prints the **tx hash** of each publish. Without it there is
+  nothing to look up, and every observable signal says the write worked.
+- A receiver deployment is not finished when the deploy script returns. Read the
+  record back — for scores, `text(node, "conformance")`. Anything short of
+  reading the written value proves nothing.
+
+**Related, and the reason this took a second run to see:** the simulator signs
+chain writes with `CRE_ETH_PRIVATE_KEY` and caches its nonce. If that account
+sends transactions by another route mid-session — a deploy, an onboarding write
+— the next simulated write dies with `nonce too low: next nonce 26, tx nonce 25`
+and the whole run fails. Re-running picks up the current nonce.

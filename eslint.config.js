@@ -14,13 +14,25 @@ export default [
       '**/dist/**',
       'contracts/out/**',
       'contracts/cache/**',
-      'cre/spike/**'
+      // Bun/CRE islands with their own toolchain (docs/spikes/cre.md, CRE-5),
+      // plus the bundler's own build artefacts, which are vendored code.
+      'cre/spike/**',
+      'cre/workflows/**/.tmp/**',
+      'cre/workflows/**/.cre_build_tmp.js'
     ]
   },
   js.configs.recommended,
   {
+    // The dashboard is the one package that runs in a browser, so it is the one
+    // place `document`, `location` and friends are legitimate globals.
+    files: ['web/src/**/*.js'],
+    languageOptions: { globals: { ...globals.browser } }
+  },
+  {
     languageOptions: {
-      ecmaVersion: 2023,
+      // `latest`, not a pinned year: @verdikt/sla imports schema.json with an
+      // import attribute (`with { type: 'json' }`), which 2023 cannot parse.
+      ecmaVersion: 'latest',
       sourceType: 'module',
       globals: { ...globals.node }
     },

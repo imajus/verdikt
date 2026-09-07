@@ -1,0 +1,15 @@
+{
+  "$comment": "Verdikt's own deployed addresses on Ethereum Sepolia. Checked in on purpose: they are public, they do not vary between a developer's machine and CI, and an address that lives in .env is one every contributor has to be handed out of band. What belongs in .env is what genuinely differs per environment \u2014 an RPC URL, a key, a port. Written by `pnpm setup:ens`; ENSv2's own protocol addresses are NOT here, they are constants in scripts/ens-sepolia.mjs.",
+  "network": "ethereum-testnet-sepolia",
+  "chainId": 11155111,
+  "ens": {
+    "parentName": "verdikt.eth",
+    "$operator": "Owns parentName and operates its resolver. Resolver roles are per-account and do NOT move when the name is transferred, so this is a deliberate choice, not a consequence of ownership (Spike A).",
+    "operator": "0x4088f83b25Ff1dcc8bd1D88250e316ed5AB29AEE",
+    "$proxies": "Deployed once through the VerifiableFactory by `pnpm setup:ens`: the subname registry under parentName, and the per-account resolver every <slug>.verdikt.eth shares.",
+    "subnameRegistry": "0x3618849F8B562DcC9D25dCbA67cF0be5C8213A97",
+    "resolver": "0x3d411f1bA3B11B630a2405F1Fb51f088Cc2E23C9"
+  },
+  "$scoreWriter": "VerdiktScoreWriter, deployed by contracts/script/DeployScoreWriter.s.sol. It can only publish once the operator grants it the conformance and availability text roles PER KEY on each subname (authorizeTextRoles), never name-wide. Pinned to the CRE SIMULATION forwarder (0x15fC6ae9\u2026), not Chainlink's production Sepolia one (0xF8344CFd\u2026) \u2014 the earlier 0xbD4A99AE\u2026 was pinned to production, so every simulated publish reverted NotForwarder and the forwarder swallowed it behind a successful transaction. That is why scores read \u2014 for so long.",
+  "scoreWriter": "0x542cb024d71e0cd0ef40ab7603779c89895effaa"
+}

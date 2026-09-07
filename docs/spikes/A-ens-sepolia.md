@@ -38,7 +38,7 @@ are the point of the spike, and they are decided entirely by that code.
 
 What fork mode does *not* prove is that a live signer holds Sepolia ETH and the
 parent name. `--live` covers that; it takes `ENS_DEPLOYER_PRIVATE_KEY`,
-`PROVIDER_PRIVATE_KEY` and `VERIFIER_PRIVATE_KEY`, and waits out the real
+`PROVIDER_PRIVATE_KEY` and `ENS_SCORE_SIGNER_PRIVATE_KEY`, and waits out the real
 commit-reveal window instead of warping time. Note that `--live` mints a real
 subname and repoints records, so run `pnpm setup:ens` first and treat `--live`
 as a deliberate act rather than a check.

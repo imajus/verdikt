@@ -1,0 +1,71 @@
+Spike C — a real x402 payment, signed and settled
+=================================================
+
+Tasks.md 0.4. The question was whether the payer and amount in an X-PAYMENT
+header are cryptographically bound, or merely asserted. They are bound, and
+this is the proof: the token contract accepted the signature.
+
+1. The header
+-------------
+$ node scripts/pay-x402.mjs https://myproceeds.xyz/api/x402/pay/…/z37ppk7amtpsl3r9
+
+  paying as   0x4088f83b25Ff1dcc8bd1D88250e316ed5AB29AEE
+  option      exact / eip155:84532 / USDC
+  amount      1 minor units of 0x036CbD53842c5426634e7929541eC2318f3dCF7e
+  payTo       0x5c33f23555313256b71f2b0a7ea1938425516505
+
+Built from the LIVE challenge, not a fixture. x402's envelope
+({x402Version, scheme, network, payload}) over ERC-3009's
+{signature, authorization} — both open standards, which is why this scheme
+could be implemented without ever capturing someone else's header.
+
+2. It round-trips through Verdikt's own decoder
+-----------------------------------------------
+  decodePayment -> 0x4088f83b25Ff1dcc8bd1D88250e316ed5AB29AEE / 1n minor units
+
+  The payer is RECOVERED from the signature, never read out of the JSON. Edit
+  the payer, the amount or the validity window and it stops verifying — see
+  packages/sdk/payment.test.js, which signs headers and then tampers with them.
+
+3. The signature is real: the token contract accepted it
+--------------------------------------------------------
+The decisive check. The authorization was submitted directly to Base Sepolia
+USDC's transferWithAuthorization — no facilitator, no paywall, nothing that
+could be lenient:
+
+  simulate: OK — the signature is accepted by the token contract
+  settled : success 0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061
+
+  payer USDC after: 19999999 [1.999e7] minor units (was 20000000)
+
+  A TRAP worth recording. Do NOT check the domain against USDC's
+  DOMAIN_SEPARATOR() getter:
+
+  on-chain DOMAIN_SEPARATOR(): 0x71f17a3b2ff373b803d70a5a07c046c1a2bc8e89c09ef722fcb047abe94c9818
+  name()="USDC"  version()="2"
+  computed from those exact values: 0x94b0a78701a5a881194f9ea54ac4d2db466190ad577906ab11b9d757178610e5
+
+  They disagree, and no combination of plausible name/version/chainId
+  reproduces the getter. It is a value cached at initialisation;
+  FiatTokenV2_2 recomputes the separator per call. Chasing that mismatch looks
+  exactly like a signing bug and is not one — the transaction above is what
+  settles the question.
+
+4. What still does not work, and whose it is
+--------------------------------------------
+The same header, sent to the paywall that advertises the scheme:
+
+  $ curl -H 'X-PAYMENT: …' https://myproceeds.xyz/api/x402/pay/cmtpsjdll0001jm047kimdv0u/z37ppk7amtpsl3r9
+    -> 402
+  $ curl -X POST -H 'X-PAYMENT: …'  -> 405  (so GET is the right method)
+
+  402, for a payment the USDC contract itself accepts. It is not the method and
+  not the x402Version — both were varied. The reasonable reading is that
+  Proceeds implements only GatewayWalletBatched and advertises eip3009 anyway.
+
+  So Verdikt's half of Spike C is finished and the remaining gap is the
+  provider's: either Proceeds honours the scheme it lists, or another x402
+  provider does, or Circle's own scheme is used — and Circle does not publish
+  its payload, which is why guessing it was never worth doing.
+
+Recorded 2026-09-07.

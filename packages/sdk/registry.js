@@ -3,6 +3,8 @@
 // The enum mappings below are implemented rather than stubbed: they ARE the
 // seam. Getting an ordinal wrong would silently reclassify a FAIL as a PASS.
 
+import { keccak256, toBytes } from 'viem';
+
 /**
  * Mirrors `IVerdiktRegistry.Outcome`. Changing either side without the other
  * is a correctness bug, not a refactor.
@@ -63,45 +65,12 @@ export function statusFromOrdinal(ordinal) {
 }
 
 /**
- * Decimals of the USDC ERC-20 an x402 payment is denominated in. Read back
- * from `decimals()` on Arc Testnet's USDC (0x3600…0000) during Spike C.
+ * A slug valid as both a DNS label and an ENS label. Mirrors
+ * `VerdiktRegistry._assertValidSlug`; a slug this rejects would register on Arc
+ * and then have no reachable `<slug>.verdikt.bond` route and no
+ * `<slug>.verdikt.eth` subname.
  */
-export const PAYMENT_ASSET_DECIMALS = 6;
-
-/**
- * Decimals of Arc's *native* USDC — the unit `msg.value` is counted in, and
- * therefore the unit deposits, refunds and `owed` balances are counted in.
- */
-export const ARC_NATIVE_DECIMALS = 18;
-
-/**
- * Convert a decoded `paidAmount` into the units the Arc registry works in.
- *
- * This exists because the two ends of a refund are denominated differently
- * and nothing about the types says so. An x402 payment moves the USDC ERC-20,
- * whose `decimals()` is 6; the bond is held and refunded as Arc's native USDC,
- * which has 18. Handing `decodePayment`'s `amount` straight to `setVerdict`
- * would put 2500 wei up against a deposit denominated in 10^18, so
- * `min(FIXED_REFUND, paidAmount, deposit)` would always pick `paidAmount` and
- * every refund would be a trillionth of what was paid — a silently wrong
- * refund, on a verdict with no dispute layer to catch it
- * (Specification.md §3).
- *
- * @param {bigint} amount integer in the asset's minor units
- * @param {number} [assetDecimals] defaults to USDC's 6
- * @returns {bigint} integer in Arc native units (wei)
- */
-export function toArcNativeUnits(amount, assetDecimals = PAYMENT_ASSET_DECIMALS) {
-  if (typeof amount !== 'bigint' || amount < 0n) {
-    throw new Error('toArcNativeUnits: amount must be a non-negative bigint');
-  }
-  if (!Number.isInteger(assetDecimals) || assetDecimals < 0 || assetDecimals > ARC_NATIVE_DECIMALS) {
-    // Scaling down would truncate, and a refund that silently rounds is worse
-    // than one that refuses to compute.
-    throw new Error(`toArcNativeUnits: unsupported asset decimals: ${assetDecimals}`);
-  }
-  return amount * 10n ** BigInt(ARC_NATIVE_DECIMALS - assetDecimals);
-}
+const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 /**
  * Derive a serviceId from a slug: `keccak256(utf8Bytes(slug))`.
@@ -109,12 +78,66 @@ export function toArcNativeUnits(amount, assetDecimals = PAYMENT_ASSET_DECIMALS)
  * The slug is one identifier reused across three surfaces — the Arc
  * serviceId, the `<slug>.verdikt.bond` route and the `<slug>.verdikt.eth`
  * subname (Specification.md §3) — so this derivation must agree exactly with
- * `IVerdiktRegistry.serviceIdOf`. Phase 2 should assert that against the
- * deployed contract rather than trusting both to be right.
+ * `IVerdiktRegistry.serviceIdOf`. Both sides assert the same vectors:
+ * `registry.test.js` here and `test_serviceIdOfMatchesTheSharedVector` in
+ * `contracts/test/VerdiktRegistry.t.sol`.
  *
  * @param {string} slug
  * @returns {string} 0x-prefixed 32-byte hex
  */
 export function serviceIdOf(slug) {
-  throw new Error('NOT_IMPLEMENTED: serviceIdOf() — Tasks.md Phase 2');
+  if (typeof slug !== 'string' || !SLUG.test(slug)) {
+    throw new Error(`serviceIdOf: "${slug}" is not a valid slug (lowercase a-z, 0-9 and -, 1..63 chars)`);
+  }
+  return keccak256(toBytes(slug));
+}
+
+/** The `failedClause` word meaning "no clause was named". */
+export const NO_CLAUSE = `0x${'0'.repeat(64)}`;
+
+/**
+ * Hash a clause id the way a verdict carries it.
+ *
+ * @param {string} clauseId
+ * @returns {string} 0x-prefixed 32-byte hex
+ */
+export const clauseHash = (clauseId) => keccak256(toBytes(clauseId));
+
+/**
+ * The implicit clause `evaluate` prepends to every evaluation. No provider
+ * declares it — the SLA validator rejects `id: 'delivery'` — which is exactly
+ * why it can be matched by name here without colliding with a real clause.
+ */
+export const DELIVERY_CLAUSE = 'delivery';
+
+/**
+ * Turn a verdict's `failedClause` word back into a clause id, using the SLA the
+ * service published.
+ *
+ * The chain stores a hash, not a string, so this is the only way back — and for
+ * declared clauses it only works against the SLA in force. Four answers, all
+ * meaningful:
+ *
+ *   - a clause id — that clause is what broke;
+ *   - `'delivery'` — the implicit clause, so the provider did not deliver at
+ *     all. Checked before the SLA because it is never in one;
+ *   - `null` for the zero word — no clause was named. Either the verdict was a
+ *     PASS, or judgement fell back to status alone and evaluated no clauses;
+ *   - `'unknown'` — a non-zero hash matching nothing the SLA currently
+ *     declares. That is not an error to hide: it means the provider has edited
+ *     its SLA since this verdict, and the clause that was broken no longer
+ *     exists under that id. Showing it as such is the honest reading.
+ *
+ * @param {string} failedClause the 32-byte word from the verdict
+ * @param {SlaDocument|null} sla the service's SLA as published now
+ * @returns {string|null} the clause id, `'delivery'`, `null`, or `'unknown'`
+ */
+export function matchFailedClause(failedClause, sla) {
+  if (!failedClause || failedClause.toLowerCase() === NO_CLAUSE) return null;
+  const target = failedClause.toLowerCase();
+  if (clauseHash(DELIVERY_CLAUSE).toLowerCase() === target) return DELIVERY_CLAUSE;
+  for (const clause of sla?.clauses ?? []) {
+    if (clauseHash(clause.id).toLowerCase() === target) return clause.id;
+  }
+  return 'unknown';
 }

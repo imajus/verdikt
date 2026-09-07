@@ -1,7 +1,10 @@
 {
   "compilerOptions": {
     "target": "es2023",
-    "lib": ["es2023"],
+    "lib": [
+      "es2023",
+      "dom"
+    ],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "allowJs": true,
@@ -9,23 +12,23 @@
     "noEmit": true,
     "strict": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true,
-    // The mirror of the node globals eslint.config.js declares. Without it
-    // `Buffer` and `structuredClone` are type errors in files that lint clean.
-    "types": ["node"],
-    // @types/node reaches for `import("punycode")`, which nodenext resolves to
-    // the installed JS package; without this, checkJs walks into node_modules
-    // and reports errors in third-party code.
-    "maxNodeModuleJsDepth": 0
+    "resolveJsonModule": true
   },
   "include": [
     "packages/**/*.js",
     "packages/**/*.d.ts",
     "fixtures/**/*.js",
-    "cre/**/*.js",
+    "cre/lib/**/*.js",
+    "cre/*.d.ts",
     "proxy/**/*.js",
-    "web/**/*.js",
+    "proxy/**/*.d.ts",
+    "web/src/**/*.js",
+    "web/*.d.ts",
     "vitest.config.js"
   ],
-  "exclude": ["**/node_modules/**", "**/dist/**", "cre/spike/**"]
+  "exclude": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "cre/spike/**"
+  ]
 }

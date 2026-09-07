@@ -6,8 +6,7 @@
   "description": "Recorded challenges, payloads and responses — everything downstream develops against these",
   "main": "index.js",
   "exports": {
-    ".": "./index.js",
-    "./x402": "./x402.js"
+    ".": "./index.js"
   },
   "dependencies": {}
 }

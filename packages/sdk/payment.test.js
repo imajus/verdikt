@@ -1,314 +1,207 @@
-// Spike C's regression suite (Tasks.md 0.4).
+// X-PAYMENT decoding (Tasks.md 0.4, Spike C).
 //
-// The positive cases here are cheap. The negative ones are the point: a
-// decoder that returned the right payer for the good header and *also* for a
-// tampered one would pass every test that only checked the happy path, and
-// would hand the bond to whoever asked. Each rejection below is a way money
-// could leave the deposit for the wrong reason.
+// Every header here is built by SIGNING one with a real key, not by pasting a
+// fixture blob. That matters: the property under test is that the payer and the
+// amount are *cryptographically bound* to the header, and a hand-written
+// fixture cannot demonstrate a binding — it can only assert one. So each
+// tampering test below edits a signed header and expects the signature to stop
+// matching, which is the only way to show the check is doing work.
+//
+// The challenge option is the real one the demo provider returns, copied from
+// `fixtures/x402/challenge-402.json`.
 
 import { describe, expect, it } from 'vitest';
-import {
-  ARC_TESTNET_NETWORK,
-  ARC_TESTNET_USDC,
-  DECODED_PAYMENT,
-  FIXTURE_ATTACKER,
-  FIXTURE_PAYER,
-  PAYMENT_PAYLOAD,
-  PAYMENT_REQUIRED_CHALLENGE,
-  PRODUCTION_402_CHALLENGE,
-  SETTLEMENT_RECEIPT,
-  X_PAYMENT_HEADER,
-  X_PAYMENT_HEADER_TAMPERED_AMOUNT,
-  X_PAYMENT_HEADER_TAMPERED_PAYER,
-  X_PAYMENT_RESPONSE_HEADER
-} from '@verdikt/fixtures';
-import { decodePayment, decodeSettlement, PaymentDecodeError } from './payment.js';
-import { ARC_NATIVE_DECIMALS, PAYMENT_ASSET_DECIMALS, toArcNativeUnits } from './registry.js';
+import { privateKeyToAccount } from 'viem/accounts';
+import { decodePayment, decodePaymentEnvelope, isPaymentDecodingImplemented } from './payment.js';
 
-/** @param {unknown} value */
-const encode = (value) => Buffer.from(JSON.stringify(value), 'utf8').toString('base64');
+const PAYER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
+const OTHER = privateKeyToAccount('0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba');
 
-/**
- * Re-encode the fixture payload with one path edited.
- * @param {(payload: any) => void} edit
- * @returns {string}
- */
-function mutate(edit) {
-  const payload = structuredClone(PAYMENT_PAYLOAD);
-  edit(payload);
-  return encode(payload);
+/** The Base Sepolia `exact`/eip3009 option, verbatim from the captured 402. */
+const EIP3009_OPTION = {
+  scheme: 'exact',
+  network: 'eip155:84532',
+  amount: '1',
+  asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+  payTo: '0x5c33f23555313256b71f2b0a7ea1938425516505',
+  maxTimeoutSeconds: 300,
+  extra: { name: 'USDC', version: '2', assetTransferMethod: 'eip3009' }
+};
+
+/** The Arc `GatewayWalletBatched` option, verbatim from the same challenge. */
+const GATEWAY_OPTION = {
+  scheme: 'exact',
+  network: 'eip155:5042002',
+  amount: '1',
+  asset: '0x3600000000000000000000000000000000000000',
+  payTo: '0x5c33f23555313256b71f2b0a7ea1938425516505',
+  extra: { name: 'GatewayWalletBatched', version: '1', verifyingContract: '0x0077777d7eba4688bdef3e311b846f25870a19b9' }
+};
+
+const ACCEPTS = [EIP3009_OPTION, GATEWAY_OPTION];
+
+const AUTHORIZATION = {
+  from: PAYER.address,
+  to: '0x5c33f23555313256b71f2b0a7ea1938425516505',
+  value: '2500',
+  validAfter: '0',
+  validBefore: '99999999999',
+  nonce: `0x${'11'.repeat(32)}`
+};
+
+const TYPES = {
+  TransferWithAuthorization: [
+    { name: 'from', type: 'address' },
+    { name: 'to', type: 'address' },
+    { name: 'value', type: 'uint256' },
+    { name: 'validAfter', type: 'uint256' },
+    { name: 'validBefore', type: 'uint256' },
+    { name: 'nonce', type: 'bytes32' }
+  ]
+};
+
+/** Sign an ERC-3009 authorization exactly as a paying agent would. */
+async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, option = EIP3009_OPTION } = {}) {
+  const signature = await account.signTypedData({
+    domain: {
+      name: option.extra.name,
+      version: option.extra.version,
+      chainId: Number(option.network.split(':')[1]),
+      verifyingContract: /** @type {`0x${string}`} */ (option.asset)
+    },
+    types: TYPES,
+    primaryType: 'TransferWithAuthorization',
+    message: {
+      from: authorization.from,
+      to: authorization.to,
+      value: BigInt(authorization.value),
+      validAfter: BigInt(authorization.validAfter),
+      validBefore: BigInt(authorization.validBefore),
+      nonce: authorization.nonce
+    }
+  });
+  return header({ scheme: option.scheme, network: option.network, payload: { signature, authorization } });
 }
 
+/** @param {Record<string, unknown>} envelope */
+const header = (envelope) => Buffer.from(JSON.stringify({ x402Version: 2, ...envelope })).toString('base64');
+
 /**
- * @param {Promise<unknown>} promise
- * @returns {Promise<string>}
+ * Re-encode a signed header with one authorization field edited.
+ *
+ * @param {Record<string, string>} patch
  */
-async function rejectionCode(promise) {
-  try {
-    await promise;
-  } catch (error) {
-    expect(error).toBeInstanceOf(PaymentDecodeError);
-    return /** @type {PaymentDecodeError} */ (error).code;
+async function tamperedWith(patch) {
+  const original = JSON.parse(Buffer.from(await signedHeader(), 'base64').toString('utf8'));
+  original.payload.authorization = { ...original.payload.authorization, ...patch };
+  return Buffer.from(JSON.stringify(original)).toString('base64');
+}
+
+describe('the envelope', () => {
+  it('reads the x402 fields out of base64 JSON', () => {
+    const envelope = decodePaymentEnvelope(header({ scheme: 'exact', network: 'eip155:84532', payload: { a: 1 } }));
+    expect(envelope).toMatchObject({ x402Version: 2, scheme: 'exact', network: 'eip155:84532' });
+  });
+
+  for (const [name, value] of [
+    ['an empty string', ''],
+    ['something that is not base64 JSON', 'not-base64-@@@'],
+    ['base64 of a non-object', Buffer.from('42').toString('base64')],
+    ['an envelope with no scheme', header({ network: 'eip155:1', payload: {} })],
+    ['an envelope with no payload', header({ scheme: 'exact', network: 'eip155:1' })]
+  ]) {
+    it(`refuses ${name}`, () => {
+      expect(() => decodePaymentEnvelope(/** @type {string} */ (value))).toThrow(/decodePayment/);
+    });
   }
-  throw new Error('expected the decode to be rejected, but it resolved');
-}
+});
 
-describe('decodePayment', () => {
-  it('recovers the payer and amount from a GatewayWalletBatched header', async () => {
-    await expect(decodePayment(X_PAYMENT_HEADER)).resolves.toEqual(DECODED_PAYMENT);
+describe('decodePayment — the eip3009 path, which is an open standard end to end', () => {
+  it('is reported as implemented, so a server need not refuse to boot', () => {
+    expect(isPaymentDecodingImplemented()).toBe(true);
   });
 
-  it('reports the amount in the asset minor units as a bigint', async () => {
-    const { amount } = await decodePayment(X_PAYMENT_HEADER);
-    expect(typeof amount).toBe('bigint');
-    // $0.0025 at USDC's 6 decimals. If this ever reads 0.0025 or 2.5, the
-    // boundary that keeps @verdikt/sla off the wire format has been crossed.
-    expect(amount).toBe(2500n);
+  it('recovers the payer and the amount from a real signature', async () => {
+    const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(payment.amount).toBe(2500n);
   });
 
-  it('agrees with the provider 402 the payment answers', async () => {
-    const decoded = await decodePayment(X_PAYMENT_HEADER);
-    const [requirements] = PAYMENT_REQUIRED_CHALLENGE.accepts;
-    expect(decoded.payTo).toBe(requirements.payTo);
-    expect(decoded.asset).toBe(requirements.asset);
-    expect(decoded.network).toBe(requirements.network);
-    expect(decoded.amount).toBe(BigInt(requirements.amount));
+  it('returns the amount as a bigint in minor units, never a string or a float', async () => {
+    const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS });
+    expect(typeof payment.amount).toBe('bigint');
   });
 
-  it('carries the authorization nonce, so a refund has a replay key', async () => {
-    const { nonce } = await decodePayment(X_PAYMENT_HEADER);
-    expect(nonce).toMatch(/^0x[0-9a-f]{64}$/);
-    expect(nonce).toBe(PAYMENT_PAYLOAD.payload.authorization.nonce);
+  /**
+   * The whole security argument for reading a refund target out of this header.
+   * If `from` were merely asserted, naming someone else would redirect their
+   * refunds; because it is signed, editing it invalidates the signature.
+   */
+  it('rejects a header whose payer was swapped for someone else', async () => {
+    const forged = await tamperedWith({ from: OTHER.address });
+    await expect(decodePayment(forged, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
   });
 
-  it('is deterministic — the same header decodes identically every time', async () => {
-    const first = await decodePayment(X_PAYMENT_HEADER);
-    const second = await decodePayment(X_PAYMENT_HEADER);
-    expect(second).toEqual(first);
+  it('rejects a header whose amount was inflated after signing', async () => {
+    const forged = await tamperedWith({ value: '999999999' });
+    await expect(decodePayment(forged, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
   });
 
-  describe('binding', () => {
-    it('rejects a header naming a different payer over the real signature', async () => {
-      expect(await rejectionCode(decodePayment(X_PAYMENT_HEADER_TAMPERED_PAYER))).toBe(
-        'signer-mismatch'
-      );
-    });
-
-    it('rejects an inflated amount', async () => {
-      expect(await rejectionCode(decodePayment(X_PAYMENT_HEADER_TAMPERED_AMOUNT))).toBe(
-        'signer-mismatch'
-      );
-    });
-
-    it('rejects a redirected payTo', async () => {
-      const header = mutate((p) => {
-        p.accepted.payTo = FIXTURE_ATTACKER;
-        p.payload.authorization.to = FIXTURE_ATTACKER;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('signer-mismatch');
-    });
-
-    it('rejects a declared amount that disagrees with the signed one', async () => {
-      // Only the envelope is edited, so the signature still recovers — this is
-      // caught by the cross-check rather than by recovery, which is why both
-      // exist.
-      const header = mutate((p) => {
-        p.accepted.amount = '250000';
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('amount-mismatch');
-    });
-
-    it('rejects a declared payTo that disagrees with the signed one', async () => {
-      const header = mutate((p) => {
-        p.accepted.payTo = FIXTURE_ATTACKER;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('recipient-mismatch');
-    });
-
-    it('rejects a shifted validity window', async () => {
-      const header = mutate((p) => {
-        p.payload.authorization.validBefore = '9999999999';
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('signer-mismatch');
-    });
-
-    it('rejects a replaced nonce', async () => {
-      const header = mutate((p) => {
-        p.payload.authorization.nonce = `0x${'ab'.repeat(32)}`;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('signer-mismatch');
-    });
-
-    it('rejects a signing domain the payer did not sign under', async () => {
-      // The domain is not itself signed, so it can be swapped freely. Swapping
-      // it changes the digest and the recovered address stops matching.
-      const header = mutate((p) => {
-        p.accepted.extra.verifyingContract = ARC_TESTNET_USDC;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('signer-mismatch');
-    });
-
-    it('rejects a signature from another key', async () => {
-      const header = mutate((p) => {
-        p.payload.signature = `0x${'11'.repeat(65)}`;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('signer-mismatch');
-    });
+  // The signature covers the whole tuple, so the window is bound too — an
+  // expired authorization cannot be revived by editing its own deadline.
+  it('rejects a header whose validity window was edited', async () => {
+    const forged = await tamperedWith({ validBefore: '1' });
+    await expect(decodePayment(forged, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
   });
 
-  describe('malformed input', () => {
-    it.each([
-      ['empty', ''],
-      ['not base64', 'not base64 at all!'],
-      ['base64 of non-JSON', Buffer.from('hello', 'utf8').toString('base64')],
-      ['base64 of a JSON array', encode([1, 2, 3])]
-    ])('rejects a header that is %s', async (_label, header) => {
-      expect(await rejectionCode(decodePayment(header))).toBe('malformed-header');
-    });
-
-    it('rejects a non-string header', async () => {
-      // @ts-expect-error — the guard exists precisely for callers who ignore the type
-      expect(await rejectionCode(decodePayment(undefined))).toBe('malformed-header');
-    });
-
-    it('rejects a hex-encoded amount rather than widening it', async () => {
-      const header = mutate((p) => {
-        p.accepted.amount = '0x9c4';
-        p.payload.authorization.value = '0x9c4';
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('malformed-header');
-    });
-
-    it('rejects a payload with no authorization', async () => {
-      const header = mutate((p) => {
-        delete p.payload.authorization;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('unsupported-scheme');
-    });
-
-    it('rejects an unknown x402 version', async () => {
-      const header = mutate((p) => {
-        p.x402Version = 3;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('unsupported-version');
-    });
-
-    it('rejects an x402 v1 header, which carries no signing domain', async () => {
-      const { authorization, signature } = PAYMENT_PAYLOAD.payload;
-      const v1 = encode({
-        x402Version: 1,
-        scheme: 'exact',
-        network: 'arc-testnet',
-        payload: { authorization, signature }
-      });
-      expect(await rejectionCode(decodePayment(v1))).toBe('unsupported-version');
-    });
-
-    it('rejects a non-EVM network', async () => {
-      const header = mutate((p) => {
-        p.accepted.network = 'solana:mainnet';
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('unsupported-network');
-    });
-
-    it('rejects a payload whose extra names no EIP-712 domain', async () => {
-      const header = mutate((p) => {
-        delete p.accepted.extra;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('missing-eip712-domain');
-    });
-
-    it('rejects an ERC-6492 wrapped signature rather than guessing at it', async () => {
-      // A counterfactual smart account's signature needs an on-chain ERC-1271
-      // check. Failing loudly beats recovering an address that means nothing.
-      const magic = '6492649264926492649264926492649264926492649264926492649264926492';
-      const header = mutate((p) => {
-        p.payload.signature = `${p.payload.signature}${magic}`;
-      });
-      expect(await rejectionCode(decodePayment(header))).toBe('smart-account-signature');
-    });
+  it('rejects a signature from a key that is not the named payer', async () => {
+    const forged = await signedHeader({ account: OTHER });
+    await expect(decodePayment(forged, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
   });
 
-  describe('with the provider 402 supplied', () => {
-    it('accepts a header that answers the challenge', async () => {
-      const [requirements] = PAYMENT_REQUIRED_CHALLENGE.accepts;
-      await expect(decodePayment(X_PAYMENT_HEADER, { requirements })).resolves.toEqual(
-        DECODED_PAYMENT
-      );
-    });
+  /**
+   * A valid signature over the wrong payment. Crediting it would let an agent
+   * pay somebody else and claim a refund on a call this provider never got.
+   */
+  it('rejects a payment validly signed to a different recipient', async () => {
+    const elsewhere = { ...AUTHORIZATION, to: '0x00000000000000000000000000000000deadbeef' };
+    const signed = await signedHeader({ authorization: elsewhere });
+    await expect(decodePayment(signed, { accepts: ACCEPTS })).rejects.toThrow(/is paid at/);
+  });
 
-    it('rejects a header that answers a different challenge', async () => {
-      // The payer echoing its own requirements is the attacker-controlled
-      // path; pinning them to the provider's live 402 closes it.
-      const [requirements] = PRODUCTION_402_CHALLENGE.accepts;
-      expect(await rejectionCode(decodePayment(X_PAYMENT_HEADER, { requirements }))).toBe(
-        'requirements-mismatch'
-      );
-    });
+  // The domain is taken from the challenge, never from the header. A payer that
+  // chose its own domain could sign something harmless elsewhere and replay it.
+  it('will not verify against a challenge that offers no matching option', async () => {
+    await expect(decodePayment(await signedHeader(), { accepts: [GATEWAY_OPTION] })).rejects.toThrow(
+      /offers no exact option on eip155:84532/
+    );
+  });
+
+  it('refuses an authorization that is missing a field rather than defaulting it', async () => {
+    const envelope = JSON.parse(Buffer.from(await signedHeader(), 'base64').toString('utf8'));
+    delete envelope.payload.authorization.nonce;
+    const truncated = Buffer.from(JSON.stringify(envelope)).toString('base64');
+    await expect(decodePayment(truncated, { accepts: ACCEPTS })).rejects.toThrow(/missing nonce/);
   });
 });
 
-describe('decodeSettlement', () => {
-  it('decodes the receipt from the paid response', async () => {
-    await expect(decodeSettlement(X_PAYMENT_RESPONSE_HEADER)).resolves.toEqual({
-      success: true,
-      transaction: SETTLEMENT_RECEIPT.transaction,
-      network: ARC_TESTNET_NETWORK,
-      payer: FIXTURE_PAYER,
-      amount: null,
-      errorReason: null
-    });
+describe('decodePayment — the scheme Spike C still cannot answer', () => {
+  const gatewayHeader = header({
+    scheme: 'exact',
+    network: 'eip155:5042002',
+    payload: { somethingCircleShaped: true }
   });
 
-  it('surfaces a failed settlement rather than throwing on it', async () => {
-    // `success: false` is a normal answer, and the caller must be able to see
-    // it: it is the case where no verdict may be written at all.
-    const header = encode({
-      success: false,
-      transaction: '',
-      network: ARC_TESTNET_NETWORK,
-      errorReason: 'insufficient_funds'
-    });
-    const receipt = await decodeSettlement(header);
-    expect(receipt.success).toBe(false);
-    expect(receipt.errorReason).toBe('insufficient_funds');
+  it('refuses GatewayWalletBatched rather than guessing its payload', async () => {
+    await expect(decodePayment(gatewayHeader, { accepts: ACCEPTS })).rejects.toThrow(/GatewayWalletBatched/);
   });
 
-  it('reports the settled amount when the scheme carries one', async () => {
-    const header = encode({ ...SETTLEMENT_RECEIPT, amount: '1800' });
-    await expect(decodeSettlement(header)).resolves.toMatchObject({ amount: 1800n });
+  it('refuses when no challenge was supplied, since nothing can be verified without one', async () => {
+    await expect(decodePayment(await signedHeader())).rejects.toThrow(/no accepts supplied/);
   });
 
-  it('rejects a receipt with no success field', async () => {
-    const header = encode({ transaction: '0x0', network: ARC_TESTNET_NETWORK });
-    expect(await rejectionCode(decodeSettlement(header))).toBe('malformed-header');
-  });
-});
-
-describe('toArcNativeUnits', () => {
-  it('scales USDC minor units up to Arc native units', async () => {
-    const { amount } = await decodePayment(X_PAYMENT_HEADER);
-    expect(toArcNativeUnits(amount)).toBe(2_500_000_000_000_000n);
-  });
-
-  it('is the identity when the asset already has 18 decimals', () => {
-    expect(toArcNativeUnits(7n, ARC_NATIVE_DECIMALS)).toBe(7n);
-  });
-
-  it('refuses to scale down rather than truncating', () => {
-    expect(() => toArcNativeUnits(1n, 24)).toThrow(/unsupported asset decimals/);
-  });
-
-  it('refuses a number, so a float can never reach the refund cap', () => {
-    // @ts-expect-error — same reason as above: the guard is for JS callers
-    expect(() => toArcNativeUnits(2500)).toThrow(/non-negative bigint/);
-  });
-
-  it('keeps $1 paid and $1 bonded comparable', () => {
-    // The invariant the helper exists for: one dollar paid must not compare as
-    // a trillionth of one dollar bonded (Specification.md §3).
-    const oneDollarPaid = 10n ** BigInt(PAYMENT_ASSET_DECIMALS);
-    const oneDollarBonded = 10n ** BigInt(ARC_NATIVE_DECIMALS);
-    expect(toArcNativeUnits(oneDollarPaid)).toBe(oneDollarBonded);
+  it('still answers with the fixture under an explicit opt-in, for development', async () => {
+    const payment = await decodePayment(gatewayHeader, { accepts: ACCEPTS, allowStub: true });
+    expect(payment.amount).toBe(2500n);
   });
 });

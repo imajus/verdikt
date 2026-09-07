@@ -3,6 +3,7 @@ dist/
 coverage/
 .env
 .env.local
+.dev.vars
 
 # foundry
 contracts/out/
@@ -19,5 +20,18 @@ cre/spike/**/.tmp/
 .DS_Store
 *.log
 
+# wrangler local dev state (DO storage, KV/D1 emulation, build cache) — web/
+# and proxy/ both run `wrangler dev`
+.wrangler/
+# ...except the captured CRE simulate run. Production enrollment is private
+# beta, so that log IS the submission's evidence that the confidential workflow
+# runs — four documents link to it. `*.log` silently kept it out of the repo
+# once already.
+!docs/evidence/*.log
+
 # scripts/setup-ens.mjs output
 ens-setup-plan.json
+
+# Claude Code worktrees. Real git worktrees checked out under the repo, so they
+# show as untracked here — committing one would nest a whole second checkout.
+.claude/worktrees/

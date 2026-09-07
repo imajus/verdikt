@@ -12,5 +12,10 @@
     "@verdikt/fixtures": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "@verdikt/sla": "workspace:*"
+  },
+  "main": "lib/judge.js",
+  "exports": {
+    "./judge": "./lib/judge.js",
+    "./reputation": "./lib/reputation.js"
   }
 }

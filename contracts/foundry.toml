@@ -5,6 +5,10 @@ out = "out"
 libs = ["lib"]
 optimizer = true
 optimizer_runs = 200
+# DeployScoreWriter reads Verdikt's own Sepolia addresses from deployments/,
+# the same file the SDK and the ENS scripts read, rather than taking them as
+# environment variables that could disagree with it.
+fs_permissions = [{ access = "read", path = "../deployments" }]
 
 [rpc_endpoints]
 arc_testnet = "${ARC_RPC_URL}"

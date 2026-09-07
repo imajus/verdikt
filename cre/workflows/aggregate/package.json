@@ -1,0 +1,28 @@
+{
+  "name": "@verdikt/cre-aggregate",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Hourly aggregate workflow — reads public verdict events, publishes reputation scores to ENS",
+  "scripts": {
+    "setup": "cre-setup",
+    "compile": "cre-compile ./main.ts .tmp/aggregate.wasm"
+  },
+  "dependencies": {
+    "@chainlink/cre-sdk": "1.19.1",
+    "@verdikt/cre": "file:../..",
+    "@verdikt/fixtures": "file:../../../fixtures",
+    "@verdikt/sdk": "file:../../../packages/sdk",
+    "@verdikt/sla": "file:../../../packages/sla",
+    "viem": "^2.56.3"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "2.6.3",
+    "@types/bun": "^1.3.11"
+  },
+  "overrides": {
+    "@verdikt/fixtures": "file:../../../fixtures",
+    "@verdikt/sdk": "file:../../../packages/sdk",
+    "@verdikt/sla": "file:../../../packages/sla"
+  }
+}
