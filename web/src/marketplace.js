@@ -6,6 +6,7 @@
 
 import { aggregateWindow, parseSla } from '@verdikt/sla';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
+import { matchFailedClause } from '@verdikt/sdk/registry';
 
 /**
  * Everything the listing and the detail views need, in one pass.
@@ -38,10 +39,14 @@ export async function loadMarketplace({ registry, resolve }) {
   const listings = services.map((service, index) => {
     const record = records[index];
     const own = verdicts.filter((verdict) => verdict.serviceId === service.serviceId);
+    // Hoisted because the history resolves each verdict's clause hash against
+    // it. The chain stores `keccak256(clauseId)`, so the SLA is the only key.
+    const sla = parseSlaOrNull(record?.sla ?? null);
     const history = own
       .map((verdict) => ({
         ...verdict,
-        refunded: refundsByRequest.get(verdict.requestId)?.amount ?? 0n
+        refunded: refundsByRequest.get(verdict.requestId)?.amount ?? 0n,
+        failedClauseId: matchFailedClause(verdict.failedClause, sla)
       }))
       .reverse();
 
@@ -55,7 +60,7 @@ export async function loadMarketplace({ registry, resolve }) {
       endpoint: record?.url ?? null,
       payTo: record?.address ?? null,
       namingLayer: /** @type {'ok'|'unreachable'} */ (record === null ? 'unreachable' : 'ok'),
-      sla: parseSlaOrNull(record?.sla ?? null),
+      sla,
       slaRaw: record?.sla ?? null,
       /** As published on ENS — the number a consumer actually ranks on. */
       published: { conformance: record?.conformance ?? null, availability: record?.availability ?? null },

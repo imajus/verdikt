@@ -151,20 +151,31 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     function onReport(bytes calldata metadata, bytes calldata report) external {
         _authenticateReport(metadata);
 
-        (bytes32 serviceId, bytes32 requestId, uint8 outcomeOrdinal, address payer, uint256 paidAmount) =
-            abi.decode(report, (bytes32, bytes32, uint8, address, uint256));
+        (
+            bytes32 serviceId,
+            bytes32 requestId,
+            uint8 outcomeOrdinal,
+            address payer,
+            uint256 paidAmount,
+            bytes32 failedClause
+        ) = abi.decode(report, (bytes32, bytes32, uint8, address, uint256, bytes32));
 
         if (outcomeOrdinal > uint8(type(Outcome).max)) revert InvalidOutcome(outcomeOrdinal);
         // A zero payer would burn the refund rather than pay anyone. It can only
         // come from a bug in our own workflow, so it is a hard failure.
         if (payer == address(0)) revert ZeroPayer();
 
-        _recordVerdict(serviceId, requestId, Outcome(outcomeOrdinal), payer, paidAmount);
+        _recordVerdict(serviceId, requestId, Outcome(outcomeOrdinal), payer, paidAmount, failedClause);
     }
 
-    function _recordVerdict(bytes32 serviceId, bytes32 requestId, Outcome outcome, address payer, uint256 paidAmount)
-        private
-    {
+    function _recordVerdict(
+        bytes32 serviceId,
+        bytes32 requestId,
+        Outcome outcome,
+        address payer,
+        uint256 paidAmount,
+        bytes32 failedClause
+    ) private {
         if (_verdicts[requestId].writtenAt != 0) {
             emit VerdictRejected(serviceId, requestId, RejectionReason.DUPLICATE_REQUEST);
             return;
@@ -189,16 +200,21 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
             if (service.deposit < credited) credited = service.deposit;
         }
 
+        // A PASS names no clause. Storing one would be a contradiction a reader
+        // would have to reconcile.
+        bytes32 clause = outcome == Outcome.PASS ? bytes32(0) : failedClause;
+
         _verdicts[requestId] = Verdict({
             serviceId: serviceId,
             outcome: outcome,
             payer: payer,
             paidAmount: paidAmount,
             refundCredited: credited,
-            writtenAt: uint64(block.timestamp)
+            writtenAt: uint64(block.timestamp),
+            failedClause: clause
         });
 
-        emit VerdictWritten(serviceId, requestId, outcome, payer, paidAmount);
+        emit VerdictWritten(serviceId, requestId, outcome, payer, paidAmount, clause);
 
         if (credited > 0) {
             service.deposit -= credited;

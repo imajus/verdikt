@@ -173,9 +173,15 @@ importers:
 
   scripts:
     dependencies:
+      '@verdikt/fixtures':
+        specifier: workspace:*
+        version: link:../fixtures
       '@verdikt/sdk':
         specifier: workspace:*
         version: link:../packages/sdk
+      '@verdikt/sla':
+        specifier: workspace:*
+        version: link:../packages/sla
       viem:
         specifier: ^2.56.3
         version: 2.56.3(typescript@7.0.2)

@@ -117,6 +117,12 @@ interface VerdictRecord {
   outcome: SlaOutcome;
   payer: string;
   paidAmount: bigint;
+  /**
+   * `keccak256(bytes(clauseId))` of the first clause that failed, or the zero
+   * word. Match it by hashing the ids in the service's own SLA — see
+   * `matchFailedClause`.
+   */
+  failedClause: string;
   blockNumber: bigint | null;
   transactionHash: string | null;
 }
@@ -138,6 +144,8 @@ interface StoredVerdict {
   refundCredited: bigint;
   /** Unix seconds. */
   writtenAt: number;
+  /** See `VerdictRecord.failedClause`. */
+  failedClause: string;
 }
 
 interface RegistryReader {

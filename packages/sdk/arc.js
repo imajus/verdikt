@@ -39,13 +39,13 @@ export const DEFAULT_ARC_RPC = arcTestnet.rpcUrls.default.http[0];
  */
 export const registryAbi = parseAbi([
   'function getService(bytes32 serviceId) view returns ((address provider, uint8 status, uint256 deposit))',
-  'function getVerdict(bytes32 requestId) view returns ((bytes32 serviceId, uint8 outcome, address payer, uint256 paidAmount, uint256 refundCredited, uint64 writtenAt))',
+  'function getVerdict(bytes32 requestId) view returns ((bytes32 serviceId, uint8 outcome, address payer, uint256 paidAmount, uint256 refundCredited, uint64 writtenAt, bytes32 failedClause))',
   'function getOwed(address payer) view returns (uint256)',
   'function DEPOSIT_AMOUNT() view returns (uint256)',
   'function FIXED_REFUND() view returns (uint256)',
   'function NATIVE_PER_MINOR_UNIT() view returns (uint256)',
   'event ServiceRegistered(bytes32 indexed serviceId, address indexed provider, string slug, uint256 deposit)',
-  'event VerdictWritten(bytes32 indexed serviceId, bytes32 indexed requestId, uint8 outcome, address payer, uint256 paidAmount)',
+  'event VerdictWritten(bytes32 indexed serviceId, bytes32 indexed requestId, uint8 outcome, address payer, uint256 paidAmount, bytes32 failedClause)',
   'event RefundCredited(bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount)',
   'event ServiceSuspended(bytes32 indexed serviceId)',
   'event ServiceReinstated(bytes32 indexed serviceId, uint256 deposit)',
@@ -150,7 +150,8 @@ export function createRegistryReader(options = {}) {
         payer: verdict.payer,
         paidAmount: verdict.paidAmount,
         refundCredited: verdict.refundCredited,
-        writtenAt: Number(verdict.writtenAt)
+        writtenAt: Number(verdict.writtenAt),
+        failedClause: verdict.failedClause
       };
     },
 
@@ -206,6 +207,7 @@ export function createRegistryReader(options = {}) {
           outcome: outcomeFromOrdinal(Number(args.outcome)),
           payer: /** @type {string} */ (args.payer),
           paidAmount: /** @type {bigint} */ (args.paidAmount),
+          failedClause: /** @type {string} */ (args.failedClause),
           blockNumber: log.blockNumber,
           transactionHash: log.transactionHash
         };

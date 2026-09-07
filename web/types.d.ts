@@ -9,6 +9,12 @@ interface MarketplaceDeps {
 interface ListingVerdict extends VerdictRecord {
   /** In Arc's 18-decimal native view — it came out of the bond. Zero for a PASS. */
   refunded: bigint;
+  /**
+   * `failedClause` resolved against the SLA published now: the clause id, or
+   * `null` when the verdict named none, or `'unknown'` when the SLA has been
+   * edited since and no longer declares it.
+   */
+  failedClauseId: string | null;
 }
 
 interface Listing {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
-import { JUDGEMENT_MODE, judge, observationFrom, shouldWriteVerdict } from './judge.js';
+import { JUDGEMENT_MODE, failedClauseOf, judge, observationFrom, shouldWriteVerdict } from './judge.js';
 
 /** @returns {SlaObservation} */
 const observe = (overrides = {}) => ({
@@ -75,6 +75,39 @@ describe('judge — when the SLA cannot be used', () => {
 
   it('is still DOWN when nothing came back', () => {
     expect(judge(null, observe({ status: null, body: null })).outcome).toBe('DOWN');
+  });
+});
+
+describe('failedClauseOf', () => {
+  it('names nothing when every clause held', () => {
+    expect(failedClauseOf(judge(SLA_TEXT.honest, observe()))).toBeNull();
+  });
+
+  /**
+   * The violating fixture breaks its schema clause AND its latency clause. Only
+   * the first reaches the chain, and "first" is the SLA's own declared order —
+   * so the provider chose which one it is, and the answer is stable across runs.
+   */
+  it('names the first failure in the order the SLA declared, not all of them', () => {
+    const judgement = judge(SLA_TEXT.violating, observe({ latencyMs: 4000 }));
+    expect(judgement.clauses.filter((clause) => !clause.pass).length).toBeGreaterThan(1);
+    expect(failedClauseOf(judgement)).toBe('current-weather-shape');
+  });
+
+  // `delivery` is prepended by the engine, so it can outrank a declared clause
+  // that also failed — which is right: nothing was delivered to judge.
+  it('names the implicit delivery clause when the provider returned a 5xx', () => {
+    expect(failedClauseOf(judge(SLA_TEXT.violating, observe({ status: 503, body: null })))).toBe('delivery');
+  });
+
+  // The status-only fallback evaluates no clauses at all. It must come back as
+  // "none named" rather than as a clause, or the chain would carry a hash of
+  // something no SLA ever declared.
+  it('names nothing when judgement fell back to status alone', () => {
+    const judgement = judge(null, observe({ status: 503, body: null }));
+    expect(judgement.mode).toBe(JUDGEMENT_MODE.STATUS_ONLY);
+    expect(judgement.outcome).not.toBeNull();
+    expect(failedClauseOf(judgement)).toBeNull();
   });
 });
 

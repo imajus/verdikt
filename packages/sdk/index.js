@@ -24,5 +24,9 @@ export {
   outcomeToOrdinal,
   outcomeFromOrdinal,
   statusFromOrdinal,
-  serviceIdOf
+  serviceIdOf,
+  NO_CLAUSE,
+  DELIVERY_CLAUSE,
+  clauseHash,
+  matchFailedClause
 } from './registry.js';

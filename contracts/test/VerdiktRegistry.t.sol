@@ -44,6 +44,9 @@ contract VerdiktRegistryTest is Test {
     uint256 internal constant REFUND = 1e18;
     uint256 internal constant ONE_USDC_MINOR = 1e6;
 
+    /// @dev `keccak256("latency")` — a stand-in for whatever clause id the SLA declares.
+    bytes32 internal constant CLAUSE = keccak256("latency");
+
     address internal constant FORWARDER = address(0xF0F0);
     address internal constant WORKFLOW_OWNER = address(0x0E0E);
     bytes10 internal constant WORKFLOW_NAME = bytes10("verdikt-v1");
@@ -86,7 +89,18 @@ contract VerdiktRegistryTest is Test {
         pure
         returns (bytes memory)
     {
-        return abi.encode(id, requestId, uint8(outcome), who, amount);
+        return _report(id, requestId, outcome, who, amount, CLAUSE);
+    }
+
+    function _report(
+        bytes32 id,
+        bytes32 requestId,
+        IVerdiktRegistry.Outcome outcome,
+        address who,
+        uint256 amount,
+        bytes32 clause
+    ) internal pure returns (bytes memory) {
+        return abi.encode(id, requestId, uint8(outcome), who, amount, clause);
     }
 
     function _deliver(bytes32 requestId, IVerdiktRegistry.Outcome outcome, address who, uint256 amount) internal {
@@ -233,7 +247,8 @@ contract VerdiktRegistryTest is Test {
         vm.prank(FORWARDER);
         vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.InvalidOutcome.selector, uint8(3)));
         registry.onReport(
-            _metadata(WORKFLOW_OWNER, WORKFLOW_NAME), abi.encode(serviceId, bytes32("r1"), uint8(3), payer, uint256(1))
+            _metadata(WORKFLOW_OWNER, WORKFLOW_NAME),
+            abi.encode(serviceId, bytes32("r1"), uint8(3), payer, uint256(1), CLAUSE)
         );
     }
 
@@ -265,6 +280,43 @@ contract VerdiktRegistryTest is Test {
         assertTrue(registry.supportsInterface(type(IReceiver).interfaceId));
         assertTrue(registry.supportsInterface(type(IERC165).interfaceId));
         assertFalse(registry.supportsInterface(bytes4(0xdeadbeef)));
+    }
+
+    // --------------------------------------------------------- failure detail
+
+    function test_failRecordsWhichClauseBroke() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 2500);
+
+        assertEq(registry.getVerdict("r1").failedClause, CLAUSE);
+    }
+
+    /// @dev A PASS naming a clause is a contradiction, and the chain is where a
+    ///      reader has no way to ask which half was meant. The registry drops
+    ///      the clause rather than storing one nothing can reconcile.
+    function test_passStoresNoClauseEvenIfTheReportNamesOne() public {
+        _register();
+        vm.prank(FORWARDER);
+        registry.onReport(
+            _metadata(WORKFLOW_OWNER, WORKFLOW_NAME),
+            _report(serviceId, "r1", IVerdiktRegistry.Outcome.PASS, payer, 2500, CLAUSE)
+        );
+
+        assertEq(registry.getVerdict("r1").failedClause, bytes32(0));
+    }
+
+    /// @dev The clause id is provider-authored, so the registry cannot check it
+    ///      against anything. An unnamed failure still has to record the failure.
+    function test_failWithoutAClauseStillCreditsTheRefund() public {
+        _register();
+        vm.prank(FORWARDER);
+        registry.onReport(
+            _metadata(WORKFLOW_OWNER, WORKFLOW_NAME),
+            _report(serviceId, "r1", IVerdiktRegistry.Outcome.FAIL, payer, 5 * ONE_USDC_MINOR, bytes32(0))
+        );
+
+        assertEq(registry.getVerdict("r1").failedClause, bytes32(0));
+        assertEq(registry.getOwed(payer), REFUND);
     }
 
     // ------------------------------------------------------------- accounting

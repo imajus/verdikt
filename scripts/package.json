@@ -3,13 +3,15 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Spikes and operational scripts — throwaway by design, kept for the evidence they produce",
+  "description": "Spikes and operational scripts \u2014 throwaway by design, kept for the evidence they produce",
   "scripts": {
     "spike:ens": "node --env-file-if-exists=../.env spike-ens.mjs",
     "setup:ens": "node --env-file-if-exists=../.env setup-ens.mjs"
   },
   "dependencies": {
+    "@verdikt/fixtures": "workspace:*",
     "@verdikt/sdk": "workspace:*",
+    "@verdikt/sla": "workspace:*",
     "viem": "^2.56.3"
   }
 }

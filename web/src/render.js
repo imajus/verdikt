@@ -59,11 +59,37 @@ function clauseRow(clause) {
     </tr>`;
 }
 
+/**
+ * What a verdict names as the clause that broke.
+ *
+ * A PASS names nothing, and neither does a failure judged on status alone — but
+ * those are different facts, so they read differently. `'unknown'` is a third:
+ * the verdict named a clause the SLA no longer declares, which means the
+ * provider edited it after the fact. That is worth showing plainly rather than
+ * rendering as a dash.
+ *
+ * @param {ListingVerdict} verdict
+ */
+function failedClauseCell(verdict) {
+  if (verdict.outcome === 'PASS') return '<span class="muted">—</span>';
+  if (verdict.failedClauseId === null) {
+    return '<span class="muted" title="Judged on status alone: no SLA was in force for this call, so no clause was evaluated.">status only</span>';
+  }
+  if (verdict.failedClauseId === 'delivery') {
+    return '<code title="The implicit clause every service is held to: a response arrived and was not a 5xx. No provider declares it.">delivery</code>';
+  }
+  if (verdict.failedClauseId === 'unknown') {
+    return '<span class="warn" title="This verdict names a clause the published SLA no longer declares — it has been edited since.">edited since</span>';
+  }
+  return `<code>${escape(verdict.failedClauseId)}</code>`;
+}
+
 /** @param {ListingVerdict} verdict */
 function verdictRow(verdict) {
   return `
     <tr class="verdict ${verdict.outcome.toLowerCase()}">
       <td><span class="outcome ${verdict.outcome.toLowerCase()}">${verdict.outcome}</span></td>
+      <td>${failedClauseCell(verdict)}</td>
       <td><code title="${escape(verdict.requestId)}">${escape(shortHex(verdict.requestId))}</code></td>
       <td><code>${escape(shortHex(verdict.payer))}</code></td>
       <td class="num">${escape(formatMinorUsdc(verdict.paidAmount))}</td>
@@ -141,7 +167,7 @@ export function renderDetail(listing) {
         listing.history.length === 0
           ? '<p class="note">No paid calls yet. A service nobody has called is presumed healthy — that is why it scores 1000 rather than 0.</p>'
           : `<table>
-               <thead><tr><th>Outcome</th><th>Request</th><th>Payer</th><th>Paid</th><th>Refunded</th><th>Block</th></tr></thead>
+               <thead><tr><th>Outcome</th><th>Broke</th><th>Request</th><th>Payer</th><th>Paid</th><th>Refunded</th><th>Block</th></tr></thead>
                <tbody>${listing.history.map(verdictRow).join('')}</tbody>
              </table>
              <p class="muted small">

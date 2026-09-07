@@ -23,9 +23,9 @@ import {
   type HTTPPayload,
   type TeeRuntime
 } from '@chainlink/cre-sdk';
-import { encodeAbiParameters, parseAbiParameters, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
 
-import { judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
+import { failedClauseOf, judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
 import { outcomeToOrdinal } from '@verdikt/sdk/registry';
 
 export type Config = {
@@ -78,8 +78,20 @@ type VerifyRequest = {
 
 /** Mirrors `VerdiktRegistry.onReport`'s decode. The two must change together. */
 const VERDICT_REPORT_PARAMS = parseAbiParameters(
-  'bytes32 serviceId, bytes32 requestId, uint8 outcome, address payer, uint256 paidAmount'
+  'bytes32 serviceId, bytes32 requestId, uint8 outcome, address payer, uint256 paidAmount, bytes32 failedClause'
 );
+
+/**
+ * The failing clause travels as `keccak256(id)`, never the string.
+ *
+ * The id is provider-authored and unbounded, and this is written once per paid
+ * call. A reader already holds the SLA from ENS, so it hashes the declared ids
+ * and matches. Nothing that is not a clause id — a status-only DOWN, the
+ * implicit `delivery` clause — hashes to anything the SLA declares, which is
+ * why the zero word is reserved for "no clause named".
+ */
+const clauseHash = (id: string | null): Hex =>
+  id === null ? '0x0000000000000000000000000000000000000000000000000000000000000000' : keccak256(toHex(id));
 
 /**
  * Runs inside the enclave. `TeeRuntime`, not `Runtime` — that type difference
@@ -180,7 +192,8 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
     request.requestId,
     outcomeToOrdinal(judgement.outcome as SlaOutcome),
     request.payer,
-    BigInt(request.paidAmountMinorUnits)
+    BigInt(request.paidAmountMinorUnits),
+    clauseHash(failedClauseOf(judgement))
   ]);
 
   const signedReport = donRuntime.report(prepareReportRequest(encodedVerdict)).result();

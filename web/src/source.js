@@ -8,6 +8,7 @@
 
 import { ARC, ENS_BACKEND, createRegistryReader, resolveServiceRecord, serviceIdOf } from '@verdikt/sdk';
 import { SLA_TEXT } from '@verdikt/fixtures';
+import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
 
 /**
  * @param {Record<string, string|undefined>} env
@@ -61,12 +62,16 @@ function demoSource() {
   const payer = '0x1111111111111111111111111111111111111111';
 
   for (let i = 0; i < 24; i += 1) {
+    const down = i === 11;
     verdicts.push({
       serviceId: honest,
       requestId: `0x${(i + 1).toString(16).padStart(64, '0')}`,
-      outcome: i === 11 ? 'DOWN' : 'PASS',
+      outcome: down ? 'DOWN' : 'PASS',
       payer,
       paidAmount: 2500n,
+      // The one outage failed to deliver at all, so it names the implicit
+      // clause rather than one the provider wrote. A PASS names none.
+      failedClause: down ? clauseHash(DELIVERY_CLAUSE) : NO_CLAUSE,
       blockNumber: 200n + BigInt(i),
       transactionHash: `0x${'a'.repeat(63)}${i.toString(16)}`
     });
@@ -81,6 +86,9 @@ function demoSource() {
       outcome: 'FAIL',
       payer,
       paidAmount: 2500n,
+      // Both the schema and the latency clause break on every call; the verdict
+      // carries the first in the SLA's own declared order.
+      failedClause: clauseHash('current-weather-shape'),
       blockNumber: 300n + BigInt(i),
       transactionHash: `0x${'b'.repeat(63)}${i.toString(16)}`
     });

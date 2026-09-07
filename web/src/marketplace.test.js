@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
+import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, scoreBand, shortHex } from './format.js';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
@@ -63,14 +64,16 @@ const service = (slug, serviceId, overrides = {}) => ({
  * @param {string} serviceId
  * @param {SlaOutcome} outcome
  * @param {string} requestId
+ * @param {string} [failedClause]
  * @returns {VerdictRecord}
  */
-const verdict = (serviceId, outcome, requestId) => ({
+const verdict = (serviceId, outcome, requestId, failedClause = NO_CLAUSE) => ({
   serviceId,
   requestId,
   outcome,
   payer: '0x1111111111111111111111111111111111111111',
   paidAmount: 2500n,
+  failedClause,
   blockNumber: 10n,
   transactionHash: `0x${'ab'.repeat(32)}`
 });
@@ -307,6 +310,48 @@ describe('rendering', () => {
       deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
     );
     expect(renderDetail(services[0])).toContain('presumed healthy');
+  });
+});
+
+describe('which clause a verdict says broke', () => {
+  /** @param {VerdictRecord[]} verdicts */
+  const detail = async (verdicts) => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], verdicts, records: { weather: record({}) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('names the clause, resolving the hash against the published SLA', async () => {
+    const html = await detail([verdict(HONEST, 'FAIL', '0x02', clauseHash('responds-within-5s'))]);
+    expect(html).toContain('responds-within-5s');
+  });
+
+  // The implicit clause is in no SLA — the validator rejects `id: "delivery"` —
+  // so matching it against the declared ids would report it as an edit.
+  it('names the implicit delivery clause, which no SLA declares', async () => {
+    const html = await detail([verdict(HONEST, 'DOWN', '0x02', clauseHash(DELIVERY_CLAUSE))]);
+    expect(html).toContain('>delivery<');
+    expect(html).not.toContain('edited since');
+  });
+
+  it('says "status only" when a failure named no clause, not "—"', async () => {
+    const html = await detail([verdict(HONEST, 'DOWN', '0x02', NO_CLAUSE)]);
+    expect(html).toContain('status only');
+  });
+
+  // The provider can rewrite its SLA at any time, and old verdicts still point
+  // at the ids that were in force. Silently rendering that as "no clause" would
+  // hide exactly the edit worth seeing.
+  it('says the SLA was edited when a named clause no longer exists', async () => {
+    const html = await detail([verdict(HONEST, 'FAIL', '0x02', clauseHash('a-clause-since-removed'))]);
+    expect(html).toContain('edited since');
+  });
+
+  it('leaves a PASS blank rather than claiming it broke nothing in particular', async () => {
+    const html = await detail([verdict(HONEST, 'PASS', '0x02')]);
+    expect(html).not.toContain('status only');
+    expect(html).not.toContain('edited since');
   });
 });
 

@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
+  DELIVERY_CLAUSE,
+  NO_CLAUSE,
   OUTCOME_ORDINAL,
   STATUS_ORDINAL,
+  clauseHash,
+  matchFailedClause,
   outcomeFromOrdinal,
   outcomeToOrdinal,
   serviceIdOf,
@@ -55,5 +59,51 @@ describe('serviceIdOf', () => {
     for (const slug of ['a', 'weather', 'weather-lite', 'x1', 'a'.repeat(63)]) {
       expect(serviceIdOf(slug), slug).toMatch(/^0x[0-9a-f]{64}$/);
     }
+  });
+});
+
+
+describe('matchFailedClause', () => {
+  /** @type {SlaDocument} */
+  const sla = /** @type {any} */ ({
+    version: 1,
+    clauses: [
+      { id: 'shape', type: 'schema', schema: { type: 'object' } },
+      { id: 'responds-within-5s', type: 'latency', maxMs: 5000 }
+    ]
+  });
+
+  it('resolves a hash back to the clause id the provider declared', () => {
+    expect(matchFailedClause(clauseHash('responds-within-5s'), sla)).toBe('responds-within-5s');
+  });
+
+  /**
+   * The implicit clause is prepended by `evaluate` and is in no SLA — the
+   * validator rejects `id: "delivery"` — so it has to be matched by name.
+   * Falling through to the declared ids would report every outage as an edit.
+   */
+  it('resolves the implicit delivery clause without it being in the SLA', () => {
+    expect(matchFailedClause(clauseHash(DELIVERY_CLAUSE), sla)).toBe(DELIVERY_CLAUSE);
+    expect(matchFailedClause(clauseHash(DELIVERY_CLAUSE), null)).toBe(DELIVERY_CLAUSE);
+  });
+
+  it('reads the zero word as "no clause was named", not as a miss', () => {
+    expect(matchFailedClause(NO_CLAUSE, sla)).toBeNull();
+    expect(matchFailedClause(NO_CLAUSE.toUpperCase().replace('0X', '0x'), sla)).toBeNull();
+  });
+
+  /**
+   * A verdict is final and the SLA behind it is not. Reporting a clause the SLA
+   * no longer declares as absent would hide the provider's edit, which is the
+   * one thing a reader looking at an old verdict needs to know.
+   */
+  it('reports a clause the SLA no longer declares as unknown, not as absent', () => {
+    expect(matchFailedClause(clauseHash('removed-since'), sla)).toBe('unknown');
+    expect(matchFailedClause(clauseHash('shape'), null)).toBe('unknown');
+  });
+
+  it('does not care how the hash was cased on the way in', () => {
+    const upper = /** @type {string} */ (clauseHash('shape')).toUpperCase().replace('0X', '0x');
+    expect(matchFailedClause(upper, sla)).toBe('shape');
   });
 });

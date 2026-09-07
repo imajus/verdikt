@@ -50,6 +50,9 @@ interface IVerdiktRegistry {
         uint256 paidAmount;
         uint256 refundCredited;
         uint64 writtenAt;
+        /// @dev `keccak256(bytes(clauseId))` of the first clause that failed,
+        ///      or zero for a PASS. See `VerdictWritten`.
+        bytes32 failedClause;
     }
 
     /// @dev One read for the dashboard's service list (Specification.md §5).
@@ -75,8 +78,27 @@ interface IVerdiktRegistry {
     ///      over a trailing 7-day window to derive the conformance and
     ///      availability ratios, so `serviceId` is indexed and `outcome` is
     ///      carried in the payload.
+    /// @dev `failedClause` is `keccak256(bytes(clauseId))` of the first clause
+    ///      that failed, or zero for a PASS.
+    ///
+    ///      A hash rather than the string, because the clause id is
+    ///      provider-authored and unbounded, and this is written once per paid
+    ///      call. Nothing is lost: a reader already holds the SLA from ENS, so
+    ///      it hashes the declared ids and matches. An id it cannot match means
+    ///      the SLA has been edited since — which is worth showing as exactly
+    ///      that rather than papering over.
+    ///
+    ///      It records WHICH clause broke, never the observed value. The
+    ///      `actual` lives in the workflow's return value with the response
+    ///      body, and putting it on a public chain would publish a slice of a
+    ///      paid response to everyone.
     event VerdictWritten(
-        bytes32 indexed serviceId, bytes32 indexed requestId, Outcome outcome, address payer, uint256 paidAmount
+        bytes32 indexed serviceId,
+        bytes32 indexed requestId,
+        Outcome outcome,
+        address payer,
+        uint256 paidAmount,
+        bytes32 failedClause
     );
 
     /// @dev Emitted instead of reverting, so a declined report is visible

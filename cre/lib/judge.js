@@ -83,6 +83,33 @@ function statusOnly(observation) {
 export const shouldWriteVerdict = (judgement) => judgement.outcome !== null;
 
 /**
+ * The id of the first clause that failed, or `null` if none did.
+ *
+ * This is the one piece of the judgement that reaches the chain besides the
+ * outcome, which is why it is *the first* rather than all of them: one word
+ * per verdict, and the clause order is the SLA's own declared order, so the
+ * answer is stable and the provider chose it.
+ *
+ * `null` is a real answer, not an absence, in two cases that must stay
+ * distinguishable from a PASS at the call site:
+ *
+ *   - a status-only judgement, which evaluates no clauses at all, so a DOWN
+ *     from it names nothing.
+ *
+ * The implicit `delivery` clause CAN be the answer, and is returned by its own
+ * id. It is not in any SLA — the validator rejects `id: 'delivery'` — so a
+ * reader matches it by name rather than against the declared clauses
+ * (`matchFailedClause`). "The provider did not deliver" is a distinct fact from
+ * "no clause was named", and flattening the two would lose it.
+ *
+ * @param {Judgement} judgement
+ * @returns {string|null}
+ */
+export function failedClauseOf(judgement) {
+  return judgement.clauses.find((clause) => !clause.pass)?.id ?? null;
+}
+
+/**
  * Build the observation the engine judges, from what the enclave saw.
  *
  * Exists so the enclave's one job — measure, don't interpret — stays visible.

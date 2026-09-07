@@ -91,3 +91,53 @@ export function serviceIdOf(slug) {
   }
   return keccak256(toBytes(slug));
 }
+
+/** The `failedClause` word meaning "no clause was named". */
+export const NO_CLAUSE = `0x${'0'.repeat(64)}`;
+
+/**
+ * Hash a clause id the way a verdict carries it.
+ *
+ * @param {string} clauseId
+ * @returns {string} 0x-prefixed 32-byte hex
+ */
+export const clauseHash = (clauseId) => keccak256(toBytes(clauseId));
+
+/**
+ * The implicit clause `evaluate` prepends to every evaluation. No provider
+ * declares it — the SLA validator rejects `id: 'delivery'` — which is exactly
+ * why it can be matched by name here without colliding with a real clause.
+ */
+export const DELIVERY_CLAUSE = 'delivery';
+
+/**
+ * Turn a verdict's `failedClause` word back into a clause id, using the SLA the
+ * service published.
+ *
+ * The chain stores a hash, not a string, so this is the only way back — and for
+ * declared clauses it only works against the SLA in force. Four answers, all
+ * meaningful:
+ *
+ *   - a clause id — that clause is what broke;
+ *   - `'delivery'` — the implicit clause, so the provider did not deliver at
+ *     all. Checked before the SLA because it is never in one;
+ *   - `null` for the zero word — no clause was named. Either the verdict was a
+ *     PASS, or judgement fell back to status alone and evaluated no clauses;
+ *   - `'unknown'` — a non-zero hash matching nothing the SLA currently
+ *     declares. That is not an error to hide: it means the provider has edited
+ *     its SLA since this verdict, and the clause that was broken no longer
+ *     exists under that id. Showing it as such is the honest reading.
+ *
+ * @param {string} failedClause the 32-byte word from the verdict
+ * @param {SlaDocument|null} sla the service's SLA as published now
+ * @returns {string|null} the clause id, `'delivery'`, `null`, or `'unknown'`
+ */
+export function matchFailedClause(failedClause, sla) {
+  if (!failedClause || failedClause.toLowerCase() === NO_CLAUSE) return null;
+  const target = failedClause.toLowerCase();
+  if (clauseHash(DELIVERY_CLAUSE).toLowerCase() === target) return DELIVERY_CLAUSE;
+  for (const clause of sla?.clauses ?? []) {
+    if (clauseHash(clause.id).toLowerCase() === target) return clause.id;
+  }
+  return 'unknown';
+}
