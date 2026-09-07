@@ -116,10 +116,17 @@ Two findings reshape work downstream, both detailed in
 
 Every refund depends on recovering the payer and the amount from the header.
 
-- [ ] **BLOCKED (external)** — capture a real `GatewayWalletBatched`
-      `X-PAYMENT` header from a live paid call on Arc Testnet. Needs a funded
-      Circle Gateway balance and a paying agent; the scheme debits a pre-funded
-      Gateway balance rather than a plain token balance (Requirements §9)
+- [ ] **BLOCKED (needs a human), and here is exactly where.** The Circle CLI is
+      installed and does support this — `circle gateway deposit --method direct`
+      lists `ARC-TESTNET`, and `circle services pay` would pay the paywall for
+      its 1 minor unit ($0.000001). But it pays from a **Circle-managed agent
+      wallet**, and standing one up is `circle wallet create` + `circle wallet
+      login`, which is email + OTP. There is also a Terms-of-Use acceptance
+      (`CIRCLE_ACCEPT_TERMS=1`) that is a legal act in the operator's name, not
+      an agent's to make.
+      The alternative — hand-signing a `GatewayWalletBatched` burn intent with
+      `cast` — is circular: the payload format is the thing this spike exists to
+      learn, so inventing it proves nothing
 - [ ] Decode it; extract payer address and paid amount — blocked on the above
 - [ ] **Verify those fields are cryptographically bound** — signed by the
       payer, not merely asserted in a JSON blob. The refund target is read
@@ -397,9 +404,13 @@ State machine, table-driven:
       the DON signs. The SDK cross-check had validated the wrong artefact. This
       is exactly the silent failure the box existed to catch, and only an actual
       delivery caught it (CRE-8)
-- [ ] **BLOCKED (external)** — `cre account link-key` to establish a production
-      `CRE_WORKFLOW_OWNER`. `cre account list-key` reports none linked and
-      `cre whoami` shows "Deploy Access: Not enabled", the private-beta gate.
+- [ ] **BLOCKED (external), confirmed by running it.** `cre account link-key`
+      answers:
+      *"Workflow deployment is currently in early access. We're onboarding
+      organizations gradually. → Run 'cre account access' to request access"*.
+      So the key cannot be linked and no production `CRE_WORKFLOW_OWNER` exists.
+      Requesting access is an outward-facing action tied to the operator's org,
+      so it is theirs to run, not an agent's.
       Until then the deployment pins the simulation forwarder and the
       `workflowOwner` simulation actually sends; both are immutable, so
       production is a redeploy
