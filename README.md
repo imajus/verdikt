@@ -155,6 +155,12 @@ verification would be self-refuting.
   parser, but not against a live delivery.** Every offset matches
   `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a
   real forwarder call, so the residual risk is a header version change.
+- **The proxy's paid leg cannot reach a deployed workflow yet.** Triggering is
+  documented and straightforward, but Chainlink documents no HTTP endpoint for
+  reading an execution's *result*, which is how the proxy was to get the payload
+  back. Spike finding CRE-9 lists the options; the likely answer is the workflow
+  pushing its result to a proxy callback from inside the enclave. Unaffected:
+  the unpaid leg, the engine, the contracts, and `simulate`.
 - **Per-verdict clause detail is not on the dashboard.** Clause results never
   reach the chain; the detail view shows what a service promised beside what it
   delivered. [Tasks §5.2](docs/Tasks.md) records what closing it would take.

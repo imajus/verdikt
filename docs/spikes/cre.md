@@ -309,6 +309,59 @@ cannot be a CI check.
 4. **Nothing here blocks Phases 1 or 2's tests.** The evaluation engine and the
    registry's accounting are untouched by all of the above.
 
+### CRE-9 — the gateway's trigger contract, and the hole it leaves in the paid leg
+
+CRE-3 settled *that* the trigger response does not carry the handler's return
+value. `proxy/src/verification.js` was then written to trigger and poll, before
+the gateway's actual contract had been read. Reading it
+([triggering deployed workflows](https://docs.chain.link/cre/guides/workflow/using-triggers/http-trigger/triggering-deployed-workflows))
+confirms one third of that design and breaks the rest.
+
+**Right.** The gateway is real and speaks JSON-RPC:
+
+| | |
+|---|---|
+| public (onchain) registry | `https://01.gateway.zone-a.cre.chain.link` |
+| private registry | `https://01.enterprise-gateway.zone-a.cre.chain.link/` |
+| method | `workflows.execute` |
+| params | `params.input` (your payload), `params.workflow.workflowID` (64 chars) |
+
+The client currently posts `{ input }` at the top level. Wrong shape; cheap fix.
+
+**Wrong — the auth token cannot be a token.** The header is
+`Authorization: Bearer <JWT>`, but the JWT is minted per request: an ECDSA
+signature over `base64url(header).base64url(payload)`, and the payload carries
+`digest`, the SHA256 of *that exact JSON-RPC body*. A credential that depends on
+the request body cannot be a fixed string in an env file.
+`CRE_TRIGGER_AUTH_TOKEN` has to become the proxy's private key, with the client
+signing a fresh short-lived JWT per call. This is consistent with CRE-4, which
+said "the proxy needs a signing key" — the config simply did not follow it.
+
+**Open, and it is the load-bearing one.** *There is no documented HTTP endpoint
+for reading an execution's result.* Chainlink documents `workflow_execution_id`
+in the trigger response, the CRE UI, and `cre execution status <uuid>` on the
+CLI. None of those is something a proxy can call per request.
+
+That matters more than the other two, because the paid leg's whole shape rests
+on it: the enclave holds the only copy of what the agent bought (an x402 payment
+settles once), and `CRE_EXECUTION_STATUS_URL` was the assumed way to get it
+back. Options, none yet taken:
+
+1. **Find the undocumented API the CRE UI itself calls.** Most likely to exist;
+   depends on an interface Chainlink has not committed to.
+2. **Have the workflow push the result out** — a confidential HTTP call from
+   inside the enclave to a proxy callback, correlated by `requestId`. Keeps the
+   payload out of CRE's execution store, and the proxy is already holding the
+   agent's connection open. Adds an inbound endpoint the proxy must authenticate.
+3. **Fall back to CRE-3's option 1** — the proxy makes the paid call and the
+   enclave verifies afterwards. Rejected before because it moves the reading of
+   the provider's response out of the enclave, and is unavailable anyway: the
+   payment settles once.
+
+Option 2 looks the strongest and does not need anything undocumented. Settle it
+before the paid leg can work end to end; it is not blocked on deploy access,
+because a `simulate --listen` run can exercise the callback.
+
 ### CRE-8 — the report header offsets, confirmed against the SDK
 
 `Tasks.md` §2.1 carried these as documentation-derived and unverified, on the

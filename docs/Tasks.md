@@ -514,6 +514,17 @@ store.
 > anyway, because an x402 payment settles once, so the enclave's call *is* the
 > call and its response is the only copy of what the agent bought.
 >
+> **Not yet working, and CRE-9 says why.** The gateway's actual contract has
+> since been read: the JSON-RPC shape is `workflows.execute` with
+> `params.input` / `params.workflow.workflowID`, the `Authorization` bearer is a
+> per-request ECDSA-signed JWT whose payload digests the body (so it cannot be a
+> static token), and — the one that matters — **no HTTP endpoint for reading an
+> execution's result is documented at all**. The polling half of this design has
+> nothing to poll. `proxy/src/verification.js` is therefore unfinished; the
+> proxy refuses paid calls while unconfigured, so nothing misbehaves silently.
+> CRE-9 lists the three ways out and favours having the workflow push its result
+> to a proxy callback from inside the enclave.
+
 > **Consequence worth stating rather than discovering.** The payload therefore
 > crosses the DON boundary in the workflow's return value. It is no longer only
 > ever inside the enclave. What attestation still buys is that the code
