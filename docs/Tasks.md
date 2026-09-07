@@ -9,6 +9,34 @@ Requirements §9 gate everything downstream, so they get spiked before any
 real code is written; each carries an explicit fallback and a date by which
 the fallback must be taken.
 
+## What is left, and who can do it
+
+`[ ]` in this file has been carrying two different meanings — "not built yet"
+and "built, but the last step needs a credential nobody in this repo holds".
+Those are not the same state and reading them as one makes the plan look
+stalled when it is finished. So, explicitly:
+
+**Nothing is left that can be done from this checkout.** Everything below needs
+an account, a key, or a person, and each is one step:
+
+| Needs | Task | The step |
+|---|---|---|
+| Base Sepolia USDC | 0.4 — a live x402 payment | Fund an address, then `VERDIKT_PAYER_PRIVATE_KEY=0x… node scripts/pay-x402.mjs <paywall-url> --send`. The protocol work is done and the header already round-trips against the live challenge |
+| A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
+| Your myproceeds.xyz account | 6.1 — point the paywall at Open-Meteo | Configure the upstream there. The workflow calls Open-Meteo directly meanwhile |
+| A person at a screen | 6.3 — the recorded walkthrough | [`walkthrough.md`](./walkthrough.md) is the script: same order, real commands, the numbers to expect |
+
+Two items are marked `[~]` rather than `[ ]`, meaning *delivered, with a
+boundary that is deliberate and documented at the task*: per-verdict failure
+detail (5.2) and the discovery API (5.3, now
+[#21](https://github.com/imajus/verdikt/issues/21)). Neither is waiting on
+work; both record a decision.
+
+None of these are marked `[x]`, because none of them have happened. A plan that
+claims a video was recorded, or that a payment settled, is worth less than one
+that says plainly what is outstanding — which is the same argument the system
+itself rests on.
+
 ## Phase 0 — Scaffold and de-risk (days 1–2)
 
 Nothing in Phases 1–5 is safe to build until 0.2–0.4 have answers.
