@@ -1,0 +1,29 @@
+node_modules
+**/node_modules
+.git
+.github
+.claude
+.agents
+
+dist
+**/dist
+coverage
+
+.env
+.env.local
+*.log
+
+# foundry
+contracts/out
+contracts/cache
+contracts/broadcast
+contracts/lib
+
+# cre
+cre/.cre
+cre/spike/**/.tmp
+
+docs
+README.md
+skills-lock.json
+ens-setup-plan.json
