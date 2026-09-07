@@ -20,6 +20,7 @@ challenge process and no arbiter: the verdict is a deterministic function of
 - [How it works](#how-it-works)
 - [Install](#install)
 - [Usage](#usage)
+- [Deploy](#deploy)
 - [Layout](#layout)
 - [What is real, and what is not](#what-is-real-and-what-is-not)
 - [Design decisions worth knowing](#design-decisions-worth-knowing)
@@ -78,12 +79,12 @@ cp .env.example .env      # then fill in what you have
 ## Usage
 
 ```bash
-pnpm test            # 209 tests: engine, SDK, proxy, workflow logic, dashboard
+pnpm test            # 305 tests: engine, SDK, proxy, workflow logic, dashboard
 pnpm lint
 pnpm typecheck       # tsc against JSDoc — the repo is JS, not TypeScript
 pnpm demo            # the whole loop end to end, on a local chain
 
-cd contracts && forge test    # 47 tests: registry and score-writer
+cd contracts && forge test    # 56 tests: registry and score-writer
 cd web && pnpm dev            # the marketplace dashboard
 cd proxy && pnpm dev          # the x402 relay
 ```
@@ -100,8 +101,26 @@ cd cre/workflows/verify && bun install && bun run compile
 cd cre/workflows && cre workflow simulate verify --listen
 ```
 
-Captured runs are in [`docs/evidence/`](docs/evidence): a simulate run including
-the TEE banner, and the enclave-to-proxy callback round trip.
+Seven transcripts are in [`docs/evidence/`](docs/evidence), all real output: the
+simulate run with its TEE banner, the enclave-to-proxy callback round trip, the
+loop running live on Arc, the `payTo` mismatch being blocked, the hourly
+aggregate, per-verdict clause detail end to end, and a signed x402 payment
+settling on Base Sepolia.
+
+## Deploy
+
+`web` is a static build with no server-side logic — it reads Arc and ENS
+straight from the browser via viem — so shipping it is just publishing
+`web/dist`. Two ways to do that:
+
+```bash
+cd web && pnpm run deploy    # vite build && wrangler deploy — assets-only Cloudflare Worker
+docker compose up -d --build # from repo root — same build, served from nginx on a VPS
+```
+
+Both default to demo mode (the seeded fixture data shown above). For live
+Arc/ENS reads, set `VITE_ARC_RPC_URL` and `VITE_SEPOLIA_RPC_URL` before
+building — Vite inlines them at build time, not at container or Worker start.
 
 ## Layout
 
@@ -113,12 +132,13 @@ the TEE banner, and the enclave-to-proxy callback round trip.
 | `cre/lib` | Everything the workflows decide, as plain JS under vitest. |
 | `cre/workflows` | The two CRE workflows — capability plumbing around `cre/lib`. |
 | `proxy` | The x402 relay. Holds no wallet and never evaluates. |
-| `web` | The marketplace dashboard. |
+| `web` | The marketplace dashboard. See [Deploy](#deploy) for `wrangler.jsonc` and `Dockerfile`. |
 | `deployments` | Verdikt's own deployed addresses, per network. Checked in: they are public and identical everywhere. |
 | `docs` | The specification, and the spikes that reshaped it. |
 
 Start with the [walkthrough](docs/walkthrough.md) — the whole loop, on a public
-chain, with real commands and real output.
+chain, with real commands and real output. The
+[shot list](docs/shot-list.md) is the same thing cut to three minutes.
 
 `docs/` takes precedence over inference from code:
 [Requirements](docs/Requirements.md) ·
@@ -167,10 +187,12 @@ verification would be self-refuting.
 
 **Simulated or blocked, and why:**
 
-- **Attestation is simulated.** CRE production enrollment is private beta
-  (`cre whoami` → *Deploy Access: Not enabled*), so both receivers are pinned to
-  the simulation forwarder. The simulator says it plainly: *"The simulator is not
-  a real TEE."*
+- **Attestation is simulated.** CRE production enrollment is early access
+  (`cre account link-key` → *"Workflow deployment is currently in early
+  access"*), so both receivers are pinned to the **simulation** forwarder for
+  their own chain — `0x6E9EE680…` on Arc, `0x15fC6ae9…` on Sepolia, which are
+  unrelated contracts. The simulator says the rest plainly: *"The simulator is
+  not a real TEE."*
 - **`decodePayment` handles half of x402, and refuses the other half.** The
   `exact`/`eip3009` scheme is implemented and *verified*: the payer is recovered
   from an ERC-3009 signature, so swapping the payer or inflating the amount
@@ -185,13 +207,20 @@ verification would be self-refuting.
   contract accepts. So the verdicts above carry a fixture payer. The proxy also
   does not yet keep the challenge a payment answers, which verification needs —
   the header names its scheme but not its asset.
-- **The KeystoneForwarder metadata offsets are confirmed against the SDK's own
-  parser, but not against a live delivery.** Every offset matches
-  `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a
-  real forwarder call, so the residual risk is a header version change.
-- **Per-verdict clause detail is not on the dashboard.** Clause results never
-  reach the chain; the detail view shows what a service promised beside what it
-  delivered. [Tasks §5.2](docs/Tasks.md) records what closing it would take.
+Two caveats that used to live here are now resolved, and both were worth the
+trouble:
+
+- The **KeystoneForwarder metadata offsets** were wrong, and matching
+  `@chainlink/cre-sdk`'s own constants is what hid it — the DON signs 109 bytes
+  and the forwarder passes the receiver only the trailing **64**. A live
+  delivery caught it (`MalformedReportMetadata(64)`); nothing else would have,
+  because the forwarder swallows a receiver revert and mines anyway
+  ([spike CRE-8](docs/spikes/cre.md)).
+- **Per-verdict clause detail** now reaches the chain as `keccak256(clauseId)`,
+  and the dashboard resolves it against the SLA it reads from ENS. The observed
+  value deliberately does not: it is a slice of a paid response, so it goes to
+  the agent that paid (`x-verdikt-expected` / `-actual`) rather than to
+  everyone.
 
 ## Design decisions worth knowing
 

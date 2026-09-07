@@ -14,9 +14,15 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 
 ## Current state
 
-Wave 0 (seams) only. Every JS function throws `NOT_IMPLEMENTED` and `IVerdiktRegistry.sol` is an interface with no bodies. The exceptions are the enum mappings in `packages/sdk/registry.js`, which are implemented because they *are* the seam.
+The loop runs end to end on public testnets. `docs/walkthrough.md` is the tour, `docs/shot-list.md` the 3-minute cut, and `docs/evidence/` holds the transcripts — every number in them was read back off a chain.
 
-Three spikes in `docs/Tasks.md` §0.2–0.4 gate everything downstream. Spike A (ENSv2 on Sepolia) has run and passed — `pnpm spike:ens`, findings in `docs/spikes/A-ens-sepolia.md`. CRE simulate and `X-PAYMENT` decoding have not; don't build on assumptions they're meant to resolve.
+- **Arc Testnet** — `VerdiktRegistry` at `0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`, block 60860488. Two services bonded, three verdicts written through the real KeystoneForwarder, refunds credited and withdrawn.
+- **Sepolia** — `verdikt.eth` with two subnames carrying real `sla`, `url` and `address` records, plus `conformance`/`availability` published by the hourly workflow through `VerdiktScoreWriter` at `0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA`.
+- Both CRE workflows run under `cre workflow simulate --broadcast`.
+
+All three spikes have run. **A** (ENSv2) — `docs/spikes/A-ens-sepolia.md`. **B** (CRE) — `docs/spikes/cre.md`, findings CRE-1…CRE-10, several of which reshaped the contracts. **C** (`X-PAYMENT`) — the `exact`/`eip3009` scheme is implemented and a signature it produced settled on Base Sepolia; Circle's `GatewayWalletBatched` is unpublished and still refuses rather than guessing.
+
+Three things are deliberately unfinished, each argued at its own task in `docs/Tasks.md`: a paid call end to end (the demo paywall advertises `eip3009`, then answers 402 to a payment the USDC contract itself accepts), production CRE enrollment (`cre whoami` → *Deploy Access: Not enabled*), and the recorded video.
 
 ## Commands
 
@@ -37,9 +43,21 @@ forge test --match-test testRefund     # single test
 forge test --match-contract Registry   # single contract
 ```
 
+```bash
+cd web
+pnpm dev                         # dashboard on :5173
+pnpm run deploy                  # vite build && wrangler deploy. NOT `pnpm deploy` — that is pnpm's own command
+```
+
+`web` is static: no server-side logic, it reads both chains from the browser. So it ships as files, either as an assets-only Cloudflare Worker (`web/wrangler.jsonc`, no `main`) or from nginx via `web/Dockerfile` + `docker-compose.yml` at the root. The Dockerfile builds from the repo root because the pnpm workspace spans it — `@verdikt/web` cannot be built from its own directory alone.
+
+Both paths take `VITE_ARC_RPC_URL` / `VITE_SEPOLIA_RPC_URL` at **build** time, never at run time: Vite inlines them, so a container or Worker cannot be repointed at a different chain without rebuilding. Unset, `web/src/source.js` falls back to seeded demo data rather than an empty marketplace.
+
 Foundry installs to `~/.foundry/bin` and its installer writes the `PATH` line to `~/.profile`, which zsh does not read. Use the absolute path or add it to `~/.zshrc`.
 
-`passWithNoTests` is set in `vitest.config.js` because Wave 0 ships no tests. Remove it with the first real test — left in, it silently tolerates a suite that has vanished.
+`pnpm demo` runs the whole registry loop against a throwaway anvil in seconds and asserts the refund arithmetic rather than narrating it. It is the fastest check that a contract change has not broken the accounting.
+
+`node scripts/pay-x402.mjs <url>` signs a real x402 payment from the live challenge; `--send` spends. `pnpm onboard` mints and configures one `<slug>.verdikt.eth`.
 
 ## Architecture
 
@@ -73,16 +91,26 @@ A verdict is final with no dispute layer, so these are correctness, not style:
 - **An empty aggregation window yields 1000, not 0.** A service with no traffic is presumed healthy. Getting this backwards brands every new listing as broken.
 - **`evaluate` is pure.** No I/O, no clock, no network, no floating point. Latency is an input, never measured inside. Price comparison in integer minor units.
 - **Outcome ordinals are mirrored** in `IVerdiktRegistry.Outcome` and `OUTCOME_ORDINAL` in `packages/sdk/registry.js`. Changing one without the other silently reclassifies a FAIL as a PASS.
-- **`paidAmount` is a `bigint` in minor units** everywhere past `decodePayment`. That boundary is what keeps the engine independent of whatever Spike C finds in the header.
+- **`paidAmount` is a `bigint` in minor units** everywhere past `decodePayment`. That boundary is what kept the engine independent of the header format while Spike C was open, and it is why implementing `eip3009` touched one file.
+- **A verdict's `failedClause` is `keccak256(clauseId)`, and a PASS stores the zero word.** The id is provider-authored and unbounded; a reader holds the SLA from ENS and matches (`matchFailedClause`). Four readings, all distinct: the clause id; `delivery`, the implicit clause matched *by name* because no SLA declares it; the zero word, meaning judgement fell back to status alone; and a non-zero hash matching nothing, meaning the provider has edited its SLA since. Flattening any pair of those loses the fact worth showing.
+- **The observed value never goes on the chain.** It is a slice of a response the agent paid for. It reaches that agent on its own response (`x-verdikt-expected` / `-actual`), which is the one party entitled to it.
+- **`decodePayment` needs the challenge's `accepts`, and refuses without it.** The header names its scheme and network but not its asset, and the EIP-712 domain needs the asset as `verifyingContract`. Taking the domain from the header would let a payer sign something harmless elsewhere and replay it here.
+
+## Two silent failures, and why they were silent
+
+Both shipped green for days. Neither raised an error anywhere; both were caught only by a number that looked wrong.
+
+- **The aggregate keeps its own copy of the registry's event signatures**, because a workflow bundles to WASM and cannot reach the SDK's ABI. That copy is the log filter's *topic*, not a decode hint: add a field to `VerdictWritten` and a stale copy matches nothing, the window comes back empty, and an empty window scores **1000**. So the symptom is every service reporting a perfect record. `cre/lib/workflow-abi.test.js` pins the copies together — keep them in step or that test fails, which is the point.
+- **The KeystoneForwarder swallows a receiver revert and mines anyway.** `txStatus === SUCCESS` means the forwarder ran, never that the receiver wrote. A receiver deployment is therefore not finished when the deploy script returns: read the value back (`text(node, "conformance")`, `getVerdict`). Simulation forwarders are also **per-chain** — `0x6E9EE680…` on Arc, `0x15fC6ae9…` on Sepolia, unrelated contracts — and pinning the wrong one produces exactly this silence (CRE-8, CRE-10).
 
 ## Package boundaries
 
 These are load-bearing, not organizational:
 
-- **`packages/sdk/ens.js` is the only file that knows ENS exists.** Every read and write goes through it, returning one `ServiceRecord`. This exists so the unresolved ENSv2→v1 question touches one file instead of rippling through the CRE workflow, proxy, and dashboard. Do not import an ENS library anywhere else, and do not make two calls where one returns all four records.
+- **`packages/sdk/ens.js` is the only file that knows ENS exists.** Every read and write goes through it, returning one `ServiceRecord`. This exists so the unresolved ENSv2→v1 question touches one file instead of rippling through the CRE workflow, proxy, and dashboard. Do not import an ENS library anywhere else, and do not make two calls where one returns everything — `resolveServiceRecord` batches the four text keys and the address record into a single round trip.
 - **`resolveServiceRecord` returns `sla` raw and unparsed.** Parsing belongs to `packages/sla`, so the ENS layer carries no SLA-schema knowledge.
 - **`packages/sla` has no dependencies and must keep none** — it bundles into the CRE workflow. Hand-roll the JSON Schema subset rather than pulling ajv.
-- **`proxy` must not depend on `@verdikt/sla`.** The proxy relays and never evaluates; if it needs the engine, something has crossed to the wrong side of the enclave boundary.
+- **`proxy` must not depend on `@verdikt/sla`.** The proxy relays and never evaluates; if it needs the engine, something has crossed to the wrong side of the enclave boundary. This is why the discovery API is built but unwired: filtering on price or latency means reading SLA clauses. The rule caught it working as intended, so it is a decision rather than a bug — tracked as [#21](https://github.com/imajus/verdikt/issues/21), and `/services` answers 503 naming the reason until it is made.
 - **Clause internals in `packages/sla` are private.** The stable seam is `evaluate` plus `SlaObservation` and `SlaEvaluation`.
 
 ## Conventions
