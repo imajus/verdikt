@@ -670,7 +670,27 @@ day saved in Phase 4 here.
 ### 5.3 Stretch, in the spec's priority order
 
 - [ ] Provider self-serve dashboard (own history, balance, SLA editor)
-- [ ] Machine-facing discovery API
+- [~] Machine-facing discovery API — `proxy/src/discovery.js` and the
+      `/services`, `/services/:slug` routes, with filters on published
+      conformance and availability, promised latency, price (integer minor
+      units) and status. Tested, and deliberately **not wired up**:
+
+> **Open decision, and the invariant caught it.** Filtering on price and latency
+> means reading a service's SLA clauses, and the only correct reader of an SLA
+> document is `@verdikt/sla` — which CLAUDE.md forbids the proxy from depending
+> on, transitively included. Three ways out, none taken unilaterally:
+>
+> 1. **Narrow the invariant** to "the proxy never calls `evaluate`", on the
+>    grounds that reading a published document is not judging one. Cheapest, but
+>    it edits a rule written to be bright-line.
+> 2. **Move the marketplace assembly into `packages/sdk`** and accept the same
+>    transitive dependency — the same question wearing a different hat.
+> 3. **Serve discovery from somewhere that is not the proxy.** Arguably what the
+>    rule is pointing at: a marketplace read is not relaying, and the proxy is
+>    the wrong host for it.
+>
+> Until it is decided, `/services` answers 503 naming the reason, which beats a
+> marketplace that looks empty.
 
 ---
 

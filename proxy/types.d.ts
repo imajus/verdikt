@@ -33,6 +33,8 @@ interface ProxyDeps {
   decodePayment?: (header: string) => Promise<DecodedPayment>;
   /** Injectable so a test can assert the id that comes back in the response headers. */
   newRequestId?: () => string;
+  /** Backs the discovery API. Absent means /services answers 503. */
+  marketplace?: (() => Promise<Marketplace>) | null;
   logger?: unknown;
 }
 

@@ -19,6 +19,12 @@ if (!workflow) {
   console.warn('[verdikt] CRE_CALLBACK_TOKEN unset — callbacks will be refused and paid calls will time out');
 }
 
+// `marketplace` is deliberately not wired here. The discovery API needs a
+// service's SLA clauses to filter on price and latency, and the only correct
+// reader of an SLA document is @verdikt/sla — which CLAUDE.md forbids the proxy
+// from depending on, transitively included. Wiring it needs a decision, not a
+// workaround; see docs/Tasks.md 5.3. Until then /services answers 503 and says
+// why, which is better than a marketplace that looks empty.
 const app = buildApp({ config, workflow, logger: { level: process.env.LOG_LEVEL ?? 'info' } });
 
 await app.listen({ port: config.port, host: config.host });

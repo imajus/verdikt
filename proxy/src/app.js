@@ -12,6 +12,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkChallenge } from './challenge.js';
+import { discover, toListing } from './discovery.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
@@ -56,6 +57,10 @@ export function buildApp(deps = {}) {
   const decode = deps.decodePayment ?? decodePayment;
   const workflow = deps.workflow ?? null;
   const newRequestId = deps.newRequestId ?? (() => `0x${randomBytes(32).toString('hex')}`);
+  // Injected rather than built here: the proxy relays, and a marketplace read is
+  // a different job with a different failure mode. Absent means /services 503s
+  // instead of the relay refusing to start.
+  const marketplace = deps.marketplace ?? null;
 
   const app = Fastify({ logger: deps.logger ?? false });
 
@@ -68,6 +73,31 @@ export function buildApp(deps = {}) {
   );
 
   app.get('/healthz', async () => ({ ok: true }));
+
+  // The machine-facing marketplace (Specification.md §5, stretch 2). Exact
+  // routes, so they are matched ahead of the `/*` service catch-all.
+  app.get('/services', async (request, reply) => {
+    if (!marketplace) {
+      return reply.code(503).send({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' });
+    }
+    try {
+      const { services } = await marketplace();
+      return discover(services, /** @type {Record<string, string|undefined>} */ (request.query), config.publicHost);
+    } catch (error) {
+      return reply.code(503).send({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message });
+    }
+  });
+
+  app.get('/services/:slug', async (request, reply) => {
+    const { slug } = /** @type {{ slug: string }} */ (request.params);
+    if (!marketplace) {
+      return reply.code(503).send({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' });
+    }
+    const { services } = await marketplace();
+    const found = services.find((listing) => listing.slug === slug);
+    if (!found) return reply.code(404).send({ error: 'unknown_service', slug });
+    return toListing(found, config.publicHost);
+  });
 
   // Where the enclave pushes a finished verification (docs/spikes/cre.md,
   // CRE-9). An exact route, so it is matched ahead of the `/*` service catch-all
