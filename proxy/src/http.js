@@ -99,6 +99,14 @@ export function assertRelayableUrl(raw, allowPrivate) {
  * @returns {URL}
  */
 export function joinUpstream(base, rest, search) {
+  // An empty rest means "the base itself". Appending a slash would ask for a
+  // different resource: the demo provider answers `.../slug/` with a 308 to
+  // `.../slug`, so the agent would get a redirect instead of its 402 challenge.
+  if (rest === '') {
+    const target = new URL(base.toString());
+    target.search = search;
+    return target;
+  }
   const basePath = base.pathname.endsWith('/') ? base.pathname : `${base.pathname}/`;
   const target = new URL(`${basePath}${rest}`, base);
   // `new URL` normalises `..`, so a path like `a/../../admin` would otherwise

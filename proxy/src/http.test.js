@@ -50,8 +50,12 @@ describe('joinUpstream', () => {
     );
   });
 
-  it('handles an empty rest path', () => {
-    expect(joinUpstream(base, '', '').toString()).toBe('https://provider.example/weather/');
+  // A trailing slash is a different resource. The demo provider 308s
+  // `.../slug/` to `.../slug`, so appending one turns an agent's 402 challenge
+  // into a redirect it has to follow.
+  it('leaves the base alone for an empty rest path, adding no trailing slash', () => {
+    expect(joinUpstream(base, '', '').toString()).toBe('https://provider.example/weather');
+    expect(joinUpstream(base, '', '?a=1').toString()).toBe('https://provider.example/weather?a=1');
   });
 
   // A real Node server hands the raw path through without normalising it, so

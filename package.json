@@ -17,7 +17,8 @@
     "contracts:test": "pnpm --filter @verdikt/contracts test",
     "spike:ens": "node --env-file-if-exists=.env scripts/spike-ens.mjs",
     "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs",
-    "demo": "node --env-file-if-exists=.env scripts/demo.mjs"
+    "demo": "node --env-file-if-exists=.env scripts/demo.mjs",
+    "onboard": "node --env-file-if-exists=.env scripts/onboard-service.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

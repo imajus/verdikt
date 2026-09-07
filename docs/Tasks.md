@@ -116,15 +116,21 @@ Two findings reshape work downstream, both detailed in
 
 Every refund depends on recovering the payer and the amount from the header.
 
-- [ ] Capture a real `GatewayWalletBatched` `X-PAYMENT` header from a live
-      paid call on Arc Testnet
-- [ ] Decode it; extract payer address and paid amount
+- [ ] **BLOCKED (external)** — capture a real `GatewayWalletBatched`
+      `X-PAYMENT` header from a live paid call on Arc Testnet. Needs a funded
+      Circle Gateway balance and a paying agent; the scheme debits a pre-funded
+      Gateway balance rather than a plain token balance (Requirements §9)
+- [ ] Decode it; extract payer address and paid amount — blocked on the above
 - [ ] **Verify those fields are cryptographically bound** — signed by the
       payer, not merely asserted in a JSON blob. The refund target is read
       out of this header, so if the binding is weak, anyone can name a
-      different payer and redirect refunds
-- [ ] Confirm the amount is in known minor units (needed for the refund cap
-      and for the price clause)
+      different payer and redirect refunds. Blocked on the above
+- [x] Confirm the amount is in known minor units — **answered from the
+      challenge alone**, without a paid call. The captured
+      `GatewayWalletBatched` option carries
+      `extra.assets[{symbol: "USDC", address: "0x3600…0000", decimals: 6}]`, and
+      `amount` is a decimal string of those units. That is the 6-decimal ERC-20
+      view, which is what `VerdiktRegistry.NATIVE_PER_MINOR_UNIT` converts from
 
 Deliverable: `packages/sdk/payment.js` with `decodePayment(header)` plus a
 fixture test.
@@ -135,10 +141,15 @@ fixture test.
 
 ### 0.5 Freeze fixtures
 
-- [ ] Record and commit: 402 challenge JSON, `X-PAYMENT` header, provider
-      200 response, settlement receipt
-- [ ] Everything downstream develops against these — no live paid call
-      needed to run a test
+- [x] 402 challenge JSON — **real**, captured from the demo Proceeds paywall
+      into `fixtures/x402/`, with the provider's `payment-required` header
+      beside it. `proxy/src/app.test.js` runs the payTo check against it
+- [x] Provider 200 response — `PROVIDER_RESPONSE` in `fixtures/`, the Open-Meteo
+      `current` block the demo SLAs are written against
+- [ ] `X-PAYMENT` header and settlement receipt — blocked with 0.4
+- [x] Everything downstream develops against these — no live paid call needed
+      to run a test. The one exception is the payment header itself, which is
+      why `decodePayment` refuses to run without an explicit opt-in
 
 ### 0.6 Domain
 
@@ -671,8 +682,13 @@ day saved in Phase 4 here.
       script and the dashboard's demo source: an honest service, and a twin
       whose schema clause promises a field the upstream does not return and
       whose latency bound no round trip can meet
-- [ ] **BLOCKED** — the live Proceeds paywall wrapping Open-Meteo. Needs the
-      Arc deployment and a provider wallet
+- [x] The live Proceeds paywall answers a real 402 on Arc — captured in
+      `fixtures/x402/challenge-402.json`. It offers `GatewayWalletBatched` on
+      `eip155:5042002` at 1 minor unit, paying to
+      `0x5c33f235…16505`, which is the address a service's ENS `address` record
+      has to match for the proxy to relay its challenge
+- [ ] Point it at Open-Meteo and pair it with a violating twin — the paywall
+      currently fronts a placeholder resource ("Access to Test")
 
 ### 6.2 Scripted end-to-end run
 
@@ -687,11 +703,18 @@ itself, a real forwarder, and a real payment.
 - [x] Repeat until the bond drains → SUSPENDED
 - [x] A DOWN refunds too — that call took payment and delivered nothing
 - [x] `withdraw()` pays exactly what was booked, asserted net of gas
-- [ ] Publish SLAs to ENS as part of the run — needs per-service subname
-      minting, which `setup-ens.mjs` does not yet do (it sets up the parent)
-- [ ] Dashboard reads it live — needs the deployment
-- [ ] `payTo` mismatch → proxy blocks before payment. Covered by
-      `proxy/src/app.test.js`, not yet by the scripted run
+- [x] Publish SLAs to ENS — `scripts/onboard-service.mjs` (`pnpm onboard`) does
+      the per-service half `setup-ens.mjs` never did: mints
+      `<slug>.verdikt.eth`, grants the provider `sla` + `url` and the score
+      writer `conformance` + `availability` **per key**, and sets the address
+      record. Both demo subnames are live on Sepolia with real records
+- [x] Dashboard reads it live — the registry is deployed and recorded, so
+      `VITE_ARC_RPC_URL` alone switches it off demo data
+- [x] `payTo` mismatch → proxy blocks before payment. Demonstrated against
+      live data on both chains: the ENS address record repointed at `0x…dEaD`
+      while the provider's real challenge paid to `0x5c33f2…`, and the agent got
+      a 502 carrying no `accepts` at all. Captured in
+      [evidence/payto-check-live.log](./evidence/payto-check-live.log)
 
 ### 6.3 Submission
 

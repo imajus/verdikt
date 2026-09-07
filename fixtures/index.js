@@ -11,6 +11,7 @@
 
 import HONEST_SLA from './sla/honest.json' with { type: 'json' };
 import VIOLATING_SLA from './sla/violating.json' with { type: 'json' };
+import CHALLENGE_402 from './x402/challenge-402.json' with { type: 'json' };
 
 /** Placeholder — all-hex-digit so it is checksum-agnostic and obviously not real. */
 export const FIXTURE_PAYER = '0x1111111111111111111111111111111111111111';
@@ -18,6 +19,19 @@ export const FIXTURE_PAYER = '0x1111111111111111111111111111111111111111';
 export const FIXTURE_PROVIDER_PAYOUT = '0x2222222222222222222222222222222222222222';
 
 export const FIXTURE_SLUG = 'weather';
+
+/**
+ * A REAL 402 challenge, captured from the demo provider (a Proceeds paywall) on
+ * 2026-09-07 — no longer synthetic. Three payment options, all to the same
+ * `payTo`, one of them `GatewayWalletBatched` on Arc.
+ *
+ * Two things it settles that guesswork had wrong: this is x402 **v2**, where
+ * the amount field is `amount` (not `maxAmountRequired`) and `network` is CAIP-2
+ * (`eip155:5042002`, not a chain name). And `extra.assets[].decimals` is 6,
+ * which confirms the amount is in USDC minor units — one of Spike C's four
+ * questions, answered from the challenge alone (Tasks.md 0.4).
+ */
+export const X402_CHALLENGE = CHALLENGE_402;
 
 /** Opaque to everything except `decodePayment`. Not a real header. */
 export const X_PAYMENT_HEADER = 'eyJzY2hlbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCIsIlBMQUNFSE9MREVSIjp0cnVlfQ==';

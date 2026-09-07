@@ -8,6 +8,7 @@
 
 import { createPublicClient, defineChain, http, parseAbi } from 'viem';
 import { ARC } from './deployments.js';
+import { env } from './env.js';
 import { outcomeFromOrdinal, statusFromOrdinal } from './registry.js';
 
 /**
@@ -73,20 +74,20 @@ const argsOf = (log) => /** @type {any} */ (log).args ?? {};
  * @returns {RegistryReader}
  */
 export function createRegistryReader(options = {}) {
-  const rpcUrl = options.rpcUrl ?? process.env.ARC_RPC_URL ?? DEFAULT_ARC_RPC;
+  const rpcUrl = options.rpcUrl ?? env('ARC_RPC_URL') ?? DEFAULT_ARC_RPC;
   // deployments/arc-testnet.json is the source of truth; the env var is an
   // override for a fork or a second deployment, not the normal path.
   const address = /** @type {`0x${string}`} */ (
-    options.address ?? process.env.VERDIKT_REGISTRY_ADDRESS ?? ARC.registry ?? ''
+    options.address ?? env('VERDIKT_REGISTRY_ADDRESS') ?? ARC.registry ?? ''
   );
   if (!address) {
     throw new Error(
-      'createRegistryReader: no registry address. deployments/arc-testnet.json has `registry: null` ' +
-        '(Tasks.md 2.4 is blocked), so pass `address` or set VERDIKT_REGISTRY_ADDRESS.'
+      'createRegistryReader: no registry address — `registry` is null in ' +
+        'deployments/arc-testnet.json and VERDIKT_REGISTRY_ADDRESS is unset.'
     );
   }
   const deployBlock =
-    options.deployBlock ?? BigInt(process.env.VERDIKT_REGISTRY_DEPLOY_BLOCK ?? ARC.deployBlock ?? '0');
+    options.deployBlock ?? BigInt(env('VERDIKT_REGISTRY_DEPLOY_BLOCK') ?? ARC.deployBlock ?? '0');
   const maxBlockRange = options.maxBlockRange ?? DEFAULT_MAX_BLOCK_RANGE;
   const client = createPublicClient({ chain: arcTestnet, transport: http(rpcUrl, { batch: true }) });
 

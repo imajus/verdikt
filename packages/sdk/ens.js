@@ -48,6 +48,7 @@ import { sepolia } from 'viem/chains';
 import { packetToBytes } from 'viem/ens';
 import { SERVICE_RECORD } from '@verdikt/fixtures';
 import { SEPOLIA } from './deployments.js';
+import { env } from './env.js';
 import { serviceIdOf } from './registry.js';
 
 /** @type {Readonly<Record<string, EnsBackend>>} */
@@ -192,7 +193,7 @@ const clientFor = (rpcUrl) =>
  */
 export async function resolveServiceRecord(slug, options = {}) {
   const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
-  const rpcUrl = options.rpcUrl ?? process.env.SEPOLIA_RPC_URL ?? DEFAULT_SEPOLIA_RPC;
+  const rpcUrl = options.rpcUrl ?? env('SEPOLIA_RPC_URL') ?? DEFAULT_SEPOLIA_RPC;
   const backend = options.backend ?? ENS_BACKEND.V2;
   const name = serviceName(slug, parentName);
   const serviceId = serviceIdOf(slug);
@@ -319,7 +320,7 @@ export async function writeServiceScores(slug, scores, options) {
     }
   }
   const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
-  const rpcUrl = options.rpcUrl ?? process.env.SEPOLIA_RPC_URL ?? DEFAULT_SEPOLIA_RPC;
+  const rpcUrl = options.rpcUrl ?? env('SEPOLIA_RPC_URL') ?? DEFAULT_SEPOLIA_RPC;
   const name = serviceName(slug, parentName);
   const node = namehash(name);
 

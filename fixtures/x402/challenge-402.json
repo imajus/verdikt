@@ -1,0 +1,66 @@
+{
+    "x402Version": 2,
+    "accepts": [
+        {
+            "scheme": "exact",
+            "network": "eip155:84532",
+            "amount": "1",
+            "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "payTo": "0x5c33f23555313256b71f2b0a7ea1938425516505",
+            "maxTimeoutSeconds": 300,
+            "extra": {
+                "name": "USDC",
+                "version": "2",
+                "assetTransferMethod": "eip3009"
+            }
+        },
+        {
+            "scheme": "exact",
+            "network": "eip155:5042002",
+            "amount": "1",
+            "asset": "0x3600000000000000000000000000000000000000",
+            "payTo": "0x5c33f23555313256b71f2b0a7ea1938425516505",
+            "maxTimeoutSeconds": 2592000,
+            "extra": {
+                "name": "GatewayWalletBatched",
+                "version": "1",
+                "verifyingContract": "0x0077777d7eba4688bdef3e311b846f25870a19b9",
+                "minValiditySeconds": 604800,
+                "assets": [
+                    {
+                        "symbol": "USDC",
+                        "address": "0x3600000000000000000000000000000000000000",
+                        "decimals": 6
+                    }
+                ]
+            }
+        },
+        {
+            "scheme": "exact",
+            "network": "eip155:84532",
+            "amount": "1",
+            "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "payTo": "0x5c33f23555313256b71f2b0a7ea1938425516505",
+            "maxTimeoutSeconds": 2592000,
+            "extra": {
+                "name": "GatewayWalletBatched",
+                "version": "1",
+                "verifyingContract": "0x0077777d7eba4688bdef3e311b846f25870a19b9",
+                "minValiditySeconds": 604800,
+                "assets": [
+                    {
+                        "symbol": "USDC",
+                        "address": "0x036cbd53842c5426634e7929541ec2318f3dcf7e",
+                        "decimals": 6
+                    }
+                ]
+            }
+        }
+    ],
+    "resource": {
+        "url": "https://myproceeds.xyz/api/x402/pay/cmtpsjdll0001jm047kimdv0u/z37ppk7amtpsl3r9",
+        "description": "Access to Test",
+        "mimeType": ""
+    },
+    "error": "Payment required"
+}

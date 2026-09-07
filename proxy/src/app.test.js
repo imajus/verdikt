@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SERVICE_RECORD } from '@verdikt/fixtures';
+import { SERVICE_RECORD, X402_CHALLENGE } from '@verdikt/fixtures';
 import { buildApp } from './app.js';
 import { loadConfig } from './config.js';
 
@@ -166,6 +166,42 @@ describe('passthrough — the payTo check', () => {
   it('blocks a challenge that offers no payTo at all', async () => {
     const { app } = harness({ upstream: new Response(JSON.stringify({ accepts: [] }), { status: 402 }) });
     expect((await call(app)).headers['x-verdikt-block']).toBe('challenge_has_no_pay_to');
+  });
+
+  // Everything above uses a hand-written challenge. This one is the real thing,
+  // captured from the demo provider: x402 v2, three payment options, CAIP-2
+  // networks, and `amount` rather than the `maxAmountRequired` the shape was
+  // originally guessed to have. The payTo check reads only `payTo`, which is
+  // why that guess never mattered — but it is worth proving against the wire
+  // format rather than against my memory of it.
+  it('accepts the real provider challenge when the published address matches', async () => {
+    const real = JSON.stringify(X402_CHALLENGE);
+    const payTo = X402_CHALLENGE.accepts[0].payTo;
+    const { app } = harness({
+      serviceRecord: { address: payTo },
+      upstream: new Response(real, { status: 402 })
+    });
+    const response = await call(app);
+    expect(response.statusCode).toBe(402);
+    expect(response.body).toBe(real);
+  });
+
+  it('blocks the real provider challenge when the published address does not', async () => {
+    const { app } = harness({
+      serviceRecord: { address: SPOOFED },
+      upstream: new Response(JSON.stringify(X402_CHALLENGE), { status: 402 })
+    });
+    expect((await call(app)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
+  });
+
+  it('checks every one of the real challenge’s three options, not just the first', async () => {
+    // A provider could offer an honest Arc option and a spoofed Base one.
+    const mixed = { ...X402_CHALLENGE, accepts: X402_CHALLENGE.accepts.map((a, i) => (i === 2 ? { ...a, payTo: SPOOFED } : a)) };
+    const { app } = harness({
+      serviceRecord: { address: X402_CHALLENGE.accepts[0].payTo },
+      upstream: new Response(JSON.stringify(mixed), { status: 402 })
+    });
+    expect((await call(app)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
   });
 
   it('blocks when the service has published no address to compare against', async () => {
