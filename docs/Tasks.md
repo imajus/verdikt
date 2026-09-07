@@ -651,10 +651,22 @@ day saved in Phase 4 here.
       and amount, and the clause results exist only in the workflow's return
       value, which goes to the proxy. The detail view shows what a service
       *promised* — the SLA clauses from ENS — beside what it delivered, which
-      answers "what am I buying" but not "which clause broke on call 47".
-      Closing it means adding the failing clause id to the report and the event;
-      a `bytes32` would be cheap, and the dashboard already holds the clause
-      list to map it back
+      answers "what am I buying" but not "which clause broke on call 47"
+
+> **Deliberately not done now, and the reason is the cost, not the difficulty.**
+> Closing it means adding a `bytes32 failedClause` to the report tuple, the
+> `Verdict` struct and the `VerdictWritten` event. One word on-chain, and the
+> dashboard already holds the clause list to map the hash back. But both
+> receivers are immutable, so it means **redeploying the registry and
+> re-registering both services** — which moves the addresses that
+> `README.md`, `walkthrough.md` and three files in `evidence/` now cite, and
+> tears down a demo that currently works end to end on a public chain.
+>
+> It also only half-closes the item: the failing clause *id* would be on-chain,
+> but the observed `actual` value would not — that lives in the workflow's
+> return value with everything else about the response. Worth doing on the next
+> deployment, alongside whatever else needs one; not worth doing to a live
+> deployment for half a display feature.
 
 > **Decision — no UI framework.** The whole surface is a list, a detail panel
 > and a stats strip. A framework would be the largest dependency in the repo for
