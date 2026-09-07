@@ -637,7 +637,10 @@ store.
 - [x] Refuse a provider `url` pointed at a private or link-local host. The
       record is provider-authored and the proxy dials it from Verdikt's own
       network, so without this it is a server-side-request-forgery primitive;
-      `PROXY_ALLOW_PRIVATE_UPSTREAM` opts a localhost demo provider back in
+      `PROXY_ALLOW_PRIVATE_UPSTREAM` opts a localhost demo provider back in.
+      The guard classifies the parsed address in both families, so private
+      hosts spelled as decimal/hex IPv4 or IPv4-mapped/compressed IPv6 are
+      caught too (issue #20); it is literal-only and does not resolve DNS
 
 ### 4.3 Verified branch
 

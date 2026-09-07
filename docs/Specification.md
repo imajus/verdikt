@@ -224,8 +224,12 @@ an accepted scope decision for a two-week build.
   carries no `payTo` at all. Runs outside the enclave — the challenge is public.
 - Because the proxy dials the `url` record from Verdikt's own network, a
   provider-authored URL is a server-side-request-forgery primitive unless it is
-  constrained. Private, loopback and link-local hosts are refused before any
-  request is made.
+  constrained. Private, loopback, link-local and CGNAT hosts are refused before
+  any request is made — in both address families and every spelling the URL
+  parser normalises (decimal/hex/octal IPv4, IPv4-mapped and compressed IPv6).
+  This is a literal-address guard: it does not resolve DNS, so a public name
+  that resolves to a private IP is a known residual gap for the demo, not a
+  claim this makes.
 - The workflow reads the live `sla` record straight from the Permissioned
   Resolver as its verification input, with no IPFS pointer or Arc-side copy to
   drift out of sync.
