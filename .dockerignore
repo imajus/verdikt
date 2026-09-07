@@ -9,8 +9,11 @@ dist
 **/dist
 coverage
 
-.env
-.env.local
+# Every env file, at any depth. web/.env.local would otherwise be copied in and
+# read by `vite build`, so an image would bake in whatever the developer had
+# locally instead of the build args it was given.
+**/.env
+**/.env.*
 *.log
 
 # foundry
