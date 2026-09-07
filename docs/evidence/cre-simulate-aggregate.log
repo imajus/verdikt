@@ -1,0 +1,41 @@
+# `cre workflow simulate aggregate`, 2026-09-07, against the live Arc registry.
+#
+# The trailing-window ratios, computed from the two real VerdictWritten events
+# on Arc Testnet (one PASS on `weather`, one FAIL on `weather-lite`):
+#
+#     weather=1000/1000        1 PASS  -> conformance 1000, availability 1000
+#     weather-lite=0/1000      1 FAIL  -> conformance    0, availability 1000
+#
+# which is Specification.md §1 exactly: conformance is PASS / (PASS + FAIL),
+# availability is (PASS + FAIL) / all.
+#
+# RUN IT WITH A FAST SCHEDULE. config.staging.json carries the production `0 0 *
+# * * *` — hourly, per §1 — and the simulator honours it, so an unmodified run
+# sits silently until the top of the hour and looks like a hang. Swap the
+# schedule to `*/15 * * * * *` for a simulation and put it back afterwards.
+
+Initializing...
+Loading settings...
+Checking RPC connectivity...
+Compiling workflow...
+✓ Workflow compiled
+✓ Simulation limits enabled
+  HTTP: req=120kb resp=250kb timeout=10s | ConfHTTP: req=125kb resp=500kb timeout=1m30s | Consensus obs=25kb | ChainWrite evm_report=50kb evm_gas=10000000 solana_report=265b solana_cu=300000 | WASM binary=100mb compressed=20mb
+  Binary hash: aa62bdfa112c6b0959283242957a6c5e0f3b5fd6b29a639939a758ec8d9ff804
+  Config hash: ce5db2fb89315d5e2be926a8574fd887c3b5e959d8e7736a9aa30f7945e64d0a
+2026-09-07T07:17:44Z [SIMULATION] Simulator Initialized
+
+2026-09-07T07:17:44Z [SIMULATION] Running trigger trigger=cron-trigger@1.0.0
+
+
+✓ Workflow Simulation Result:
+"window 604800s ending 1788747464: weather=1000/1000 weather-lite=0/1000"
+
+2026-09-07T07:17:46Z [SIMULATION] Execution finished signal received
+2026-09-07T07:17:46Z [SIMULATION] Skipping WorkflowEngineV2
+
+╭──────────────────────────────────────────────────────╮
+│ Simulation complete! Ready to deploy your workflow?  │
+│                                                      │
+│ Run cre account access to request deployment access. │
+╰──────────────────────────────────────────────────────╯

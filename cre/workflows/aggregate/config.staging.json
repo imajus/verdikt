@@ -2,8 +2,9 @@
   "schedule": "0 0 * * * *",
   "arcChainSelectorName": "arc-testnet",
   "sepoliaChainSelectorName": "ethereum-testnet-sepolia",
-  "registryAddress": "0x0000000000000000000000000000000000000001",
-  "scoreWriterAddress": "0x0000000000000000000000000000000000000002",
-  "registryDeployBlock": "0",
-  "gasLimit": "1000000"
+  "registryAddress": "0xa22440c1ae6ce9178b3341ee19b55b881eaeff76",
+  "scoreWriterAddress": "0xbd4a99ae4f0534f84089de2a21edb8dbfcae0deb",
+  "registryDeployBlock": "60839524",
+  "gasLimit": "1000000",
+  "blockTimeSeconds": 0.512
 }

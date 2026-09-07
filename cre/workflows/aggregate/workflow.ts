@@ -98,7 +98,11 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
   // Anchor the window on chain time, not on the runtime's wall clock: the
   // events being aggregated are dated in block time, and mixing the two would
   // make the window drift with node clock skew.
-  const head = arcClient.headerByNumber(runtime, { blockNumber: bigIntJson(-1n) }).result().header;
+  //
+  // `blockNumber` is omitted rather than set to -1. A negative BigInt is not a
+  // "latest" sentinel this capability understands — passing one made the whole
+  // run hang with no error at all, which is an expensive way to learn it.
+  const head = arcClient.headerByNumber(runtime, {}).result().header;
   if (!head?.blockNumber) throw new Error('could not read Arc head');
   const headNumber = BigInt(bytesToHex(head.blockNumber.absVal));
   const headTimestamp = Number(head.timestamp);

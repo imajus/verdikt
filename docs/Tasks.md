@@ -15,7 +15,7 @@ Nothing in Phases 1–5 is safe to build until 0.2–0.4 have answers.
 
 ### 0.1 Repo scaffold
 
-- [ ] pnpm workspace:
+- [x] pnpm workspace:
   - `contracts/` — Foundry (Solidity)
   - `packages/sla/` — evaluation engine (JS, ESM)
   - `packages/sdk/` — Arc + ENS read wrapper (spec §3)
@@ -23,10 +23,15 @@ Nothing in Phases 1–5 is safe to build until 0.2–0.4 have answers.
   - `proxy/` — Fastify
   - `web/` — dashboard
   - `fixtures/` — recorded challenges, payloads, responses
-- [ ] Vitest at the root; JS + ESM throughout except where the CRE SDK
-      forces otherwise (see 0.3)
-- [ ] `.env.example` with Arc Testnet RPC, Sepolia RPC, contract addresses
-- [ ] CI: lint + `vitest run` + `forge test` on push
+- [x] Vitest at the root; JS + ESM throughout except where the CRE SDK
+      forces otherwise (see 0.3) — `cre/workflows` is that exception, a bun
+      island with its own toolchain
+- [x] `.env.example` with the Arc and Sepolia RPCs. **Not** contract
+      addresses: those are `deployments/*.json` and code — see the decision in
+      2.4
+- [x] CI: lint + typecheck + `vitest run` + `forge fmt --check` + `forge test`
+      on push (`.github/workflows/ci.yml`). Simulation is deliberately absent —
+      it needs an interactive login (CRE-1)
 
 ### 0.2 Spike A — ENSv2 on Sepolia (highest risk)
 
@@ -367,21 +372,26 @@ State machine, table-driven:
 
 - [x] `contracts/script/Deploy.s.sol`, parameterised by forwarder, workflow
       owner, deposit and refund
-- [ ] **BLOCKED** — deploy to Arc Testnet. `ARC_RPC_URL` and a funded
-      `DEPLOYER_PRIVATE_KEY` are both empty in `.env`; nothing in the repo can
-      supply either. Everything downstream that needs a deployed address is
-      blocked with it (2.4's remaining boxes, 3.x's live writes, Phase 6)
+- [x] Deployed to Arc Testnet
 - [x] `deployments/arc-testnet.json` and `deployments/sepolia.json` exist and
       are the source of truth for Verdikt's own addresses; `registry` is `null`
       until the deploy runs. See the decision below
-- [ ] Record the deployed address there
-- [ ] Confirm the `ReportMetadata` offsets against a real forwarder delivery.
-      Much lower risk since CRE-8 matched them against the SDK's own parser, but
-      only a live delivery rules out a header version change — and the forwarder
-      will not say why a verdict was rejected
-- [ ] `cre account link-key` to establish `CRE_WORKFLOW_OWNER`. Currently
-      unlinked (`cre account list-key` reports none) and `cre whoami` shows
-      "Deploy Access: Not enabled", which is the private-beta gate
+- [x] Recorded in `deployments/arc-testnet.json`, with the deploy block that
+      bounds every log scan
+- [x] `VerdiktScoreWriter` deployed to Sepolia and recorded in
+      `deployments/sepolia.json`
+- [x] Confirm the `ReportMetadata` offsets against a real forwarder delivery —
+      **and they were wrong.** A traced `simulate --broadcast` delivery reverted
+      `MalformedReportMetadata(64)`: a receiver is handed 64 bytes, not the 109
+      the DON signs. The SDK cross-check had validated the wrong artefact. This
+      is exactly the silent failure the box existed to catch, and only an actual
+      delivery caught it (CRE-8)
+- [ ] **BLOCKED (external)** — `cre account link-key` to establish a production
+      `CRE_WORKFLOW_OWNER`. `cre account list-key` reports none linked and
+      `cre whoami` shows "Deploy Access: Not enabled", the private-beta gate.
+      Until then the deployment pins the simulation forwarder and the
+      `workflowOwner` simulation actually sends; both are immutable, so
+      production is a redeploy
 
 ---
 
@@ -464,9 +474,16 @@ paid amount, and the raw `sla` record.
 - [x] Capture the simulation output — it is the submission's evidence, since
       production enrollment is private-beta:
       [evidence/cre-simulate-verify.log](./evidence/cre-simulate-verify.log)
-- [ ] **BLOCKED** — `aggregate` under `simulate`. With
-      `registryDeployBlock: "0"` it scans Arc from genesis and stalls; it needs
-      a deployed registry and its real deploy block, which is 2.4's blocker
+- [x] `aggregate` green under `simulate`, against the live Arc registry:
+      `weather=1000/1000 weather-lite=0/1000`, computed from the two real
+      `VerdictWritten` events. Captured in
+      [evidence/cre-simulate-aggregate.log](./evidence/cre-simulate-aggregate.log)
+
+> **Two traps, both of which look like a hang.** The simulator honours the cron
+> schedule, so an unmodified hourly config sits silently until the top of the
+> hour — swap to `*/15 * * * * *` to simulate. And `headerByNumber` has no
+> negative-number "latest" sentinel: passing `-1` hangs with no error, where
+> omitting `blockNumber` works.
 
 ---
 
@@ -578,8 +595,9 @@ store.
       in `packages/sdk/ens.js`, and `ens-sepolia.mjs` imports them. It keeps the
       registrar, factory, EAC-onboarding and anvil surface, which the SDK must
       never carry
-- [ ] Arc views (`getService`, `getVerdict`, `getOwed`, `VerdictWritten` log
-      replay) — landing with Phase 5's data layer, which is their only consumer
+- [x] Arc views (`getService`, `getVerdict`, `getOwed`, and `VerdictWritten` /
+      `ServiceRegistered` / `RefundCredited` log replay) in `packages/sdk/arc.js`,
+      chunked so a public RPC's `eth_getLogs` cap cannot silently truncate a scan
 
 > **Bug the tests caught, worth not reintroducing.** viem wraps a *transport*
 > failure in `ContractFunctionExecutionError`, the same class as a revert. The
@@ -606,17 +624,37 @@ day saved in Phase 4 here.
 
 ### 5.1 Data layer
 
-- [ ] Arc event reads over plain RPC, no subgraph (spec §3)
-- [ ] ENS reads for `sla`, `conformance`, `availability`
-- [ ] Both through `packages/sdk`
+- [x] Arc event reads over plain RPC, no subgraph (spec §3)
+- [x] ENS reads for `url`, `sla`, `conformance`, `availability`
+- [x] Both through `packages/sdk`; the dashboard knows neither an ABI nor a
+      resolver address
+- [x] A demo source, labelled in the header, for when no registry is configured
 
 ### 5.2 Views
 
-- [ ] Service list: slug, conformance, availability, deposit, status, price
-- [ ] Service detail: rendered SLA, verdict history, refund history
-- [ ] Per-verdict failure detail — which clause failed, expected vs actual
-- [ ] Platform stats: services registered, verdict breakdown, refunds paid
-      over time
+- [x] Service list: slug, conformance, availability, deposit, status
+- [x] Service detail: rendered SLA clauses, verdict history, refund per verdict
+- [x] Platform stats: services registered, verdict breakdown, bonded, refunded
+- [ ] **Per-verdict failure detail — which clause failed, expected vs actual.**
+      Not reachable from chain data: `VerdictWritten` carries the outcome, payer
+      and amount, and the clause results exist only in the workflow's return
+      value, which goes to the proxy. The detail view shows what a service
+      *promised* — the SLA clauses from ENS — beside what it delivered, which
+      answers "what am I buying" but not "which clause broke on call 47".
+      Closing it means adding the failing clause id to the report and the event;
+      a `bytes32` would be cheap, and the dashboard already holds the clause
+      list to map it back
+
+> **Decision — no UI framework.** The whole surface is a list, a detail panel
+> and a stats strip. A framework would be the largest dependency in the repo for
+> markup that fits in one file, and the data layer — the part with the logic —
+> is separated and unit-tested without a DOM.
+
+> **Bug the screenshot caught.** Ranking by availability first put a service
+> that answered every call and broke its SLA on every one of them *above* one
+> that delivered correctly and blipped once — the marketplace recommending the
+> worse option. It now ranks on the product of the two ratios, so neither can
+> carry a listing alone.
 
 ### 5.3 Stretch, in the spec's priority order
 
