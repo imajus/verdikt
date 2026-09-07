@@ -123,18 +123,36 @@ Every refund depends on recovering the payer and the amount from the header.
 > which is specified end to end in public. Treating the whole spike as blocked
 > on a live capture conflated the two.
 
-- [ ] **Capturing a live header is BLOCKED (needs a human), and here is exactly
-      where.** The Circle CLI is installed and does support this —
-      `circle gateway deposit --method direct` lists `ARC-TESTNET`, and
-      `circle services pay` would pay the paywall for its 1 minor unit
-      ($0.000001). But it pays from a **Circle-managed agent wallet**, and
-      standing one up is `circle wallet create` + `circle wallet login`, which
-      is email + OTP. There is also a Terms-of-Use acceptance
-      (`CIRCLE_ACCEPT_TERMS=1`) that is a legal act in the operator's name, not
-      an agent's to make.
-      For `GatewayWalletBatched` the old objection still holds: hand-signing a
-      burn intent is circular, because its payload format is the thing a capture
-      would teach us and Circle does not publish it
+- [ ] **Making a live payment is BLOCKED on funding — nothing else.** The
+      protocol half is done and the tooling is written; what is missing is USDC.
+
+      Two routes, and the second is the one that survives scrutiny:
+
+      1. *Circle's `GatewayWalletBatched`.* `circle gateway deposit --method
+         direct` does list `ARC-TESTNET` and `circle services pay` would pay the
+         paywall's 1 minor unit ($0.000001) — but from a **Circle-managed agent
+         wallet**, and standing one up is `circle wallet create` +
+         `circle wallet login`, which is email + OTP, plus a Terms-of-Use
+         acceptance (`CIRCLE_ACCEPT_TERMS=1`) that is a legal act in the
+         operator's name. Hand-signing the burn intent instead is still
+         circular: its payload is the thing a capture would teach us.
+      2. *The same challenge's `eip3009` option.* No Circle wallet, and no gas
+         in the payer's account either — the facilitator submits the transfer.
+         `scripts/pay-x402.mjs` builds and signs a real one and its header
+         round-trips through `decodePayment` against the **live** challenge.
+         It needs USDC on Base Sepolia at the paying address, and every account
+         in this checkout holds zero.
+
+      A dry run against the live paywall also closed off learning anything from
+      failures. It answers an identical bare 402 for *all* of: no header,
+      unparseable garbage, a well-formed envelope with a nonsense signature, and
+      a well-formed envelope correctly signed by an unfunded account. No error
+      body, no `x-payment-response` header. So there is no cheap probe that
+      reveals the settlement shape — only a payment that actually settles does,
+      which is precisely why this is a funding blocker and not a protocol one.
+
+      **To finish it:** fund an address with Base Sepolia USDC, then
+      `VERDIKT_PAYER_PRIVATE_KEY=0x… node scripts/pay-x402.mjs <url> --send`
 - [x] Decode it; extract payer address and paid amount — **done for `eip3009`**,
       against the spec rather than a capture. The envelope is x402's own
       (base64 of `{x402Version, scheme, network, payload}`) and the payload is
