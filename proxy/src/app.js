@@ -8,13 +8,13 @@
 // if it ever needs the engine, something has moved to the wrong side of the
 // enclave boundary.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import Fastify from 'fastify';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkChallenge } from './challenge.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
-import { VERIFICATION_FAILURE, VerificationError } from './verification.js';
+import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
 
 /** Mirrors `VerdiktRegistry._assertValidSlug`. */
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -68,6 +68,35 @@ export function buildApp(deps = {}) {
   );
 
   app.get('/healthz', async () => ({ ok: true }));
+
+  // Where the enclave pushes a finished verification (docs/spikes/cre.md,
+  // CRE-9). An exact route, so it is matched ahead of the `/*` service catch-all
+  // and can never be mistaken for a slug.
+  //
+  // Two things authenticate it, and both matter. The bearer is a shared secret
+  // the workflow holds; `requestId` is 32 random bytes this process issued and
+  // has not yet answered. Forging a callback would put attacker-chosen bytes in
+  // front of a paying agent — it could not fake the on-chain verdict, which the
+  // DON signs, but the agent would still be handed the wrong response.
+  app.post('/internal/verification-callback', async (request, reply) => {
+    if (!config.callbackToken || !bearerMatches(request.headers.authorization, config.callbackToken)) {
+      return reply.code(401).send({ error: 'unauthorized' });
+    }
+    let payload;
+    try {
+      payload = JSON.parse(Buffer.from(/** @type {Buffer} */ (request.body) ?? Buffer.alloc(0)).toString('utf8'));
+    } catch {
+      return reply.code(400).send({ error: 'malformed_callback' });
+    }
+    const requestId = payload?.requestId;
+    if (typeof requestId !== 'string') return reply.code(400).send({ error: 'missing_request_id' });
+
+    // Unknown means already answered, timed out, or never issued here. Accepting
+    // it would be accepting a result nobody asked for.
+    const delivered = workflow?.pending?.settle(requestId, parseWorkflowResult(payload));
+    if (!delivered) return reply.code(409).send({ error: 'no_such_pending_request', requestId });
+    return { ok: true };
+  });
 
   app.all('/*', async (request, reply) => {
     const route = routeOf(request, config);
@@ -282,4 +311,19 @@ async function verified({ request, reply, record, upstream, paymentHeader, decod
     .code(result.status ?? 502)
     .headers({ ...result.headers, ...headers })
     .send(result.body);
+}
+
+/**
+ * Constant-time bearer comparison. A plain `===` leaks the shared secret one
+ * character at a time to anyone who can time the endpoint.
+ *
+ * @param {string|string[]|undefined} header
+ * @param {string} expected
+ */
+function bearerMatches(header, expected) {
+  const value = Array.isArray(header) ? header[0] : header;
+  if (typeof value !== 'string' || !value.startsWith('Bearer ')) return false;
+  const given = Buffer.from(value.slice(7), 'utf8');
+  const want = Buffer.from(expected, 'utf8');
+  return given.length === want.length && timingSafeEqual(given, want);
 }

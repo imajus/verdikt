@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Verified x402 API marketplace \u2014 SLA conformance verified in a TEE, refunds enforced on-chain",
+  "description": "Verified x402 API marketplace — SLA conformance verified in a TEE, refunds enforced on-chain",
   "packageManager": "pnpm@12.3.4",
   "engines": {
     "node": ">=22"

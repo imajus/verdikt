@@ -42,6 +42,13 @@ export type Config = {
   /** VerdiktRegistry on Arc — the report receiver. */
   registryAddress: string;
   gasLimit: string;
+  /**
+   * Shared secret presented on the callback. Kept in config rather than in
+   * `secrets.yaml` only because that is not wired yet — it authenticates bytes
+   * that reach a paying agent, so it belongs in the Vault DON before this is
+   * deployed anywhere real.
+   */
+  callbackToken?: string;
 };
 
 /**
@@ -60,6 +67,13 @@ type VerifyRequest = {
   paidAmountMinorUnits: string;
   /** The `sla` ENS text record, verbatim, or null if it could not be read. */
   sla: string | null;
+  /**
+   * Where to push the result. The trigger response does not carry a handler's
+   * return value and no endpoint for reading an execution's result is
+   * documented (CRE-3, CRE-9), so the proxy — which is still holding the
+   * agent's connection — gets it pushed back here, correlated by requestId.
+   */
+  callbackUrl?: string;
 };
 
 /** Mirrors `VerdiktRegistry.onReport`'s decode. The two must change together. */
@@ -146,7 +160,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   // skip has to happen before a report is built. The payload still comes back:
   // no verdict is not the same as no delivery.
   if (!shouldWriteVerdict(judgement)) {
-    return JSON.stringify({
+    return finish(runtime, request, config, {
       ...relay,
       outcome: null,
       mode: judgement.mode,
@@ -185,7 +199,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   // the miss (Tasks.md 4.4); the verdict can be rewritten, the response cannot.
   const wrote = txResult.txStatus === TxStatus.SUCCESS;
 
-  return JSON.stringify({
+  return finish(runtime, request, config, {
     ...relay,
     outcome: judgement.outcome,
     mode: judgement.mode,
@@ -194,6 +208,48 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
     tx: wrote ? bytesToHex(txResult.txHash ?? new Uint8Array(32)) : null,
     writeError: wrote ? null : txResult.errorMessage || String(txResult.txStatus)
   });
+};
+
+/**
+ * Hand the finished verification back to the proxy, then return it.
+ *
+ * Pushed rather than polled because there is nothing to poll: Chainlink
+ * documents no endpoint for reading an execution's result (CRE-9). The return
+ * value is kept as well, because that is what `cre workflow simulate` prints —
+ * so a simulate run stays readable even with no proxy listening.
+ *
+ * A failed push is NOT fatal. The verdict is already on Arc by this point, and
+ * throwing would lose the response body the agent paid for to report a delivery
+ * problem the proxy will notice anyway when it times out.
+ */
+const finish = (
+  runtime: TeeRuntime<Config>,
+  request: VerifyRequest,
+  config: Config,
+  result: Record<string, unknown>
+): string => {
+  const payload = JSON.stringify({ requestId: request.requestId, ...result });
+  if (request.callbackUrl) {
+    try {
+      new HTTPClient()
+        .sendRequest(runtime, {
+          url: request.callbackUrl,
+          method: 'POST',
+          body: new TextEncoder().encode(payload),
+          multiHeaders: {
+            'Content-Type': { values: ['application/json'] },
+            ...(config.callbackToken
+              ? { Authorization: { values: [`Bearer ${config.callbackToken}`] } }
+              : {})
+          }
+        })
+        .result();
+    } catch {
+      // Deliberately not logged: the payload is in scope here and log output
+      // leaves the enclave.
+    }
+  }
+  return payload;
 };
 
 export const initWorkflow = (config: Config) => {

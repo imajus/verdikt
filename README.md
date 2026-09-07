@@ -100,8 +100,8 @@ cd cre/workflows/verify && bun install && bun run compile
 cd cre/workflows && cre workflow simulate verify --listen
 ```
 
-A captured simulate run — including the TEE banner — is in
-[`docs/evidence/cre-simulate-verify.log`](docs/evidence/cre-simulate-verify.log).
+Captured runs are in [`docs/evidence/`](docs/evidence): a simulate run including
+the TEE banner, and the enclave-to-proxy callback round trip.
 
 ## Layout
 
@@ -138,6 +138,11 @@ verification would be self-refuting.
   contracts, including the negative case (Spike A).
 - Both CRE workflows compile to WASM with `@verdikt/sla` bundled in, and the
   per-request one runs green under `cre workflow simulate` in confidential mode.
+- The paid leg's round trip works: the enclave pushes its finished verification
+  back to the proxy, which relays the provider's payload to the agent. Captured
+  in [`docs/evidence/cre-callback-roundtrip.log`](docs/evidence/cre-callback-roundtrip.log) —
+  Chainlink documents no way to *read* an execution's result, so pushing is the
+  mechanism (spike finding CRE-9).
 
 **Simulated or blocked, and why:**
 
@@ -155,12 +160,6 @@ verification would be self-refuting.
   parser, but not against a live delivery.** Every offset matches
   `REPORT_METADATA_OFFSETS` in `@chainlink/cre-sdk`. What remains untested is a
   real forwarder call, so the residual risk is a header version change.
-- **The proxy's paid leg cannot reach a deployed workflow yet.** Triggering is
-  documented and straightforward, but Chainlink documents no HTTP endpoint for
-  reading an execution's *result*, which is how the proxy was to get the payload
-  back. Spike finding CRE-9 lists the options; the likely answer is the workflow
-  pushing its result to a proxy callback from inside the enclave. Unaffected:
-  the unpaid leg, the engine, the contracts, and `simulate`.
 - **Per-verdict clause detail is not on the dashboard.** Clause results never
   reach the chain; the detail view shows what a service promised beside what it
   delivered. [Tasks §5.2](docs/Tasks.md) records what closing it would take.

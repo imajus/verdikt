@@ -10,8 +10,16 @@ interface ProxyConfig {
   upstreamTimeoutMs: number;
   /** Off by default: a provider-authored `url` record is otherwise an SSRF primitive. */
   allowPrivateUpstream: boolean;
+  /** The shared secret the enclave presents on the callback. Unset refuses every callback. */
+  callbackToken?: string;
   /** `null` means paid calls are refused rather than relayed unverified. */
-  workflow: { triggerUrl: string; statusUrl: string; authToken?: string } | null;
+  workflow: {
+    triggerUrl: string;
+    workflowId: string;
+    privateKey: string;
+    callbackUrl: string;
+    timeoutMs: number;
+  } | null;
   arc: { rpcUrl?: string; address?: string; deployBlock?: bigint };
 }
 
@@ -65,19 +73,35 @@ interface VerificationResult {
   bodyTruncated?: boolean;
 }
 
+/** Requests waiting on a callback from the enclave, keyed by requestId. */
+interface PendingRegistry {
+  readonly size: number;
+  await(requestId: string, timeoutMs: number): Promise<VerificationResult>;
+  settle(requestId: string, result: VerificationResult): boolean;
+  cancel(requestId: string, error: Error): boolean;
+}
+
 interface WorkflowClient {
   verify(request: VerificationRequest): Promise<VerificationResult>;
+  /** The callback route settles waiters here. */
+  pending?: PendingRegistry;
 }
 
 interface WorkflowClientOptions {
-  /** The CRE gateway's trigger endpoint for the `verdikt-verify` workflow. */
+  /** The CRE gateway. `https://01.gateway.zone-a.cre.chain.link` for a public registry. */
   triggerUrl: string;
-  /** Where an execution's status and result are read back from. */
-  statusUrl: string;
-  /** Signed by the proxy's own key, which must be in the workflow's `authorizedKeys` (Spike B, CRE-4). */
-  authToken?: string;
-  pollIntervalMs?: number;
+  /** 64-char workflow id, from `cre workflow hash`. */
+  workflowId: string;
+  /**
+   * The proxy's own key, whose address must appear in the workflow's
+   * `authorizedKeys`. A fresh JWT is signed with it per request — the gateway's
+   * token digests the body, so it cannot be a fixed string (CRE-9).
+   */
+  privateKey: string;
+  /** Where the enclave pushes the finished verification back to. */
+  callbackUrl: string;
   timeoutMs?: number;
+  pending?: PendingRegistry;
   fetch?: typeof fetch;
 }
 
@@ -86,3 +110,16 @@ type ChallengeBlockReason =
   | 'unparseable_challenge'
   | 'challenge_has_no_pay_to'
   | 'pay_to_mismatch';
+
+interface TriggerJwtOptions {
+  /** The exact JSON-RPC body that will be sent — the token digests these bytes. */
+  body: string;
+  /** The proxy's own key; its address must appear in the workflow's `authorizedKeys`. */
+  privateKey: string;
+  /** Capped at 300 by the gateway. */
+  ttlSeconds?: number;
+  /** Unix seconds. Injectable so a test is not clock-dependent. */
+  now?: number;
+  /** Injectable for the same reason; a fresh UUID v4 otherwise. */
+  jti?: string;
+}

@@ -63,7 +63,12 @@ curl -X POST http://localhost:2000/trigger -H 'Content-Type: application/json' \
                    "paymentHeader":"…","payer":"0x…","paidAmountMinorUnits":"2500","sla":null}}'
 ```
 
-A captured run is in [`docs/evidence/cre-simulate-verify.log`](../../docs/evidence/cre-simulate-verify.log).
+Captured runs are in [`docs/evidence/`](../../docs/evidence).
+
+`verify` also POSTs its result to the `callbackUrl` in the trigger input, if one
+is given. That is how the proxy gets the payload back — there is no documented
+way to read an execution's result (docs/spikes/cre.md, CRE-9). To watch it, run
+the proxy alongside the simulator and pass its callback URL in the input.
 
 **`aggregate` needs a deployed registry.** With `registryDeployBlock: "0"` it
 scans Arc from genesis and stalls; set it to the registry's real deployment

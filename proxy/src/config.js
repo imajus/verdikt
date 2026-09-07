@@ -30,15 +30,28 @@ export function loadConfig(env = process.env) {
      */
     allowPrivateUpstream: env.PROXY_ALLOW_PRIVATE_UPSTREAM === 'true',
     /**
+     * The shared secret the enclave presents on the callback. Without it the
+     * callback route refuses everything, which is the safe direction: a paid
+     * call then times out rather than being answered by anyone who can reach
+     * the port.
+     */
+    callbackToken: env.CRE_CALLBACK_TOKEN,
+    /**
      * Unset means the proxy refuses paid calls outright. Relaying one
      * unverified would take an agent's money for a call nothing judged.
+     *
+     * There is no status URL: no HTTP endpoint for reading an execution's
+     * result is documented (docs/spikes/cre.md, CRE-9), so the workflow pushes
+     * its result to `callbackUrl` instead.
      */
     workflow:
-      env.CRE_TRIGGER_URL && env.CRE_EXECUTION_STATUS_URL
+      env.CRE_TRIGGER_URL && env.CRE_WORKFLOW_ID && env.CRE_TRIGGER_PRIVATE_KEY && env.CRE_CALLBACK_URL
         ? {
             triggerUrl: env.CRE_TRIGGER_URL,
-            statusUrl: env.CRE_EXECUTION_STATUS_URL,
-            authToken: env.CRE_TRIGGER_AUTH_TOKEN
+            workflowId: env.CRE_WORKFLOW_ID,
+            privateKey: env.CRE_TRIGGER_PRIVATE_KEY,
+            callbackUrl: env.CRE_CALLBACK_URL,
+            timeoutMs: Number(env.PROXY_VERIFY_TIMEOUT_MS ?? 45_000)
           }
         : null,
     arc: {

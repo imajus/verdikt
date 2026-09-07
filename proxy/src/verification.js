@@ -1,26 +1,32 @@
 // Talking to the confidential workflow (Specification.md §2, Tasks.md 4.3).
 //
-// WHY THIS IS TRIGGER-THEN-POLL AND NOT ONE REQUEST
+// WHY THIS IS TRIGGER-THEN-WAIT-FOR-A-CALLBACK
 //
-// Chainlink's docs contradict each other on whether a workflow's return value
-// comes back on the HTTP response to the trigger. Spike B settled it by
-// observation (docs/spikes/cre.md, CRE-3): it does not — the trigger is
-// acknowledged immediately with an empty body, and the handler's result shows
-// up separately.
+// Two findings shape it, both in docs/spikes/cre.md:
 //
-// The alternative was to have the proxy make the paid call itself and let the
-// enclave verify afterwards. That is rejected: it moves the reading of the
-// provider's response out of the enclave, and "the code that reads your data is
-// attested" is the entire argument §2 is built on. It is also not actually
-// available — an x402 payment settles once, so the enclave's call *is* the
-// call, and its response is the only copy of what the agent bought.
+//   CRE-3 — the trigger response does not carry the handler's return value. It
+//   answers `{ status: "ACCEPTED", workflow_execution_id }` immediately.
 //
-// So the payload comes back through the workflow's return value, and the proxy
-// waits for it.
+//   CRE-9 — and there is no documented HTTP endpoint for reading that
+//   execution's result. The CRE UI and `cre execution status` are the only
+//   documented readers, neither of which a proxy can call per request.
+//
+// So polling is not available, and the proxy still has to return the payload:
+// an x402 payment settles once, which makes the enclave's call THE call and its
+// response the only copy of what the agent bought.
+//
+// The workflow therefore pushes its result back, from inside the enclave, to a
+// callback this proxy serves. The agent's connection is already being held
+// open; `requestId` correlates the two. The alternative — the proxy making the
+// paid call and the enclave verifying afterwards — was rejected because it
+// moves the reading of the provider's response out of the enclave, which is the
+// argument §2 is built on.
+
+import { mintTriggerJwt } from './jwt.js';
 
 /** @type {Readonly<Record<string, VerificationFailure>>} */
 export const VERIFICATION_FAILURE = Object.freeze({
-  /** The workflow never reported a result in time. The agent has paid — never swallow this. */
+  /** No callback arrived in time. The agent has paid — never swallow this. */
   TIMEOUT: 'workflow_timeout',
   /** The gateway refused the trigger, so no verification happened at all. */
   TRIGGER_REJECTED: 'trigger_rejected',
@@ -41,35 +47,126 @@ export class VerificationError extends Error {
 }
 
 /**
- * A client the proxy can use, and tests can replace.
+ * Requests waiting on a callback, keyed by `requestId`.
  *
- * Kept an interface rather than a direct call so the proxy's failure handling —
- * which is the delicate part, because the agent has already paid — is testable
- * without a CRE account, a deployed workflow, or a gateway.
- *
+ * In-memory on purpose: an entry is only meaningful while this process is
+ * holding the agent's connection, so persisting it would outlive the thing it
+ * refers to. One consequence to state rather than discover — a proxy restart
+ * loses in-flight calls, and horizontal scaling needs the callback to reach the
+ * same instance.
+ */
+export function createPendingRegistry() {
+  /** @type {Map<string, { resolve: (result: VerificationResult) => void, reject: (error: Error) => void }>} */
+  const pending = new Map();
+
+  return {
+    get size() {
+      return pending.size;
+    },
+
+    /**
+     * @param {string} requestId
+     * @param {number} timeoutMs
+     * @returns {Promise<VerificationResult>}
+     */
+    await(requestId, timeoutMs) {
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => {
+          pending.delete(requestId);
+          reject(
+            new VerificationError(
+              VERIFICATION_FAILURE.TIMEOUT,
+              `no callback for ${requestId} within ${timeoutMs}ms`
+            )
+          );
+        }, timeoutMs);
+        // `unref` so a pending verification cannot hold the process open.
+        timer.unref?.();
+        pending.set(requestId, {
+          resolve: (result) => {
+            clearTimeout(timer);
+            pending.delete(requestId);
+            resolve(result);
+          },
+          reject: (error) => {
+            clearTimeout(timer);
+            pending.delete(requestId);
+            reject(error);
+          }
+        });
+      });
+    },
+
+    /**
+     * Hand a callback's payload to whoever is waiting.
+     *
+     * Returns false for an unknown `requestId` — already answered, timed out,
+     * or never issued by this process — so the route can reject it rather than
+     * accept a result nobody asked for.
+     *
+     * @param {string} requestId
+     * @param {VerificationResult} result
+     */
+    settle(requestId, result) {
+      const waiter = pending.get(requestId);
+      if (!waiter) return false;
+      waiter.resolve(result);
+      return true;
+    },
+
+    /**
+     * Fail a waiter that will never be answered — the trigger was refused, so
+     * no callback is coming. Without this the agent waits out the full timeout
+     * for an error already known.
+     *
+     * @param {string} requestId
+     * @param {Error} error
+     */
+    cancel(requestId, error) {
+      const waiter = pending.get(requestId);
+      if (!waiter) return false;
+      waiter.reject(error);
+      return true;
+    }
+  };
+}
+
+/**
  * @param {WorkflowClientOptions} options
  * @returns {WorkflowClient}
  */
 export function createWorkflowClient(options) {
   const doFetch = options.fetch ?? fetch;
-  const pollIntervalMs = options.pollIntervalMs ?? 500;
   const timeoutMs = options.timeoutMs ?? 45_000;
+  const pending = options.pending ?? createPendingRegistry();
 
   return {
+    pending,
+
     async verify(request) {
-      let executionId;
+      // Registered BEFORE the trigger is sent: the enclave can call back faster
+      // than the trigger response returns, and a callback arriving first would
+      // otherwise find nothing waiting and be rejected.
+      const waiting = pending.await(request.requestId, timeoutMs);
+
+      const body = JSON.stringify({
+        jsonrpc: '2.0',
+        id: request.requestId,
+        method: 'workflows.execute',
+        params: {
+          input: { ...request, callbackUrl: options.callbackUrl },
+          workflow: { workflowID: options.workflowId }
+        }
+      });
+
       try {
+        // The JWT digests this exact string, so the same one must be sent —
+        // re-serialising would change the bytes and fail authorisation.
+        const authorization = await mintTriggerJwt({ body, privateKey: options.privateKey });
         const response = await doFetch(options.triggerUrl, {
           method: 'POST',
-          headers: {
-            'content-type': 'application/json',
-            // The gateway validates a JWT signed by a key in the workflow's
-            // `authorizedKeys` (Spike B, CRE-4). That signature — not the
-            // on-chain role — is what stops a third party manufacturing a
-            // verdict by calling the workflow directly.
-            ...(options.authToken ? { authorization: `Bearer ${options.authToken}` } : {})
-          },
-          body: JSON.stringify({ input: request }),
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${authorization}` },
+          body,
           signal: AbortSignal.timeout(timeoutMs)
         });
         if (!response.ok) {
@@ -78,56 +175,41 @@ export function createWorkflowClient(options) {
             `workflow trigger returned ${response.status}`
           );
         }
-        const body = await response.json().catch(() => ({}));
-        executionId = body?.result?.workflow_execution_id ?? body?.workflow_execution_id;
+        const answer = await response.json().catch(() => ({}));
+        if (answer?.error) {
+          throw new VerificationError(
+            VERIFICATION_FAILURE.TRIGGER_REJECTED,
+            `gateway refused the trigger: ${answer.error?.message ?? JSON.stringify(answer.error)}`
+          );
+        }
+        if (answer?.result?.status && answer.result.status !== 'ACCEPTED') {
+          throw new VerificationError(
+            VERIFICATION_FAILURE.TRIGGER_REJECTED,
+            `gateway answered ${answer.result.status}`
+          );
+        }
       } catch (error) {
-        if (error instanceof VerificationError) throw error;
-        throw new VerificationError(
-          VERIFICATION_FAILURE.TRIGGER_REJECTED,
-          `could not reach the workflow gateway: ${/** @type {Error} */ (error).message}`
-        );
+        const failure =
+          error instanceof VerificationError
+            ? error
+            : new VerificationError(
+                VERIFICATION_FAILURE.TRIGGER_REJECTED,
+                `could not reach the workflow gateway: ${/** @type {Error} */ (error).message}`
+              );
+        // Release the waiter registered above, or it sits until the timeout for
+        // an error already known. Swallow its rejection — `failure` is thrown.
+        waiting.catch(() => {});
+        pending.cancel(request.requestId, failure);
+        throw failure;
       }
 
-      if (!executionId) {
-        throw new VerificationError(
-          VERIFICATION_FAILURE.TRIGGER_REJECTED,
-          'the gateway accepted the trigger but named no execution to wait on'
-        );
-      }
-      return pollForResult(executionId);
+      return waiting;
     }
   };
-
-  /** @param {string} executionId */
-  async function pollForResult(executionId) {
-    const deadline = Date.now() + timeoutMs;
-    while (Date.now() < deadline) {
-      const status = await doFetch(`${options.statusUrl}/${executionId}`, {
-        headers: options.authToken ? { authorization: `Bearer ${options.authToken}` } : {},
-        signal: AbortSignal.timeout(Math.max(1, deadline - Date.now()))
-      })
-        .then((response) => (response.ok ? response.json() : null))
-        .catch(() => null);
-
-      if (status?.status === 'COMPLETED') return parseWorkflowResult(status.result);
-      if (status?.status === 'ERRORED' || status?.status === 'FAILED') {
-        throw new VerificationError(VERIFICATION_FAILURE.RUN_FAILED, status.error ?? 'the workflow run failed');
-      }
-      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-    }
-    // Surfaced as a distinct error, never swallowed: the agent paid, and a
-    // silent failure here is indistinguishable from a service that took the
-    // money and returned nothing.
-    throw new VerificationError(
-      VERIFICATION_FAILURE.TIMEOUT,
-      `the workflow did not report a result within ${timeoutMs}ms`
-    );
-  }
 }
 
 /**
- * The workflow returns a JSON string. Parsed here so the proxy's route handler
- * never touches the wire format.
+ * Normalise what the workflow sent back.
  *
  * @param {unknown} raw
  * @returns {VerificationResult}

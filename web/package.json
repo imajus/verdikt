@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Marketplace dashboard \u2014 the primary demo surface",
+  "description": "Marketplace dashboard — the primary demo surface",
   "comment": "No UI framework on purpose: the whole surface is a list, a detail panel and a stats strip, and a framework would be the largest dependency in the repo for markup that fits in one file.",
   "scripts": {
     "dev": "vite",

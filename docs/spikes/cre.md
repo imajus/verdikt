@@ -309,7 +309,14 @@ cannot be a CI check.
 4. **Nothing here blocks Phases 1 or 2's tests.** The evaluation engine and the
    registry's accounting are untouched by all of the above.
 
-### CRE-9 — the gateway's trigger contract, and the hole it leaves in the paid leg
+### CRE-9 — the gateway's trigger contract, and how the paid leg gets its result back
+
+> **Resolved.** Option 2 below was taken and then demonstrated end to end:
+> `docs/evidence/cre-callback-roundtrip.log` is a real
+> `cre workflow simulate verify --listen` run, in confidential mode, where the
+> enclave POSTs its finished verification to the proxy's callback route and the
+> proxy's waiting request picks it up by `requestId`. The provider's response
+> body arrives intact, which is the thing the paid leg exists to relay.
 
 CRE-3 settled *that* the trigger response does not carry the handler's return
 value. `proxy/src/verification.js` was then written to trigger and poll, before
@@ -333,8 +340,13 @@ The client currently posts `{ input }` at the top level. Wrong shape; cheap fix.
 signature over `base64url(header).base64url(payload)`, and the payload carries
 `digest`, the SHA256 of *that exact JSON-RPC body*. A credential that depends on
 the request body cannot be a fixed string in an env file.
-`CRE_TRIGGER_AUTH_TOKEN` has to become the proxy's private key, with the client
-signing a fresh short-lived JWT per call. This is consistent with CRE-4, which
+The setting has to become the proxy's private key, with the client signing a
+fresh short-lived JWT per call — now `CRE_TRIGGER_PRIVATE_KEY`, implemented in
+`proxy/src/jwt.js` and checked by recovering the signature back to the issuer.
+The exact shape: header `{"alg":"ETH","typ":"JWT"}`; payload `digest` (SHA256 of
+the body, `0x`-prefixed), `iss` (the signing address), `iat`, `exp` (at most 5
+minutes after `iat`), `jti` (UUID v4); signature an EIP-191 `personal_sign` over
+`base64url(header).base64url(payload)`, base64url-encoded as `r ‖ s ‖ v`. This is consistent with CRE-4, which
 said "the proxy needs a signing key" — the config simply did not follow it.
 
 **Open, and it is the load-bearing one.** *There is no documented HTTP endpoint
@@ -342,10 +354,10 @@ for reading an execution's result.* Chainlink documents `workflow_execution_id`
 in the trigger response, the CRE UI, and `cre execution status <uuid>` on the
 CLI. None of those is something a proxy can call per request.
 
-That matters more than the other two, because the paid leg's whole shape rests
+That mattered more than the other two, because the paid leg's whole shape rests
 on it: the enclave holds the only copy of what the agent bought (an x402 payment
-settles once), and `CRE_EXECUTION_STATUS_URL` was the assumed way to get it
-back. Options, none yet taken:
+settles once), and polling an execution was the assumed way to get it back. The
+options were:
 
 1. **Find the undocumented API the CRE UI itself calls.** Most likely to exist;
    depends on an interface Chainlink has not committed to.
@@ -358,9 +370,28 @@ back. Options, none yet taken:
    the provider's response out of the enclave, and is unavailable anyway: the
    payment settles once.
 
-Option 2 looks the strongest and does not need anything undocumented. Settle it
-before the paid leg can work end to end; it is not blocked on deploy access,
-because a `simulate --listen` run can exercise the callback.
+**Option 2 was taken**, and needed nothing undocumented. The workflow POSTs to a
+`callbackUrl` passed in the trigger input; the proxy serves
+`/internal/verification-callback` and correlates by `requestId`. Two things
+authenticate it — a shared bearer the workflow holds, and the `requestId` being
+32 random bytes the proxy issued and has not yet answered. Forging a callback
+could not fake the on-chain verdict, which the DON signs, but it would hand a
+paying agent the wrong bytes, which is why the route refuses everything when no
+token is configured.
+
+Consequences worth stating:
+
+- **The proxy is stateful for the life of a request.** In-memory only, since an
+  entry is meaningless once the connection it refers to is gone — but a restart
+  loses in-flight calls, and more than one proxy instance needs the callback to
+  reach the same one.
+- **The push is best-effort.** A failed callback does not throw inside the
+  workflow: the verdict is already on Arc by then, and throwing would lose the
+  response body the agent paid for to report a delivery problem the proxy
+  notices anyway when it times out.
+- **The callback token belongs in `secrets.yaml`**, released by the Vault DON,
+  not in workflow config where it currently sits. It authenticates bytes that
+  reach a paying agent.
 
 ### CRE-8 — the report header offsets, confirmed against the SDK
 
