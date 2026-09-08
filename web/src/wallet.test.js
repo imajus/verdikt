@@ -61,12 +61,10 @@ describe('connectWallet', () => {
     expect(account.address).toBe('0xAaAa000000000000000000000000000000AaAa');
     expect(account.chainId).toBe(10001);
   });
-
   it('throws plainly when no provider is available', async () => {
     vi.stubGlobal('window', fakeWindow());
     await expect(connectWallet()).rejects.toThrow(/no wallet/i);
   });
-
   it('remembers the connected account for getConnectedAccount', async () => {
     const provider = fakeProvider();
     vi.stubGlobal('window', fakeWindow({ ethereum: provider }));
@@ -87,7 +85,6 @@ describe('ensureChain', () => {
       params: [{ chainId: '0x2711' }]
     });
   });
-
   it('adds the chain when the wallet does not recognise it (error code 4902)', async () => {
     const provider = fakeProvider({ switchError: { code: 4902 } });
     vi.stubGlobal('window', fakeWindow({ ethereum: provider }));
@@ -114,6 +111,17 @@ describe('onAccountChange', () => {
     provider._emit('accountsChanged', ['0xBbBb000000000000000000000000000000BbBb']);
     provider._emit('accountsChanged', []);
     expect(seen).toEqual(['0xBbBb000000000000000000000000000000BbBb', null]);
+    unsubscribe();
+  });
+  it('handles a reconnect after disconnect without a fresh connectWallet() call', async () => {
+    const provider = fakeProvider();
+    vi.stubGlobal('window', fakeWindow({ ethereum: provider }));
+    await connectWallet();
+    const seen = /** @type {(string|null)[]} */ ([]);
+    const unsubscribe = onAccountChange((address) => seen.push(address));
+    expect(() => provider._emit('accountsChanged', [])).not.toThrow();
+    expect(() => provider._emit('accountsChanged', ['0xCcCc000000000000000000000000000000CcCc'])).not.toThrow();
+    expect(seen).toEqual([null, '0xCcCc000000000000000000000000000000CcCc']);
     unsubscribe();
   });
 });

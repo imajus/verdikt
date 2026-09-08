@@ -56,7 +56,11 @@ export async function connectWallet() {
   activeProvider = provider;
   connected = { address: accounts[0], chainId: Number.parseInt(chainIdHex, 16) };
   /** @type {{ on?: Function }} */ (provider).on?.('accountsChanged', (/** @type {string[]} */ next) => {
-    connected = next.length > 0 ? { address: next[0], chainId: /** @type {{ chainId: number }} */ (connected).chainId } : null;
+    if (next.length === 0) {
+      connected = null;
+    } else if (connected) {
+      connected = { ...connected, address: next[0] };
+    }
     for (const listener of listeners) listener(next.length > 0 ? next[0] : null);
   });
   /** @type {{ on?: Function }} */ (provider).on?.('chainChanged', (/** @type {string} */ hex) => {
