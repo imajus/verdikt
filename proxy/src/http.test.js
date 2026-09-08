@@ -11,15 +11,55 @@ describe('assertRelayableUrl', () => {
   it('refuses hosts only Verdikt’s network can reach', () => {
     for (const url of [
       'http://localhost:8080/x',
+      'http://sub.localhost/x',
       'http://127.0.0.1/x',
       'http://169.254.169.254/latest/meta-data',
       'http://10.0.0.5/x',
       'http://192.168.1.1/x',
       'http://172.16.0.1/x',
+      'http://100.64.0.1/x', // CGNAT (100.64.0.0/10)
+      'http://0.0.0.0/x',
       'http://[::1]/x'
     ]) {
       expect(() => assertRelayableUrl(url, false), url).toThrow(/private host/);
     }
+  });
+
+  // The URL parser normalises numeric IPv4 spellings, so a private address
+  // dressed up as decimal/hex/octal/short-form still resolves to a private host.
+  it('refuses private IPv4 no matter how it is spelled', () => {
+    for (const url of [
+      'http://2130706433/x', // 127.0.0.1 as a 32-bit decimal
+      'http://0x7f000001/x', // 127.0.0.1 in hex
+      'http://017700000001/x', // 127.0.0.1 in octal
+      'http://127.1/x', // short form
+      'http://0/x' // 0.0.0.0
+    ]) {
+      expect(() => assertRelayableUrl(url, false), url).toThrow(/private host/);
+    }
+  });
+
+  // The old string guard only knew `::1`, `fc`, and `fd`. These are the IPv6
+  // spellings of private hosts it let straight through — including the metadata
+  // endpoint mapped into IPv6, which the parser renders in hex.
+  it('refuses private IPv6, including mapped/unspecified/link-local forms', () => {
+    for (const url of [
+      'http://[::]/x', // unspecified
+      'http://[::ffff:127.0.0.1]/x', // IPv4-mapped loopback (serialised as ::ffff:7f00:1)
+      'http://[::ffff:169.254.169.254]/x', // IPv4-mapped cloud metadata
+      'http://[::ffff:10.0.0.1]/x', // IPv4-mapped RFC1918
+      'http://[fe80::1]/x', // link-local
+      'http://[fd12:3456:789a::1]/x', // unique-local (fd)
+      'http://[fc00::1]/x' // unique-local (fc)
+    ]) {
+      expect(() => assertRelayableUrl(url, false), url).toThrow(/private host/);
+    }
+  });
+
+  it('still allows public addresses in either family', () => {
+    expect(assertRelayableUrl('http://8.8.8.8/x', false).hostname).toBe('8.8.8.8');
+    expect(assertRelayableUrl('http://[2606:4700:4700::1111]/x', false).hostname).toBe('[2606:4700:4700::1111]');
+    expect(assertRelayableUrl('http://[::ffff:8.8.8.8]/x', false).hostname).toBe('[::ffff:808:808]');
   });
 
   it('allows them only when a demo explicitly opts in', () => {
