@@ -29,6 +29,13 @@ interface Listing {
   payTo: string | null;
   /** `unreachable` means Sepolia did not answer — the listing is still real. */
   namingLayer: 'ok' | 'unreachable';
+  /**
+   * The ENS subname's owner and the Arc registration's provider disagree. The
+   * proxy already refuses to route such a listing (`checkOwnership`) — this
+   * is the same fact, surfaced for the marketplace to render rather than
+   * silently list a service nobody can actually call.
+   */
+  contested: boolean;
   sla: SlaDocument | null;
   slaRaw: string | null;
   /** As published on ENS by the hourly workflow. `null` before its first run. */

@@ -51,6 +51,7 @@ function listingRow(listing, selected) {
       <span class="cell name">
         <strong>${escape(listing.slug)}</strong>
         <small>${escape(listing.name)}</small>
+        ${listing.contested ? '<span class="contested">contested</span>' : ''}
         ${unranked ? '<span class="unranked">not yet ranked</span>' : ''}
       </span>
       <span class="cell num">${scoreCell(published.conformance)}</span>
@@ -177,6 +178,15 @@ export function renderDetail(listing) {
     ${
       listing.namingLayer === 'unreachable'
         ? '<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>'
+        : ''
+    }
+    ${
+      listing.contested
+        ? `<p class="aside warn">
+             This slug's ENS subname and its Arc registration are owned by different
+             addresses. The proxy refuses to route it until they agree — see
+             <a href="?view=how">how it works</a>.
+           </p>`
         : ''
     }
 

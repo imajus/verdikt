@@ -18,6 +18,7 @@ const record = (overrides) => ({
   sla: SLA_TEXT.honest,
   conformance: 1000,
   availability: 1000,
+  owner: null,
   backend: 'fixture',
   resolvedAt: 0,
   ...overrides
@@ -184,6 +185,20 @@ describe('loadMarketplace', () => {
     // shared aggregateWindow, shown only to fill the gap before the first run.
     expect(services[0].published.conformance).toBeNull();
     expect(services[0].unpublished.conformance).toBe(500);
+  });
+
+  it('flags a listing as contested when the ENS owner and Arc provider disagree', async () => {
+    const services = [service('weather', HONEST, { provider: '0xaaaa000000000000000000000000000000aaaa' })];
+    const records = { weather: record({ owner: '0xbbbb000000000000000000000000000000bbbb' }) };
+    const { services: listings } = await loadMarketplace(deps({ services, records }));
+    expect(listings[0].contested).toBe(true);
+  });
+
+  it('does not flag a listing whose subname is simply unclaimed', async () => {
+    const services = [service('weather', HONEST, { provider: '0xaaaa000000000000000000000000000000aaaa' })];
+    const records = { weather: record({ owner: null }) };
+    const { services: listings } = await loadMarketplace(deps({ services, records }));
+    expect(listings[0].contested).toBe(false);
   });
 
   it('tallies platform stats across every service', async () => {
