@@ -94,6 +94,16 @@ export const resolverRecordsAbi = parseAbi([
 ]);
 
 /**
+ * The one `PermissionedRegistry` read the SDK needs directly — not through
+ * the resolver, since `owner` is not a text or address record. Only what
+ * `resolveServiceRecord` reads; the registrar/EAC-onboarding surface stays in
+ * `scripts/ens-sepolia.mjs` per this file's own rule.
+ */
+export const subnameRegistryAbi = parseAbi([
+  'function getState(uint256 anyId) view returns ((uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource))'
+]);
+
+/**
  * DNS wire format — what UniversalResolverV2 and the resolver's authorize* take.
  * @param {string} name
  */
@@ -268,12 +278,23 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     return value === '0x0000000000000000000000000000000000000000' ? null : value;
   };
 
-  const [address, url, sla, conformance, availability] = await Promise.all([
+  const readOwner = async () => {
+    const state = await client.readContract({
+      address: /** @type {`0x${string}`} */ (SEPOLIA.ens.subnameRegistry),
+      abi: subnameRegistryAbi,
+      functionName: 'getState',
+      args: [BigInt(serviceId)]
+    });
+    return state.latestOwner === '0x0000000000000000000000000000000000000000' ? null : state.latestOwner;
+  };
+
+  const [address, url, sla, conformance, availability, owner] = await Promise.all([
     readAddr(),
     readText('url'),
     readText('sla'),
     readText('conformance'),
-    readText('availability')
+    readText('availability'),
+    readOwner()
   ]);
 
   return {
@@ -285,6 +306,7 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     sla,
     conformance: conformance === null ? null : parseScore(conformance),
     availability: availability === null ? null : parseScore(availability),
+    owner,
     backend: ENS_BACKEND.V2,
     resolvedAt: Date.now()
   };

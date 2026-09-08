@@ -14,24 +14,26 @@ import {
   resolveServiceRecord,
   resolverRecordsAbi,
   serviceName,
+  subnameRegistryAbi,
   writeServiceScores
 } from './ens.js';
+import { SEPOLIA } from './deployments.js';
 
 const RPC = 'http://ens.test/rpc';
 const RESOLVER = '0x00000000000000000000000000000000000000aa';
 
 /**
- * Stands in for the Sepolia RPC. Decodes the `resolve(name, data)` the SDK
- * sends, looks the inner call up in `records`, and answers with the ABI the
- * real Universal Resolver would return — so this exercises the encode/decode
- * path rather than asserting the SDK against itself.
+ * Stands in for the Sepolia RPC. Two request shapes are answered: a
+ * `resolve(name, data)` against the Universal Resolver (the existing four
+ * records), and a `getState(anyId)` against the subname registry directly —
+ * `owner` is not a resolver-routed record, it comes straight off the registry.
  *
- * @param {{ addr?: string, sla?: string, conformance?: string, availability?: string }} records
+ * @param {{ addr?: string, sla?: string, conformance?: string, availability?: string, owner?: string }} records
  *        Omit a key to make it unset; `revert` makes the whole name unresolvable.
  */
 function mockRpc(records) {
   /** @param {`0x${string}`} data */
-  const answer = (data) => {
+  const answerResolve = (data) => {
     const outer = decodeFunctionData({
       abi: [
         {
@@ -51,7 +53,6 @@ function mockRpc(records) {
       data
     });
     const inner = decodeFunctionData({ abi: resolverRecordsAbi, data: /** @type {`0x${string}`} */ (outer.args[1]) });
-
     /** @type {`0x${string}`} */
     let result = '0x';
     if (inner.functionName === 'addr' && records.addr !== undefined) {
@@ -74,13 +75,27 @@ function mockRpc(records) {
     return encodeAbiParameters(parseAbiParameters('bytes, address'), [result, RESOLVER]);
   };
 
+  const answerGetState = () =>
+    encodeFunctionResult({
+      abi: subnameRegistryAbi,
+      functionName: 'getState',
+      result: {
+        status: records.owner ? 2 : 0,
+        expiry: 0n,
+        latestOwner: /** @type {`0x${string}`} */ (records.owner ?? '0x0000000000000000000000000000000000000000'),
+        tokenId: 0n,
+        resource: 0n
+      }
+    });
+
   return vi.fn(async (_url, init) => {
     const body = JSON.parse(String(init.body));
-    const one = (/** @type {{ id: number, params: [{ data: `0x${string}` }] }} */ request) => ({
-      jsonrpc: '2.0',
-      id: request.id,
-      result: answer(request.params[0].data)
-    });
+    const one = (/** @type {{ id: number, params: [{ to: string, data: `0x${string}` }] }} */ request) => {
+      const { to, data } = request.params[0];
+      const result =
+        to.toLowerCase() === SEPOLIA.ens.subnameRegistry.toLowerCase() ? answerGetState() : answerResolve(data);
+      return { jsonrpc: '2.0', id: request.id, result };
+    };
     const payload = Array.isArray(body) ? body.map(one) : one(body);
     return new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } });
   });
@@ -125,6 +140,21 @@ describe('resolveServiceRecord', () => {
     });
     // The choke point exists so a consumer needing two records makes one call.
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns the subname owner alongside the four records, still in one round trip', async () => {
+    const owner = '0x4444444444444444444444444444444444444444';
+    const fetchMock = mockRpc({ addr: '0x1111111111111111111111111111111111111111', owner });
+    vi.stubGlobal('fetch', fetchMock);
+    const record = await resolveServiceRecord('weather', { rpcUrl: RPC });
+    expect(record.owner).toBe(owner);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports an unclaimed subname as owner: null, not a zero address', async () => {
+    vi.stubGlobal('fetch', mockRpc({}));
+    const record = await resolveServiceRecord('weather', { rpcUrl: RPC });
+    expect(record.owner).toBeNull();
   });
 
   it('returns the sla raw and unparsed', async () => {
@@ -177,16 +207,44 @@ describe('resolveServiceRecord', () => {
       vi.fn(async (_url, init) => {
         const body = JSON.parse(String(init.body));
         // ResolverNotFound() — a custom error revert, which is what the
-        // Universal Resolver answers for a subname nobody has onboarded.
-        const error = { code: 3, message: 'execution reverted', data: '0x7199966d' };
-        const one = (/** @type {{ id: number }} */ request) => ({ jsonrpc: '2.0', id: request.id, error });
+        // Universal Resolver answers for a subname nobody has onboarded. The
+        // subname registry itself is a different contract and does not share
+        // this error, so its `getState` call still gets a normal answer.
+        const one = (/** @type {{ id: number, params: [{ to: string, data: `0x${string}` }] }} */ request) => {
+          if (request.params[0].to.toLowerCase() === SEPOLIA.ens.subnameRegistry.toLowerCase()) {
+            return {
+              jsonrpc: '2.0',
+              id: request.id,
+              result: encodeFunctionResult({
+                abi: subnameRegistryAbi,
+                functionName: 'getState',
+                result: {
+                  status: 0,
+                  expiry: 0n,
+                  latestOwner: '0x0000000000000000000000000000000000000000',
+                  tokenId: 0n,
+                  resource: 0n
+                }
+              })
+            };
+          }
+          const error = { code: 3, message: 'execution reverted', data: '0x7199966d' };
+          return { jsonrpc: '2.0', id: request.id, error };
+        };
         const payload = Array.isArray(body) ? body.map(one) : one(body);
         return new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } });
       })
     );
 
     const record = await resolveServiceRecord('weather', { rpcUrl: RPC });
-    expect(record).toMatchObject({ slug: 'weather', address: null, sla: null, conformance: null, availability: null });
+    expect(record).toMatchObject({
+      slug: 'weather',
+      address: null,
+      sla: null,
+      conformance: null,
+      availability: null,
+      owner: null
+    });
   });
 
   it('serves a cached record within its TTL and refetches after it', async () => {
