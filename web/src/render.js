@@ -241,9 +241,10 @@ export function renderDetail(listing) {
  * A filter rather than a separate app: the same data, narrowed to one address.
  * The SLA editor validates against the engine's own `schema.json` — the one the
  * verifier enforces, so a provider cannot be told a document is fine and then
- * judged against a different rule — and produces the transaction to sign
- * WITHOUT sending it. Verdikt holds no key on the provider's behalf; the SLA
- * lives on ENS precisely so publishing needs no Verdikt backend.
+ * judged against a different rule — and sends the resulting transaction from
+ * the signed-in provider's own connected wallet. Verdikt holds no key on the
+ * provider's behalf; the SLA lives on ENS precisely so publishing needs no
+ * Verdikt backend.
  *
  * @param {Listing[]} owned
  * @param {string} provider
