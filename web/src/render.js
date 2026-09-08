@@ -5,6 +5,8 @@
 import { setTextCalldata } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
+import { renderNav } from './nav.js';
+import { renderHowItWorks } from './views/how-it-works.js';
 
 /** @param {unknown} value */
 const escape = (value) =>
@@ -363,19 +365,23 @@ function verdictFigure(stats) {
 /**
  * @param {Marketplace} marketplace
  * @param {'live'|'demo'} mode
+ * @param {'marketplace'|'provider'|'how'} view
  * @param {string|null} selectedSlug
  * @param {string|null} [provider]
  * @param {string} [slaDraft]
  */
-export function renderApp(marketplace, mode, selectedSlug, provider = null, slaDraft = '') {
+export function renderApp(marketplace, mode, view, selectedSlug, provider = null, slaDraft = '') {
   const { stats, services } = marketplace;
+  if (view === 'how') {
+    return `${renderNav({ view, mode })}${renderHowItWorks()}`;
+  }
   if (provider) {
     const owned = services.filter((listing) => listing.provider.toLowerCase() === provider.toLowerCase());
-    return renderProvider(owned, provider, slaDraft);
+    return `${renderNav({ view, mode })}${renderProvider(owned, provider, slaDraft)}`;
   }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 
-  return `
+  return `${renderNav({ view, mode })}
     <header class="masthead">
       <div>
         <h1>Verdikt</h1>

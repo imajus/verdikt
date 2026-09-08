@@ -26,7 +26,7 @@ async function main() {
 
 /** @param {Marketplace} marketplace */
 function draw(marketplace) {
-  root.innerHTML = renderApp(marketplace, mode, selectedSlug, provider, slaDraft);
+  root.innerHTML = renderApp(marketplace, mode, 'marketplace', selectedSlug, provider, slaDraft);
   const editor = /** @type {HTMLTextAreaElement|null} */ (root.querySelector('#sla-draft'));
   if (editor) {
     editor.addEventListener('input', () => {

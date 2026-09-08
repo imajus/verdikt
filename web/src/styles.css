@@ -98,6 +98,20 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .source.live { color: var(--good); }
 .source.demo { color: var(--fair); }
 
+/* Nav ------------------------------------------------------------------------ */
+
+.nav {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; font-size: 13.5px;
+}
+.nav-links { display: flex; gap: 20px; }
+.nav-item { color: var(--muted); text-decoration: none; padding: 2px 0; border-bottom: 1.5px solid transparent; }
+.nav-item:hover { color: var(--ink); }
+.nav-item.active { color: var(--ink); border-bottom-color: var(--ink); }
+.nav-external { display: flex; gap: 14px; align-items: center; }
+.nav-external a { color: var(--muted); display: inline-flex; }
+.nav-external a:hover { color: var(--ink); }
+
 /* Standing notes: a rule down the left, no fill. A tinted box is how every
    generated dashboard says "notice"; a marginal rule is how a ledger does. */
 .aside {
