@@ -310,3 +310,8 @@ label { display: block; font-size: 13px; color: var(--muted); margin-top: 14px; 
 .form-status { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; font-family: var(--mono); overflow-wrap: anywhere; }
 .bond-form, .retire-form { max-width: 420px; margin-top: 16px; }
 .retire-form button { background: var(--poor); border-color: var(--poor); }
+
+/* Onboarding wizard ------------------------------------------------------------ */
+
+.wizard-steps { display: flex; gap: 24px; list-style: none; padding: 0; margin: 0 0 16px; font-size: 13px; color: var(--muted); }
+.wizard-steps li.done { color: var(--good); font-weight: 500; }

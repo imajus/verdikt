@@ -268,6 +268,11 @@ function renderProvider(owned, provider, draft) {
       <p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p>
     </header>
 
+    <section class="block">
+      <h3>Add a service</h3>
+      <div id="wizard-mount"></div>
+    </section>
+
     <section class="figures">
       <div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div>
       <div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div>
