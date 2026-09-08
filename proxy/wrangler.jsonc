@@ -36,8 +36,6 @@
     // storage backend still has to be declared, and SQLite is what a
     // Workers Free plan can run.
     { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] }
-  ]
-  // No `routes` block yet: this deploys to workers.dev, same as `web`. Wiring
-  // `*.verdikt.bond/*` needs the zone added to the Cloudflare account first
-  // (docs/Tasks.md 0.6) — a Cloudflare-dashboard step, not a code change.
+  ],
+  "routes": [{ "pattern": "*.verdikt.bond/*", "zone_name": "verdikt.bond" }]
 }
