@@ -102,6 +102,13 @@ based on its actual track record instead of a provider's own claims.
   with no traffic scores a full 1000. Verdikt measures what agents actually
   bought, not what a synthetic prober would have seen
   ([spec §1](./Specification.md#1-sla-verification-model)).
+- **ERC-8004 interop** — a Verdikt verdict is objective proof of delivery and
+  so belongs in that standard's Validation Registry, but publishing to one is
+  not MVP scope: the EIP is still `Draft`, and its handshake assumes an agent
+  requests validation of its own work where Verdikt validates unilaterally on
+  every paid call. The field mapping, the two ways round that mismatch, and
+  which chain would host the registry are worked through in
+  [roadmap/erc-8004.md](./roadmap/erc-8004.md).
 
 ## 5. Users
 

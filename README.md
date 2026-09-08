@@ -142,7 +142,7 @@ any key in it must be origin-restricted.
 | `proxy` | The x402 relay. Holds no wallet and never evaluates. |
 | `web` | The marketplace dashboard. See [Deploy](#deploy) for `wrangler.jsonc` and `Dockerfile`. |
 | `deployments` | Verdikt's own deployed addresses, per network. Checked in: they are public and identical everywhere. |
-| `docs` | The specification, and the spikes that reshaped it. |
+| `docs` | The specification, the spikes that reshaped it, and the roadmap notes for what comes after. |
 
 Start with the [walkthrough](docs/walkthrough.md) — the whole loop, on a public
 chain, with real commands and real output. The
@@ -153,7 +153,8 @@ chain, with real commands and real output. The
 [Specification](docs/Specification.md) ·
 [Tasks](docs/Tasks.md) ·
 [Spike A: ENSv2](docs/spikes/A-ens-sepolia.md) ·
-[Spike B: CRE](docs/spikes/cre.md)
+[Spike B: CRE](docs/spikes/cre.md) ·
+[Roadmap: ERC-8004 interop](docs/roadmap/erc-8004.md)
 
 ## What is real, and what is not
 

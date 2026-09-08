@@ -11,6 +11,7 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/Requirements.md` — problem, scope, non-goals, open risks
 - `docs/Specification.md` — mechanics; sections are cited throughout the code as `spec §N`
 - `docs/Tasks.md` — the phased build plan, ordered by risk
+- `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 
 ## Current state
 
