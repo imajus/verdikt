@@ -905,9 +905,10 @@ main().catch((error) => {
 Run: `node -e "import('./scripts/grant-registrar-roles.mjs')"`
 Expected: throws `deployments/sepolia.json has no subnameRegistrar address — run DeployRegistrar.s.sol first…` (because `subnameRegistrar` is still `null` from Step 1) — this is the *expected* failure mode right now and confirms the script's guard clause and imports both work.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Format and commit**
 
 ```bash
+cd contracts && forge fmt script/DeployRegistrar.s.sol && cd ..
 git add contracts/script/DeployRegistrar.s.sol scripts/ens-sepolia.mjs scripts/grant-registrar-roles.mjs deployments/sepolia.json
 git commit -m "Add the registrar deploy script and the operator role-grant script"
 ```
