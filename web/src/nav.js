@@ -12,9 +12,9 @@ const GITHUB_ICON = `<svg viewBox="0 0 16 16" width="16" height="16" fill="curre
 const X_ICON = `<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true"><path d="M9.53 6.78 15.17.5h-1.34L8.94 5.87 5.02.5H0l5.92 8.15L0 15.5h1.34l5.19-5.7 4.15 5.7H16L9.53 6.78Zm-1.84 2.02-.6-.83L2.3 1.44h2.06l3.84 5.29.6.83 4.99 6.87h-2.06L7.69 8.8Z"/></svg>`;
 
 /**
- * @param {{ view: 'marketplace'|'provider'|'how', mode: 'live'|'demo' }} args
+ * @param {{ view: 'marketplace'|'provider'|'how', mode: 'live'|'demo', account?: string|null }} args
  */
-export function renderNav({ view, mode }) {
+export function renderNav({ view, mode, account = null }) {
   const item = (/** @type {string} */ target, /** @type {string} */ label) =>
     `<a href="?view=${target}" class="nav-item${view === target ? ' active' : ''}" data-nav="${target}">${escape(label)}</a>`;
   return `
@@ -27,6 +27,13 @@ export function renderNav({ view, mode }) {
       <div class="nav-external">
         <a href="${GITHUB_URL}" target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${GITHUB_ICON}</a>
         <a href="${X_URL}" target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${X_ICON}</a>
+        ${
+          mode === 'live'
+            ? account
+              ? `<span class="nav-account" title="${escape(account)}">${escape(account.slice(0, 6))}…${escape(account.slice(-4))}</span>`
+              : `<button type="button" id="connect-wallet" class="secondary">Connect wallet</button>`
+            : ''
+        }
       </div>
     </nav>`;
 }

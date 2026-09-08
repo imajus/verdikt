@@ -5,6 +5,7 @@
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { renderNav } from './nav.js';
 import { renderHowItWorks } from './views/how-it-works.js';
+import { getConnectedAccount } from './wallet.js';
 
 /** @param {unknown} value */
 const escape = (value) =>
@@ -346,16 +347,17 @@ function verdictFigure(stats) {
  */
 export function renderApp(marketplace, mode, view, selectedSlug, provider = null, slaDraft = '') {
   const { stats, services } = marketplace;
+  const account = getConnectedAccount()?.address ?? null;
   if (view === 'how') {
-    return `${renderNav({ view, mode })}${renderHowItWorks()}`;
+    return `${renderNav({ view, mode, account })}${renderHowItWorks()}`;
   }
   if (provider) {
     const owned = services.filter((listing) => listing.provider.toLowerCase() === provider.toLowerCase());
-    return `${renderNav({ view, mode })}${renderProvider(owned, provider, slaDraft)}`;
+    return `${renderNav({ view, mode, account })}${renderProvider(owned, provider, slaDraft)}`;
   }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 
-  return `${renderNav({ view, mode })}
+  return `${renderNav({ view, mode, account })}
     <header class="masthead">
       <div>
         <h1>Verdikt</h1>
