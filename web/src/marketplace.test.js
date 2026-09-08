@@ -403,23 +403,4 @@ describe('the provider view', () => {
   it('says so plainly when an address owns nothing', async () => {
     expect(renderApp(await build(), 'demo', 'provider', null, '0xdead')).toContain('No services registered');
   });
-
-  // The editor validates with the engine's own parser, so a provider cannot be
-  // told a document is fine and then have a call judged by a different rule.
-  it('accepts a valid SLA and offers the transaction to sign', async () => {
-    const html = renderApp(await build(), 'demo', 'provider', null, '0xA11ce00000000000000000000000000000000001', SLA_TEXT.honest);
-    expect(html).toContain('Valid.');
-    expect(html).toContain('setText(bytes32,string,string)');
-  });
-
-  it('rejects an invalid SLA and never offers a transaction for it', async () => {
-    const html = renderApp(await build(), 'demo', 'provider', null, '0xA11ce00000000000000000000000000000000001', '{"version":1,"clauses":[]}');
-    expect(html).not.toContain('Valid.');
-    expect(html).not.toContain('setText(bytes32,string,string)');
-  });
-
-  it('never offers to send anything itself — Verdikt holds no provider key', async () => {
-    const html = renderApp(await build(), 'demo', 'provider', null, '0xA11ce00000000000000000000000000000000001', SLA_TEXT.honest);
-    expect(html).toContain('Nothing is sent');
-  });
 });

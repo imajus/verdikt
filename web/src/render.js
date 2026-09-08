@@ -2,8 +2,6 @@
 // a row of figures, and a framework would be the largest dependency in the repo
 // for markup that fits in one file.
 
-import { setTextCalldata } from '@verdikt/sdk';
-import { parseSla } from '@verdikt/sla';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { renderNav } from './nav.js';
 import { renderHowItWorks } from './views/how-it-works.js';
@@ -259,27 +257,6 @@ function renderProvider(owned, provider, draft) {
   );
   const verdicts = owned.reduce((n, listing) => n + listing.history.length, 0);
   const target = owned[0];
-  const source = draft || target?.slaRaw || '';
-
-  /** @type {{ ok: boolean, message: string }} */
-  let check = { ok: false, message: 'Paste an SLA to validate it.' };
-  if (source.trim()) {
-    try {
-      const parsed = parseSla(source);
-      check = { ok: true, message: `Valid. ${parsed.clauses.length} clause(s); the verifier would enforce all of them.` };
-    } catch (error) {
-      check = { ok: false, message: /** @type {Error} */ (error).message };
-    }
-  }
-
-  let call = null;
-  if (check.ok && target) {
-    try {
-      call = setTextCalldata(target.slug, 'sla', source);
-    } catch {
-      call = null;
-    }
-  }
 
   return `
     <header class="masthead">
@@ -314,24 +291,15 @@ function renderProvider(owned, provider, draft) {
       <p class="aside">
         Validated against the same <code>schema.json</code> the verifier enforces, so
         this cannot tell you a document is fine and then have a call judged by a
-        different rule. Nothing is sent: Verdikt holds no key of yours, which is
-        why the SLA lives on ENS and not on Arc.
+        different rule. Sent from your own wallet — Verdikt holds no key of yours,
+        which is why the SLA lives on ENS and not on Arc.
       </p>
-      <textarea id="sla-draft" spellcheck="false" rows="14">${escape(source)}</textarea>
-      <p class="check ${check.ok ? 'ok' : 'bad'}"><i class="dot"></i>${escape(check.message)}</p>
-      ${
-        call
-          ? `<section class="block">
-               <h3>Transaction to sign</h3>
-               <table class="kv">
-                 <tr><th>to</th><td><code>${escape(call.to)}</code></td></tr>
-                 <tr><th>function</th><td><code>setText(bytes32,string,string)</code></td></tr>
-                 <tr><th>data</th><td><code class="wrap">${escape(call.data)}</code></td></tr>
-               </table>
-               <p class="aside">Send from the address that owns ${escape(call.name)}. It is scoped to <code>sla</code> and <code>url</code> only — writing <code>conformance</code> reverts.</p>
-             </section>`
-          : ''
-      }
+      <div id="sla-editor-mount"></div>
+    </section>
+
+    <section class="block">
+      <h3>Bond <small>${target ? escape(target.name) : ''}</small></h3>
+      <div id="bond-controls-mount"></div>
     </section>`;
 }
 
