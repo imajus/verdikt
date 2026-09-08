@@ -35,6 +35,7 @@ import {
   type Hex
 } from 'viem';
 
+import { assertBlockTimeSeconds } from '@verdikt/cre/config';
 import { reputationForWindow, WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { outcomeFromOrdinal, statusFromOrdinal } from '@verdikt/sdk/registry';
 
@@ -96,6 +97,11 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
   if (!arc) throw new Error(`unknown chain selector name: ${config.arcChainSelectorName}`);
   if (!sepolia) throw new Error(`unknown chain selector name: ${config.sepoliaChainSelectorName}`);
 
+  // Fail loudly here, not with a NaN-derived RangeError deep in the window
+  // math (see cre/lib/config.js). This is the only config field that is both
+  // required and silently corrupting when wrong.
+  const blockTimeSeconds = assertBlockTimeSeconds(config.blockTimeSeconds);
+
   const arcClient = new EVMClient(arc.chainSelector.selector);
   const registry = hexToBase64(config.registryAddress);
   const deployBlock = BigInt(config.registryDeployBlock);
@@ -112,12 +118,12 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
   const headNumber = BigInt(bytesToHex(head.blockNumber.absVal));
   const headTimestamp = Number(head.timestamp);
 
-  const windowBlocks = BigInt(Math.ceil(WINDOW_SECONDS / config.blockTimeSeconds));
+  const windowBlocks = BigInt(Math.ceil(WINDOW_SECONDS / blockTimeSeconds));
   const fromBlock = headNumber > windowBlocks + deployBlock ? headNumber - windowBlocks : deployBlock;
 
   /** An EVM log carries no timestamp; date it from the head and the nominal block time. */
   const timestampOfBlock = (blockNumber: bigint) =>
-    headTimestamp - Number(headNumber - blockNumber) * config.blockTimeSeconds;
+    headTimestamp - Number(headNumber - blockNumber) * blockTimeSeconds;
 
   // `ServiceRegistered` is scanned from the registry's deployment block, not
   // from the window start: a service registered a year ago is still a listing,

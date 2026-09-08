@@ -73,3 +73,12 @@ the proxy alongside the simulator and pass its callback URL in the input.
 **`aggregate` needs a deployed registry.** With `registryDeployBlock: "0"` it
 scans Arc from genesis and stalls; set it to the registry's real deployment
 block before simulating. That is blocked on the Arc deployment (Tasks.md 2.4).
+
+**`aggregate` needs `blockTimeSeconds` set.** It is Arc's nominal block time,
+used to turn the 7-day window into a `fromBlock` and to date each log (EVM logs
+carry no timestamp). It is required, not optional: the workflow rejects an
+unset, zero, or non-numeric value at startup (`cre/lib/config.js`) rather than
+crashing later with a NaN-derived `RangeError`. The estimate is load-bearing —
+the same value dates every log, so a wrong one silently shifts the window — so
+measure it against live Arc rather than guessing (`0.512` for the current Arc
+testnet). The `config.staging.json` in this repo already carries it.
