@@ -13,7 +13,8 @@ export const BLOCK_REASON = Object.freeze({
   NO_ADDRESS_RECORD: 'no_address_record',
   UNPARSEABLE_CHALLENGE: 'unparseable_challenge',
   NO_PAY_TO: 'challenge_has_no_pay_to',
-  PAY_TO_MISMATCH: 'pay_to_mismatch'
+  PAY_TO_MISMATCH: 'pay_to_mismatch',
+  OWNER_MISMATCH: 'owner_mismatch'
 });
 
 /**
@@ -66,6 +67,38 @@ export function checkChallenge(body, expectedPayTo) {
       ok: false,
       reason: BLOCK_REASON.PAY_TO_MISMATCH,
       detail: `challenge pays to ${wrong.map((p) => String(p)).join(', ')}, but the service published ${expectedPayTo}`
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Refuses to relay when the ENS subname's owner and the Arc service's
+ * registered provider disagree.
+ *
+ * A permissionless registrar (`VerdiktSubnameRegistrar`) means the ENS side
+ * of a slug and the Arc side are two independent first-come claims with
+ * nothing binding them once anyone but the operator can claim either. Without
+ * this, a slug claimed on Arc by Alice but on ENS by Mallory would relay
+ * through Mallory's `url` record and pay Mallory's `address` record —
+ * silently, since both records individually look well-formed.
+ *
+ * `recordOwner === null` (nobody has claimed the subname through the
+ * registrar yet) is not a mismatch: it falls through to the existing
+ * `NO_ADDRESS_RECORD`/`NO_PAY_TO` checks, which already refuse an unclaimed
+ * listing for a reason that stands on its own.
+ *
+ * @param {string|null} recordOwner the ENS subname's owner
+ * @param {string} arcProvider the Arc-registered provider
+ * @returns {{ ok: true } | { ok: false, reason: ChallengeBlockReason, detail: string }}
+ */
+export function checkOwnership(recordOwner, arcProvider) {
+  if (!recordOwner) return { ok: true };
+  if (recordOwner.toLowerCase() !== arcProvider.toLowerCase()) {
+    return {
+      ok: false,
+      reason: BLOCK_REASON.OWNER_MISMATCH,
+      detail: `the ENS subname is owned by ${recordOwner}, but Arc's registered provider is ${arcProvider} — this slug's two claims disagree and cannot be safely routed`
     };
   }
   return { ok: true };
