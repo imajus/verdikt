@@ -351,9 +351,13 @@ export function renderApp(marketplace, mode, view, selectedSlug, provider = null
   if (view === 'how') {
     return `${renderNav({ view, mode, account })}${renderHowItWorks()}`;
   }
-  if (provider) {
-    const owned = services.filter((listing) => listing.provider.toLowerCase() === provider.toLowerCase());
-    return `${renderNav({ view, mode, account })}${renderProvider(owned, provider, slaDraft)}`;
+  // The nav's own "Provider" link carries no address (?view=provider only) —
+  // it means "my own console", so a signed-in visitor falls back to their
+  // connected address rather than landing on a page with nothing to show.
+  const effectiveProvider = provider ?? (view === 'provider' ? account : null);
+  if (effectiveProvider) {
+    const owned = services.filter((listing) => listing.provider.toLowerCase() === effectiveProvider.toLowerCase());
+    return `${renderNav({ view, mode, account })}${renderProvider(owned, effectiveProvider, slaDraft)}`;
   }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 
