@@ -89,7 +89,9 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
   margin: 0;
 }
 .masthead h1 a { color: inherit; text-decoration: none; }
-.masthead .tagline { margin: 8px 0 0; color: var(--ink-2); font-size: 15px; max-width: 64ch; }
+.masthead .brand { display: inline-flex; align-items: center; gap: 10px; }
+.masthead .brand-mark { display: block; width: 42px; height: 42px; flex: none; }
+.masthead .tagline { margin: 8px 0 0 52px; color: var(--ink-2); font-size: 15px; max-width: 64ch; }
 .masthead .tagline code { font-size: 0.85em; color: var(--ink); }
 .source {
   margin: 0; white-space: nowrap; font-size: 13px; color: var(--muted);
@@ -97,6 +99,11 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 }
 .source.live { color: var(--good); }
 .source.demo { color: var(--fair); }
+
+@media (max-width: 560px) {
+  .masthead { align-items: flex-start; }
+  .masthead .tagline { margin-left: 0; }
+}
 
 /* Nav ------------------------------------------------------------------------ */
 
