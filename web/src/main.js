@@ -1,15 +1,14 @@
 import { ARC, SEPOLIA, registryAbi } from '@verdikt/sdk';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { formatNativeUsdc } from './format.js';
-import { html, render } from 'lit';
 import { resolveProviderConsole } from './provider.js';
 import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
 import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
-import { mountSlaEditor } from './forms/sla-editor.js';
-import { mountBondControls } from './forms/bond.js';
-import { mountWizard } from './forms/wizard.js';
+import './forms/sla-editor.js';
+import './forms/bond.js';
+import './forms/wizard.js';
 import './lit-app.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
@@ -81,10 +80,11 @@ function mountProviderConsole(route) {
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
-  const wizardMount = app.querySelector('#wizard-mount');
+  const wizardMount = /** @type {import('./forms/wizard.js').VerdiktWizard|null} */ (app.querySelector('#wizard-mount'));
   if (wizardMount && account && sessionMatchesAccount && viewingOwnPage) {
     if (SEPOLIA.subnameRegistrar) {
-      mountWizard(/** @type {HTMLElement} */ (wizardMount), {
+      wizardMount.message = '';
+      wizardMount.deps = {
         account: account.address,
         registrarAddress: SEPOLIA.subnameRegistrar,
         registryAddress: /** @type {string} */ (ARC.registry),
@@ -95,37 +95,38 @@ function mountProviderConsole(route) {
         ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG),
         ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG),
         onDone: () => main()
-      });
+      };
     } else {
-      render(html`<p class="aside">Service onboarding needs the subname registrar deployed — not yet live on this build.</p>`, /** @type {HTMLElement} */ (wizardMount));
+      wizardMount.message = 'Service onboarding needs the subname registrar deployed — not yet live on this build.';
     }
   } else if (wizardMount) {
-    render(account
-      ? html`<p class="aside">Connect as this provider's own address to add a service.</p>`
-      : html`<p class="aside">Connect a wallet to add a service.</p>`, /** @type {HTMLElement} */ (wizardMount));
+    wizardMount.message = account ? "Connect as this provider's own address to add a service." : 'Connect a wallet to add a service.';
   }
   if (!target) return;
-  const slaMount = app.querySelector('#sla-editor-mount');
+  const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
   if (slaMount && sessionMatchesAccount && viewingOwnPage) {
-    mountSlaEditor(/** @type {HTMLElement} */ (slaMount), target, {
+    slaMount.message = '';
+    slaMount.listing = target;
+    slaMount.deps = {
       walletClientFor: () => walletClientFor(SEPOLIA_CHAIN_CONFIG),
-      sepoliaChainConfig: SEPOLIA_CHAIN_CONFIG,
       ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG)
-    });
+    };
   } else if (slaMount) {
-    render(html`<p class="aside">Connect as this service's own provider to publish changes.</p>`, /** @type {HTMLElement} */ (slaMount));
+    slaMount.message = "Connect as this service's own provider to publish changes.";
   }
-  const bondMount = app.querySelector('#bond-controls-mount');
+  const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
   if (bondMount && sessionMatchesAccount && viewingOwnPage) {
-    mountBondControls(/** @type {HTMLElement} */ (bondMount), target, {
+    bondMount.message = '';
+    bondMount.listing = target;
+    bondMount.deps = {
       walletClientFor: () => walletClientFor(ARC_CHAIN_CONFIG),
       registryAddress: /** @type {string} */ (ARC.registry),
       depositAmount,
       formatNativeUsdc,
       ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG)
-    });
+    };
   } else if (bondMount) {
-    render(html`<p class="aside">Connect as this service's own provider to manage its bond.</p>`, /** @type {HTMLElement} */ (bondMount));
+    bondMount.message = "Connect as this service's own provider to manage its bond.";
   }
 }
 

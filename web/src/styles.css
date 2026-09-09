@@ -275,6 +275,7 @@ footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule);
 /* Provider view --------------------------------------------------------------- */
 
 .editor { margin-top: 44px; }
+verdikt-wizard, verdikt-sla-editor, verdikt-bond-controls { display: block; }
 textarea {
   width: 100%; min-height: 240px; padding: 12px 14px; margin: 0;
   background: var(--paper-2); color: var(--ink);
