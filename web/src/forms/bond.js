@@ -4,6 +4,7 @@
 // behind typing the slug back.
 
 import { retireService, topUpBond } from '../actions.js';
+import { html, render } from 'lit';
 
 /**
  * @param {HTMLElement} container
@@ -13,28 +14,24 @@ import { retireService, topUpBond } from '../actions.js';
 export function mountBondControls(container, listing, deps) {
   const shortfall = deps.depositAmount > listing.deposit ? deps.depositAmount - listing.deposit : 0n;
   const suspended = listing.status === 'SUSPENDED';
-  container.innerHTML = `
+  render(html`
     <div class="bond-form">
       <label for="topup-amount">Top up (USDC)</label>
       <input id="topup-amount" type="text" inputmode="decimal" placeholder="0.0" />
-      ${
-        suspended
-          ? `<p class="aside warn">Suspended — needs ${deps.formatNativeUsdc(shortfall)} more to reinstate (reinstatement requires the bond back at full, not merely above zero).</p>`
-          : ''
-      }
+      ${suspended ? html`<p class="aside warn">Suspended — needs ${deps.formatNativeUsdc(shortfall)} more to reinstate (reinstatement requires the bond back at full, not merely above zero).</p>` : null}
       <button type="button" id="topup-send">Top up</button>
       <p class="form-status" id="topup-status" hidden></p>
     </div>
     <div class="retire-form">
       <p class="aside warn">
-        Retiring is permanent: "${escapeHtml(listing.slug)}" can never be registered again, the remaining bond
+        Retiring is permanent: "${listing.slug}" can never be registered again, the remaining bond
         returns to you, and the listing stops taking calls.
       </p>
-      <label for="retire-confirm">Type "${escapeHtml(listing.slug)}" to confirm</label>
+      <label for="retire-confirm">Type "${listing.slug}" to confirm</label>
       <input id="retire-confirm" type="text" autocomplete="off" />
-      <button type="button" id="retire-send" disabled ${suspended ? 'title="Reverts while suspended — top up first"' : ''}>Retire service</button>
+      <button type="button" id="retire-send" disabled title=${suspended ? 'Reverts while suspended — top up first' : ''}>Retire service</button>
       <p class="form-status" id="retire-status" hidden></p>
-    </div>`;
+    </div>`, container);
   const topUpInput = /** @type {HTMLInputElement} */ (container.querySelector('#topup-amount'));
   const topUpButton = /** @type {HTMLButtonElement} */ (container.querySelector('#topup-send'));
   const topUpStatus = /** @type {HTMLElement} */ (container.querySelector('#topup-status'));
@@ -93,11 +90,6 @@ function parseUsdcToNativeUnits(input) {
   const [whole, fraction = ''] = trimmed.split('.');
   const paddedFraction = fraction.padEnd(18, '0').slice(0, 18);
   return BigInt(whole) * 10n ** 18n + BigInt(paddedFraction || '0');
-}
-
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }
 
 export const __parseUsdcToNativeUnitsForTests = parseUsdcToNativeUnits;

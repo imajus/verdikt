@@ -6,6 +6,7 @@
 // module owns exactly the elements inside its container and nothing else.
 
 import { parseSla } from '@verdikt/sla';
+import { html, render } from 'lit';
 import { publishSla } from '../actions.js';
 
 /**
@@ -34,11 +35,11 @@ export function describeSlaValidity(source) {
  * @param {{ walletClientFor: () => { sendTransaction: Function }, sepoliaChainConfig: object, ensureSepolia: () => Promise<void> }} deps
  */
 export function mountSlaEditor(container, listing, deps) {
-  container.innerHTML = `
-    <textarea id="sla-draft" spellcheck="false" rows="14">${escapeHtml(listing.slaRaw ?? '')}</textarea>
+  render(html`
+    <textarea id="sla-draft" spellcheck="false" rows="14">${listing.slaRaw ?? ''}</textarea>
     <p class="check" id="sla-check"><i class="dot"></i></p>
     <button type="button" id="sla-publish" disabled>Publish SLA</button>
-    <p class="form-status" id="sla-status" hidden></p>`;
+    <p class="form-status" id="sla-status" hidden></p>`, container);
   const textarea = /** @type {HTMLTextAreaElement} */ (container.querySelector('#sla-draft'));
   const check = /** @type {HTMLElement} */ (container.querySelector('#sla-check'));
   const button = /** @type {HTMLButtonElement} */ (container.querySelector('#sla-publish'));
@@ -66,9 +67,4 @@ export function mountSlaEditor(container, listing, deps) {
       button.disabled = false;
     }
   });
-}
-
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }

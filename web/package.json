@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "description": "Marketplace dashboard — the primary demo surface",
-  "comment": "No UI framework on purpose: the whole surface is a list, a detail panel and a stats strip, and a framework would be the largest dependency in the repo for markup that fits in one file.",
+  "comment": "Lit owns the application view and event bindings while the chain-facing modules remain framework-independent.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -16,9 +16,11 @@
     "@verdikt/cre": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "@verdikt/sla": "workspace:*",
+    "lit": "^3.3.3",
     "viem": "^2.56.3"
   },
   "devDependencies": {
+    "@lit-labs/ssr": "^4.1.0",
     "@verdikt/fixtures": "workspace:*",
     "vite": "^8.2.2",
     "wrangler": "^4.129.0"

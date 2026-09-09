@@ -1,7 +1,8 @@
 import { ARC, SEPOLIA, registryAbi } from '@verdikt/sdk';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { formatNativeUsdc } from './format.js';
-import { renderApp, resolveProviderConsole } from './render.js';
+import { html, render } from 'lit';
+import { resolveProviderConsole } from './provider.js';
 import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
 import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
@@ -9,8 +10,11 @@ import { getSession, signIn } from './session.js';
 import { mountSlaEditor } from './forms/sla-editor.js';
 import { mountBondControls } from './forms/bond.js';
 import { mountWizard } from './forms/wizard.js';
+import './lit-app.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
+const app = /** @type {import('./lit-app.js').VerdiktApp} */ (document.createElement('verdikt-app'));
+root.append(app);
 // Vite injects the env; `import.meta.env` is not in the shared jsconfig's lib.
 const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
 const { mode, deps } = createSource(env);
@@ -31,7 +35,8 @@ let marketplaceCache = null;
 let depositAmountCache = null;
 
 async function main() {
-  root.innerHTML = '<p class="empty">Reading Arc and the naming layer…</p>';
+  app.error = null;
+  app.marketplace = null;
   try {
     marketplaceCache = await loadMarketplace(deps);
     marketplaceCache.services.sort(byReputation);
@@ -47,36 +52,19 @@ async function main() {
     }
     draw();
   } catch (error) {
-    root.innerHTML = `<p class="note warn">Could not load the marketplace: ${/** @type {Error} */ (error).message}</p>`;
+    app.marketplace = null;
+    app.error = /** @type {Error} */ (error).message;
   }
 }
 
 function draw() {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const route = readRoute(new URL(location.href));
-  const selected = marketplace.services.find((listing) => listing.slug === route.service) ?? marketplace.services[0] ?? null;
-  root.innerHTML = renderApp(marketplace, mode, route.view, selected?.slug ?? null, route.provider);
-  for (const row of root.querySelectorAll('.row[data-slug]')) {
-    row.addEventListener('click', () => {
-      const slug = /** @type {HTMLElement} */ (row).dataset.slug ?? null;
-      if (slug) {
-        // Keeps a service's page linkable — the point of a marketplace is that
-        // someone can send you the listing they are looking at.
-        history.replaceState(null, '', withService(new URL(location.href), String(slug)));
-        draw();
-      }
-    });
-  }
-  for (const link of root.querySelectorAll('.nav-item[data-nav]')) {
-    link.addEventListener('click', (event) => {
-      event.preventDefault();
-      const target = /** @type {HTMLElement} */ (link).dataset.nav ?? 'marketplace';
-      history.replaceState(null, '', withView(new URL(location.href), target));
-      draw();
-    });
-  }
+  app.mode = mode;
+  app.route = route;
+  app.marketplace = marketplace;
   if (route.view === 'provider' && mode === 'live') {
-    mountProviderConsole(route);
+    app.updateComplete.then(() => mountProviderConsole(route));
   }
 }
 
@@ -93,7 +81,7 @@ function mountProviderConsole(route) {
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
-  const wizardMount = root.querySelector('#wizard-mount');
+  const wizardMount = app.querySelector('#wizard-mount');
   if (wizardMount && account && sessionMatchesAccount && viewingOwnPage) {
     if (SEPOLIA.subnameRegistrar) {
       mountWizard(/** @type {HTMLElement} */ (wizardMount), {
@@ -109,15 +97,15 @@ function mountProviderConsole(route) {
         onDone: () => main()
       });
     } else {
-      wizardMount.innerHTML = '<p class="aside">Service onboarding needs the subname registrar deployed — not yet live on this build.</p>';
+      render(html`<p class="aside">Service onboarding needs the subname registrar deployed — not yet live on this build.</p>`, /** @type {HTMLElement} */ (wizardMount));
     }
   } else if (wizardMount) {
-    wizardMount.innerHTML = account
-      ? '<p class="aside">Connect as this provider\'s own address to add a service.</p>'
-      : '<p class="aside">Connect a wallet to add a service.</p>';
+    render(account
+      ? html`<p class="aside">Connect as this provider's own address to add a service.</p>`
+      : html`<p class="aside">Connect a wallet to add a service.</p>`, /** @type {HTMLElement} */ (wizardMount));
   }
   if (!target) return;
-  const slaMount = root.querySelector('#sla-editor-mount');
+  const slaMount = app.querySelector('#sla-editor-mount');
   if (slaMount && sessionMatchesAccount && viewingOwnPage) {
     mountSlaEditor(/** @type {HTMLElement} */ (slaMount), target, {
       walletClientFor: () => walletClientFor(SEPOLIA_CHAIN_CONFIG),
@@ -125,9 +113,9 @@ function mountProviderConsole(route) {
       ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG)
     });
   } else if (slaMount) {
-    slaMount.innerHTML = '<p class="aside">Connect as this service\'s own provider to publish changes.</p>';
+    render(html`<p class="aside">Connect as this service's own provider to publish changes.</p>`, /** @type {HTMLElement} */ (slaMount));
   }
-  const bondMount = root.querySelector('#bond-controls-mount');
+  const bondMount = app.querySelector('#bond-controls-mount');
   if (bondMount && sessionMatchesAccount && viewingOwnPage) {
     mountBondControls(/** @type {HTMLElement} */ (bondMount), target, {
       walletClientFor: () => walletClientFor(ARC_CHAIN_CONFIG),
@@ -137,16 +125,22 @@ function mountProviderConsole(route) {
       ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG)
     });
   } else if (bondMount) {
-    bondMount.innerHTML = '<p class="aside">Connect as this service\'s own provider to manage its bond.</p>';
+    render(html`<p class="aside">Connect as this service's own provider to manage its bond.</p>`, /** @type {HTMLElement} */ (bondMount));
   }
 }
 
 onAccountChange(() => draw());
-
-document.addEventListener('click', async (event) => {
-  const target = /** @type {HTMLElement} */ (event.target);
-  if (target.id !== 'connect-wallet') return;
-  event.preventDefault();
+app.addEventListener('service-select', (event) => {
+  const slug = /** @type {CustomEvent<string>} */ (event).detail;
+  history.replaceState(null, '', withService(new URL(location.href), slug));
+  draw();
+});
+app.addEventListener('view-select', (event) => {
+  const view = /** @type {CustomEvent<string>} */ (event).detail;
+  history.replaceState(null, '', withView(new URL(location.href), view));
+  draw();
+});
+app.addEventListener('wallet-connect', async () => {
   try {
     const account = await connectWallet();
     await signIn(SEPOLIA.chainId, {

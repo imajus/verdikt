@@ -11,6 +11,7 @@
 
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
+import { html, render } from 'lit';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -34,13 +35,13 @@ export function mountWizard(container, deps) {
   /** @type {{ step: 1|2|3, slug: string, claimed: boolean|null, registered: boolean|null }} */
   const state = { step: 1, slug: '', claimed: null, registered: null };
   const draw = () => {
-    container.innerHTML = `
+    render(html`
       <ol class="wizard-steps">
         <li class="${state.step >= 1 ? 'done' : ''}">1. Claim the subname</li>
         <li class="${state.step >= 2 ? 'done' : ''}">2. Register on Arc</li>
         <li class="${state.step >= 3 ? 'done' : ''}">3. Publish SLA &amp; URL</li>
       </ol>
-      <div id="wizard-step"></div>`;
+      <div id="wizard-step"></div>`, container);
     const stepMount = /** @type {HTMLElement} */ (container.querySelector('#wizard-step'));
     if (state.step === 1) drawStep1(stepMount);
     else if (state.step === 2) drawStep2(stepMount);
@@ -48,12 +49,12 @@ export function mountWizard(container, deps) {
   };
   /** @param {HTMLElement} mount */
   const drawStep1 = (mount) => {
-    mount.innerHTML = `
+    render(html`
       <label for="wizard-slug">Slug</label>
-      <input id="wizard-slug" type="text" autocomplete="off" value="${escapeHtml(state.slug)}" placeholder="weather" />
+      <input id="wizard-slug" type="text" autocomplete="off" .value=${state.slug} placeholder="weather" />
       <p class="form-status" id="wizard-availability" hidden></p>
       <button type="button" id="wizard-claim" disabled>Claim on Sepolia</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
+      <p class="form-status" id="wizard-status" hidden></p>`, mount);
     const input = /** @type {HTMLInputElement} */ (mount.querySelector('#wizard-slug'));
     const availability = /** @type {HTMLElement} */ (mount.querySelector('#wizard-availability'));
     const claimButton = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-claim'));
@@ -115,10 +116,10 @@ export function mountWizard(container, deps) {
   };
   /** @param {HTMLElement} mount */
   const drawStep2 = (mount) => {
-    mount.innerHTML = `
-      <p class="aside">Registering "${escapeHtml(state.slug)}" for ${deps.formatNativeUsdc(deps.depositAmount)}.</p>
+    render(html`
+      <p class="aside">Registering "${state.slug}" for ${deps.formatNativeUsdc(deps.depositAmount)}.</p>
       <button type="button" id="wizard-register">Register on Arc</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
+      <p class="form-status" id="wizard-status" hidden></p>`, mount);
     const button = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-register'));
     const status = /** @type {HTMLElement} */ (mount.querySelector('#wizard-status'));
     button.addEventListener('click', async () => {
@@ -139,14 +140,14 @@ export function mountWizard(container, deps) {
   };
   /** @param {HTMLElement} mount */
   const drawStep3 = (mount) => {
-    mount.innerHTML = `
+    render(html`
       <label for="wizard-url">Endpoint URL</label>
       <input id="wizard-url" type="text" autocomplete="off" placeholder="https://provider.example/api" />
       <label for="wizard-sla">SLA (JSON)</label>
       <textarea id="wizard-sla" spellcheck="false" rows="10"></textarea>
       <p class="check bad" id="wizard-sla-check"><i class="dot"></i>Paste an SLA to validate it.</p>
       <button type="button" id="wizard-publish" disabled>Publish &amp; finish</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
+      <p class="form-status" id="wizard-status" hidden></p>`, mount);
     const urlInput = /** @type {HTMLInputElement} */ (mount.querySelector('#wizard-url'));
     const slaInput = /** @type {HTMLTextAreaElement} */ (mount.querySelector('#wizard-sla'));
     const check = /** @type {HTMLElement} */ (mount.querySelector('#wizard-sla-check'));
@@ -193,9 +194,4 @@ export function mountWizard(container, deps) {
     });
   };
   draw();
-}
-
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }

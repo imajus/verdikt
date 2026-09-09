@@ -1,4 +1,4 @@
-/* One stylesheet, no framework.
+/* One stylesheet shared by Lit components rendered into the light DOM.
  *
  * The page is a ledger: a list of services and, for each, what it promised and
  * what it delivered. So it is set like one — hairline rules instead of boxed
