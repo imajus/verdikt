@@ -12,10 +12,11 @@ import { mountWizard } from './forms/wizard.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 // Vite injects the env; `import.meta.env` is not in the shared jsconfig's lib.
-const { mode, deps } = createSource(/** @type {any} */ (import.meta).env ?? {});
+const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
+const { mode, deps } = createSource(env);
 
-const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: 'https://rpc.testnet.arc.network', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
-const SEPOLIA_CHAIN_CONFIG = { chainId: SEPOLIA.chainId, name: 'Ethereum Sepolia', rpcUrl: 'https://ethereum-sepolia-rpc.publicnode.com' };
+const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: /** @type {string} */ (env.VITE_ARC_RPC_URL), nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
+const SEPOLIA_CHAIN_CONFIG = { chainId: SEPOLIA.chainId, name: 'Ethereum Sepolia', rpcUrl: /** @type {string} */ (env.VITE_SEPOLIA_RPC_URL) };
 
 /** @type {Marketplace | null} */
 let marketplaceCache = null;

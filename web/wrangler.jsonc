@@ -3,6 +3,10 @@
   // Assets-only Worker: no `main`, the dashboard is a static build with no
   // server-side logic (it reads Arc/ENS straight from the browser via viem).
   "name": "verdikt-web",
+  "vars": {
+    "VITE_ARC_RPC_URL": "https://arc-testnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "VITE_SEPOLIA_RPC_URL": "https://eth-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
+  },
   "compatibility_date": "2026-09-07",
   "assets": {
     "directory": "./dist"
