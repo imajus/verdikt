@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- Verdikt mark — transparent bg, for favicon.svg / inline use -->
+  <defs>
+    <linearGradient id="dropGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#7c3aed"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="10"/>
+    </filter>
+  </defs>
+  <ellipse cx="128" cy="214" rx="34" ry="10" fill="#0f172a" opacity="0.18" filter="url(#soft)"/>
+  <path d="M128,40 C170,40 198,72 198,112 C198,160 128,222 128,222 C128,222 58,160 58,112 C58,72 86,40 128,40 Z"
+        fill="url(#dropGrad)"/>
+  <ellipse cx="106" cy="82" rx="16" ry="22" fill="#ffffff" opacity="0.28"/>
+</svg>
