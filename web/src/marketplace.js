@@ -50,6 +50,8 @@ export async function loadMarketplace({ registry, resolve }) {
       }))
       .reverse();
 
+    const contested =
+      record !== null && record.owner !== null && record.owner.toLowerCase() !== service.provider.toLowerCase();
     return {
       serviceId: service.serviceId,
       slug: service.slug,
@@ -60,6 +62,7 @@ export async function loadMarketplace({ registry, resolve }) {
       endpoint: record?.url ?? null,
       payTo: record?.address ?? null,
       namingLayer: /** @type {'ok'|'unreachable'} */ (record === null ? 'unreachable' : 'ok'),
+      contested,
       sla,
       slaRaw: record?.sla ?? null,
       /** As published on ENS — the number a consumer actually ranks on. */

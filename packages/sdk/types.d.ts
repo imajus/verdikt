@@ -41,6 +41,15 @@ interface ServiceRecord {
   conformance: number | null;
   /** 0–1000, written hourly by the aggregate workflow. `null` before the first run. */
   availability: number | null;
+  /**
+   * The subname registry's `latestOwner` for this slug's ENS token — `null`
+   * when nobody has claimed the subname yet. Compared against the Arc
+   * `provider` by the proxy's `checkOwnership`: a permissionless registrar
+   * means the ENS claim and the Arc registration are two independent
+   * first-come claims, and a mismatch means the two disagree about who runs
+   * this slug.
+   */
+  owner: string | null;
   /** Which resolver actually answered — surfaced so the demo can be honest about the fallback. */
   backend: EnsBackend;
   /** Unix ms, for cache-age display. */

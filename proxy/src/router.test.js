@@ -38,10 +38,11 @@ const challenge = (overrides = {}) =>
  * @param {object} [options]
  * @param {Partial<ServiceRecord>} [options.serviceRecord]
  * @param {ServiceStatus} [options.status]
+ * @param {string} [options.provider]
  * @param {Response|(() => Response|Promise<Response>)} [options.upstream]
  * @param {Error} [options.ensError]
  */
-function harness({ serviceRecord = {}, status = 'ACTIVE', upstream, ensError } = {}) {
+function harness({ serviceRecord = {}, status = 'ACTIVE', provider = '0x03', upstream, ensError } = {}) {
   const upstreamFetch = vi.fn(async (/** @type {URL|string} */ _url, /** @type {RequestInit} */ _init) =>
     typeof upstream === 'function' ? upstream() : (upstream ?? new Response('ok', { status: 200 }))
   );
@@ -52,7 +53,7 @@ function harness({ serviceRecord = {}, status = 'ACTIVE', upstream, ensError } =
       return record(serviceRecord);
     }),
     registry: {
-      getService: vi.fn(async () => ({ provider: '0x03', status, deposit: 10n ** 19n }))
+      getService: vi.fn(async () => ({ provider, status, deposit: 10n ** 19n }))
     },
     fetch: /** @type {typeof fetch} */ (/** @type {unknown} */ (upstreamFetch))
   };
@@ -253,6 +254,48 @@ describe('refusals before any upstream call', () => {
   // Path escape is covered in http.test.js, at `joinUpstream`'s own level: the
   // URL parser normalises dot-segments before a router-level test would ever
   // see them, while a real upstream server sees the raw path a client sent.
+});
+
+describe('ownership binding — a permissionless ENS claim vs. the Arc provider', () => {
+  it('routes normally when the ENS owner matches the Arc provider', async () => {
+    const { deps, upstreamFetch } = harness({
+      provider: '0xAAAA000000000000000000000000000000AAAA',
+      serviceRecord: { owner: '0xaaaa000000000000000000000000000000aaaa' }
+    });
+    const response = await getWeather(deps);
+    expect(response.statusCode).toBe(200);
+    expect(upstreamFetch).toHaveBeenCalled();
+  });
+
+  it('routes normally when nobody has claimed the subname yet', async () => {
+    // owner: null means "unclaimed", not "contested" — the existing
+    // no_address_record / no_endpoint checks are what should refuse this,
+    // for their own reasons, not this one.
+    const { deps, upstreamFetch } = harness({ serviceRecord: { owner: null } });
+    const response = await getWeather(deps);
+    expect(response.statusCode).toBe(200);
+    expect(upstreamFetch).toHaveBeenCalled();
+  });
+
+  it('refuses to route when the ENS owner and the Arc provider disagree', async () => {
+    const { deps, upstreamFetch } = harness({
+      provider: '0xAAAA000000000000000000000000000000AAAA',
+      serviceRecord: { owner: '0xBBBB000000000000000000000000000000BBBB' }
+    });
+    const response = await getWeather(deps);
+    expect(response.statusCode).toBe(409);
+    expect(response.headers['x-verdikt-block']).toBe('owner_mismatch');
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('compares owner and provider without regard to checksum case', async () => {
+    const { deps, upstreamFetch } = harness({
+      provider: '0xAAAA000000000000000000000000000000AAAA',
+      serviceRecord: { owner: '0xaaaa000000000000000000000000000000aaaa' }
+    });
+    await getWeather(deps);
+    expect(upstreamFetch).toHaveBeenCalled();
+  });
 });
 
 describe('the paid leg', () => {

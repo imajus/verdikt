@@ -2,9 +2,30 @@
 // a row of figures, and a framework would be the largest dependency in the repo
 // for markup that fits in one file.
 
-import { setTextCalldata } from '@verdikt/sdk';
-import { parseSla } from '@verdikt/sla';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
+import { renderNav } from './nav.js';
+import { renderHowItWorks } from './views/how-it-works.js';
+import { getConnectedAccount } from './wallet.js';
+
+/**
+ * Whose console this is, and which of their services it's about — the one
+ * place both renderApp (what's shown) and main.js (what the mounted forms
+ * act on) derive this, so the two can never disagree about it. A bare
+ * ?view=provider (the nav's own link, no address) falls back to the
+ * connected account: it means "my own console."
+ * @param {Listing[]} services
+ * @param {'marketplace'|'provider'|'how'} view
+ * @param {string|null} routeProvider
+ * @param {string|null} account
+ * @returns {{ effectiveProvider: string|null, owned: Listing[], target: Listing|null }}
+ */
+export function resolveProviderConsole(services, view, routeProvider, account) {
+  const effectiveProvider = routeProvider ?? (view === 'provider' ? account : null);
+  const owned = effectiveProvider
+    ? services.filter((listing) => listing.provider.toLowerCase() === effectiveProvider.toLowerCase())
+    : [];
+  return { effectiveProvider, owned, target: owned[0] ?? null };
+}
 
 /** @param {unknown} value */
 const escape = (value) =>
@@ -51,6 +72,7 @@ function listingRow(listing, selected) {
       <span class="cell name">
         <strong>${escape(listing.slug)}</strong>
         <small>${escape(listing.name)}</small>
+        ${listing.contested ? '<span class="contested">contested</span>' : ''}
         ${unranked ? '<span class="unranked">not yet ranked</span>' : ''}
       </span>
       <span class="cell num">${scoreCell(published.conformance)}</span>
@@ -179,6 +201,15 @@ export function renderDetail(listing) {
         ? '<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>'
         : ''
     }
+    ${
+      listing.contested
+        ? `<p class="aside warn">
+             This slug's ENS subname and its Arc registration are owned by different
+             addresses. The proxy refuses to route it until they agree — see
+             <a href="?view=how">how it works</a>.
+           </p>`
+        : ''
+    }
 
     <section class="block">
       <h3>Endpoint</h3>
@@ -231,15 +262,15 @@ export function renderDetail(listing) {
  * A filter rather than a separate app: the same data, narrowed to one address.
  * The SLA editor validates against the engine's own `schema.json` — the one the
  * verifier enforces, so a provider cannot be told a document is fine and then
- * judged against a different rule — and produces the transaction to sign
- * WITHOUT sending it. Verdikt holds no key on the provider's behalf; the SLA
- * lives on ENS precisely so publishing needs no Verdikt backend.
+ * judged against a different rule — and sends the resulting transaction from
+ * the signed-in provider's own connected wallet. Verdikt holds no key on the
+ * provider's behalf; the SLA lives on ENS precisely so publishing needs no
+ * Verdikt backend.
  *
  * @param {Listing[]} owned
  * @param {string} provider
- * @param {string} draft
  */
-function renderProvider(owned, provider, draft) {
+function renderProvider(owned, provider) {
   const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
   const refunded = owned.reduce(
     (total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n),
@@ -247,27 +278,6 @@ function renderProvider(owned, provider, draft) {
   );
   const verdicts = owned.reduce((n, listing) => n + listing.history.length, 0);
   const target = owned[0];
-  const source = draft || target?.slaRaw || '';
-
-  /** @type {{ ok: boolean, message: string }} */
-  let check = { ok: false, message: 'Paste an SLA to validate it.' };
-  if (source.trim()) {
-    try {
-      const parsed = parseSla(source);
-      check = { ok: true, message: `Valid. ${parsed.clauses.length} clause(s); the verifier would enforce all of them.` };
-    } catch (error) {
-      check = { ok: false, message: /** @type {Error} */ (error).message };
-    }
-  }
-
-  let call = null;
-  if (check.ok && target) {
-    try {
-      call = setTextCalldata(target.slug, 'sla', source);
-    } catch {
-      call = null;
-    }
-  }
 
   return `
     <header class="masthead">
@@ -277,6 +287,11 @@ function renderProvider(owned, provider, draft) {
       </div>
       <p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p>
     </header>
+
+    <section class="block">
+      <h3>Add a service</h3>
+      <div id="wizard-mount"></div>
+    </section>
 
     <section class="figures">
       <div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div>
@@ -302,24 +317,15 @@ function renderProvider(owned, provider, draft) {
       <p class="aside">
         Validated against the same <code>schema.json</code> the verifier enforces, so
         this cannot tell you a document is fine and then have a call judged by a
-        different rule. Nothing is sent: Verdikt holds no key of yours, which is
-        why the SLA lives on ENS and not on Arc.
+        different rule. Sent from your own wallet — Verdikt holds no key of yours,
+        which is why the SLA lives on ENS and not on Arc.
       </p>
-      <textarea id="sla-draft" spellcheck="false" rows="14">${escape(source)}</textarea>
-      <p class="check ${check.ok ? 'ok' : 'bad'}"><i class="dot"></i>${escape(check.message)}</p>
-      ${
-        call
-          ? `<section class="block">
-               <h3>Transaction to sign</h3>
-               <table class="kv">
-                 <tr><th>to</th><td><code>${escape(call.to)}</code></td></tr>
-                 <tr><th>function</th><td><code>setText(bytes32,string,string)</code></td></tr>
-                 <tr><th>data</th><td><code class="wrap">${escape(call.data)}</code></td></tr>
-               </table>
-               <p class="aside">Send from the address that owns ${escape(call.name)}. It is scoped to <code>sla</code> and <code>url</code> only — writing <code>conformance</code> reverts.</p>
-             </section>`
-          : ''
-      }
+      <div id="sla-editor-mount"></div>
+    </section>
+
+    <section class="block">
+      <h3>Bond <small>${target ? escape(target.name) : ''}</small></h3>
+      <div id="bond-controls-mount"></div>
     </section>`;
 }
 
@@ -353,19 +359,26 @@ function verdictFigure(stats) {
 /**
  * @param {Marketplace} marketplace
  * @param {'live'|'demo'} mode
+ * @param {'marketplace'|'provider'|'how'} view
  * @param {string|null} selectedSlug
  * @param {string|null} [provider]
- * @param {string} [slaDraft]
  */
-export function renderApp(marketplace, mode, selectedSlug, provider = null, slaDraft = '') {
+export function renderApp(marketplace, mode, view, selectedSlug, provider = null) {
   const { stats, services } = marketplace;
-  if (provider) {
-    const owned = services.filter((listing) => listing.provider.toLowerCase() === provider.toLowerCase());
-    return renderProvider(owned, provider, slaDraft);
+  const account = getConnectedAccount()?.address ?? null;
+  if (view === 'how') {
+    return `${renderNav({ view, mode, account })}${renderHowItWorks()}`;
+  }
+  // The nav's own "Provider" link carries no address (?view=provider only) —
+  // it means "my own console", so a signed-in visitor falls back to their
+  // connected address rather than landing on a page with nothing to show.
+  const { effectiveProvider, owned } = resolveProviderConsole(services, view, provider, account);
+  if (effectiveProvider) {
+    return `${renderNav({ view, mode, account })}${renderProvider(owned, effectiveProvider)}`;
   }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 
-  return `
+  return `${renderNav({ view, mode, account })}
     <header class="masthead">
       <div>
         <h1>Verdikt</h1>

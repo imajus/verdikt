@@ -194,6 +194,9 @@ importers:
       '@verdikt/sla':
         specifier: workspace:*
         version: link:../packages/sla
+      viem:
+        specifier: ^2.56.3
+        version: 2.56.3(typescript@7.0.2)
     devDependencies:
       '@verdikt/fixtures':
         specifier: workspace:*

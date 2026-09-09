@@ -14,7 +14,7 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
-import { checkChallenge } from './challenge.js';
+import { checkChallenge, checkOwnership } from './challenge.js';
 import { discover, toListing } from './discovery.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
@@ -141,6 +141,15 @@ export async function handleRequest(request, deps = {}) {
     state = await registry.getService(record.serviceId);
   } catch (error) {
     return json({ error: 'registry_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
+
+  const ownership = checkOwnership(record.owner, state.provider);
+  if (!ownership.ok) {
+    return json(
+      { error: 'owner_mismatch', reason: ownership.reason, detail: ownership.detail, service: record.name },
+      409,
+      { 'x-verdikt-block': ownership.reason }
+    );
   }
 
   // Checked on the unpaid leg too, not just before a payment: an agent that

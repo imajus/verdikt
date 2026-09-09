@@ -88,6 +88,7 @@ export const SERVICE_RECORD = Object.freeze({
   sla: JSON.stringify(HONEST_SLA),
   conformance: 1000,
   availability: 1000,
+  owner: null,
   backend: 'fixture',
   resolvedAt: 0
 });

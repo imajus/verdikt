@@ -15,7 +15,8 @@
   "dependencies": {
     "@verdikt/cre": "workspace:*",
     "@verdikt/sdk": "workspace:*",
-    "@verdikt/sla": "workspace:*"
+    "@verdikt/sla": "workspace:*",
+    "viem": "^2.56.3"
   },
   "devDependencies": {
     "@verdikt/fixtures": "workspace:*",

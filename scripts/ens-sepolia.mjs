@@ -72,6 +72,8 @@ export const registryAbi = parseAbi([
   'function getResolver(string label) view returns (address)',
   'function getState(uint256 anyId) view returns ((uint8 status, uint64 expiry, address latestOwner, uint256 tokenId, uint256 resource))',
   'function initialize(address rootAccount, uint256 roleBitmap)',
+  'function grantRootRoles(uint256 roleBitmap, address account) returns (bool)',
+  'function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)',
   'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
 ]);
 
@@ -88,6 +90,7 @@ export const resolverAbi = [
     'function authorizeTextRoles(bytes toName, string key, address account, bool grant) returns (bool)',
     'function authorizeNameRoles(bytes toName, uint256 roleBitmap, address account, bool grant) returns (bool)',
     'function hasRootRoles(uint256 roleBitmap, address account) view returns (bool)',
+    'function grantRootRoles(uint256 roleBitmap, address account) returns (bool)',
     'error EACUnauthorizedAccountRoles(uint256 resource, uint256 roleBitmap, address account)'
   ])
 ];
@@ -118,6 +121,14 @@ export const RESOLVER_ROLE_SET_TEXT = 1n << 4n;
  */
 export const RESOLVER_ROLES_VERDIKT_NEEDS =
   (1n << 0n) | RESOLVER_ROLE_SET_TEXT | (RESOLVER_ROLE_SET_TEXT << 128n);
+
+/**
+ * `PermissionedRegistry`'s `RegistryRolesLib.ROLE_REGISTRAR` — nybble 0,
+ * root-only. What `VerdiktSubnameRegistrar` needs on the subname registry to
+ * call `register()` on a claimant's behalf (verified against the live Sepolia
+ * bytecode via Sourcify — `RegistryRolesLib.sol`).
+ */
+export const REGISTRY_ROLE_REGISTRAR = 1n << 0n;
 
 /**
  * `IPermissionedRegistry.Status`, indexed by `getState().status`.

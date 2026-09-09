@@ -11,5 +11,7 @@
     "resolver": "0x3d411f1bA3B11B630a2405F1Fb51f088Cc2E23C9"
   },
   "$scoreWriter": "VerdiktScoreWriter, deployed by contracts/script/DeployScoreWriter.s.sol. It can only publish once the operator grants it the conformance and availability text roles PER KEY on each subname (authorizeTextRoles), never name-wide. Pinned to the CRE SIMULATION forwarder (0x15fC6ae9\u2026), not Chainlink's production Sepolia one (0xF8344CFd\u2026) \u2014 the earlier 0xbD4A99AE\u2026 was pinned to production, so every simulated publish reverted NotForwarder and the forwarder swallowed it behind a successful transaction. That is why scores read \u2014 for so long.",
-  "scoreWriter": "0x542cb024d71e0cd0ef40ab7603779c89895effaa"
+  "scoreWriter": "0x542cb024d71e0cd0ef40ab7603779c89895effaa",
+  "$subnameRegistrar": "VerdiktSubnameRegistrar, deployed by contracts/script/DeployRegistrar.s.sol. Null until deployed and granted ROLE_REGISTRAR on the subname registry and RESOLVER_ROLES_VERDIKT_NEEDS on the resolver by scripts/grant-registrar-roles.mjs — see that script's header for the exact sequence.",
+  "subnameRegistrar": null
 }
