@@ -31,7 +31,7 @@ export function describeSlaValidity(source) {
 /**
  * @param {HTMLElement} container an empty element this function owns completely
  * @param {{ slug: string, slaRaw: string | null }} listing
- * @param {{ walletClientFor: () => { sendTransaction: Function }, sepoliaChainConfig: object }} deps
+ * @param {{ walletClientFor: () => { sendTransaction: Function }, sepoliaChainConfig: object, ensureSepolia: () => Promise<void> }} deps
  */
 export function mountSlaEditor(container, listing, deps) {
   container.innerHTML = `
@@ -56,6 +56,7 @@ export function mountSlaEditor(container, listing, deps) {
     status.hidden = false;
     status.textContent = 'Sending…';
     try {
+      await deps.ensureSepolia();
       const walletClient = deps.walletClientFor();
       const { hash } = await publishSla({ walletClient, slug: listing.slug, value: textarea.value.trim() });
       status.textContent = `Sent: ${hash}`;

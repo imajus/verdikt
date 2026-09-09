@@ -8,7 +8,7 @@ import { retireService, topUpBond } from '../actions.js';
 /**
  * @param {HTMLElement} container
  * @param {{ slug: string, serviceId: string, status: string, deposit: bigint }} listing
- * @param {{ walletClientFor: () => { writeContract: Function }, registryAddress: string, depositAmount: bigint, formatNativeUsdc: (v: bigint) => string }} deps
+ * @param {{ walletClientFor: () => { writeContract: Function }, registryAddress: string, depositAmount: bigint, formatNativeUsdc: (v: bigint) => string, ensureArc: () => Promise<void> }} deps
  */
 export function mountBondControls(container, listing, deps) {
   const shortfall = deps.depositAmount > listing.deposit ? deps.depositAmount - listing.deposit : 0n;
@@ -49,6 +49,7 @@ export function mountBondControls(container, listing, deps) {
     topUpStatus.hidden = false;
     topUpStatus.textContent = 'Sending…';
     try {
+      await deps.ensureArc();
       const walletClient = deps.walletClientFor();
       const { hash } = await topUpBond({ walletClient, registryAddress: deps.registryAddress, serviceId: listing.serviceId, amount });
       topUpStatus.textContent = `Sent: ${hash}`;
@@ -69,6 +70,7 @@ export function mountBondControls(container, listing, deps) {
     retireStatus.hidden = false;
     retireStatus.textContent = 'Sending…';
     try {
+      await deps.ensureArc();
       const walletClient = deps.walletClientFor();
       const { hash } = await retireService({ walletClient, registryAddress: deps.registryAddress, serviceId: listing.serviceId });
       retireStatus.textContent = `Sent: ${hash}`;

@@ -24,7 +24,7 @@ const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
  *   depositAmount: bigint,
  *   sepoliaRpcUrl: string,
  *   formatNativeUsdc: (v: bigint) => string,
- *   walletClientFor: () => { writeContract: Function, sendTransaction: Function },
+ *   walletClientFor: (chain: 'arc'|'sepolia') => { writeContract: Function, sendTransaction: Function },
  *   ensureSepolia: () => Promise<void>,
  *   ensureArc: () => Promise<void>,
  *   onDone: () => void
@@ -50,7 +50,7 @@ export function mountWizard(container, deps) {
   const drawStep1 = (mount) => {
     mount.innerHTML = `
       <label for="wizard-slug">Slug</label>
-      <input id="wizard-slug" type="text" autocomplete="off" value="${state.slug}" placeholder="weather" />
+      <input id="wizard-slug" type="text" autocomplete="off" value="${escapeHtml(state.slug)}" placeholder="weather" />
       <p class="form-status" id="wizard-availability" hidden></p>
       <button type="button" id="wizard-claim" disabled>Claim on Sepolia</button>
       <p class="form-status" id="wizard-status" hidden></p>`;
@@ -103,7 +103,7 @@ export function mountWizard(container, deps) {
       status.textContent = 'Sending…';
       try {
         await deps.ensureSepolia();
-        const walletClient = deps.walletClientFor();
+        const walletClient = deps.walletClientFor('sepolia');
         await claimSubname({ walletClient, registrarAddress: deps.registrarAddress, slug: state.slug, payTo: deps.account });
         state.step = 2;
         draw();
@@ -116,7 +116,7 @@ export function mountWizard(container, deps) {
   /** @param {HTMLElement} mount */
   const drawStep2 = (mount) => {
     mount.innerHTML = `
-      <p class="aside">Registering "${state.slug}" for ${deps.formatNativeUsdc(deps.depositAmount)}.</p>
+      <p class="aside">Registering "${escapeHtml(state.slug)}" for ${deps.formatNativeUsdc(deps.depositAmount)}.</p>
       <button type="button" id="wizard-register">Register on Arc</button>
       <p class="form-status" id="wizard-status" hidden></p>`;
     const button = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-register'));
@@ -127,7 +127,7 @@ export function mountWizard(container, deps) {
       status.textContent = 'Sending…';
       try {
         await deps.ensureArc();
-        const walletClient = deps.walletClientFor();
+        const walletClient = deps.walletClientFor('arc');
         await registerService({ walletClient, registryAddress: deps.registryAddress, slug: state.slug, depositAmount: deps.depositAmount });
         state.step = 3;
         draw();
@@ -180,7 +180,7 @@ export function mountWizard(container, deps) {
       status.textContent = 'Publishing URL…';
       try {
         await deps.ensureSepolia();
-        const walletClient = deps.walletClientFor();
+        const walletClient = deps.walletClientFor('sepolia');
         await publishUrl({ walletClient, slug: state.slug, value: urlInput.value.trim() });
         status.textContent = 'Publishing SLA…';
         await publishSla({ walletClient, slug: state.slug, value: slaInput.value.trim() });
@@ -193,4 +193,9 @@ export function mountWizard(container, deps) {
     });
   };
   draw();
+}
+
+/** @param {string} value */
+function escapeHtml(value) {
+  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
 }

@@ -7,6 +7,26 @@ import { renderNav } from './nav.js';
 import { renderHowItWorks } from './views/how-it-works.js';
 import { getConnectedAccount } from './wallet.js';
 
+/**
+ * Whose console this is, and which of their services it's about — the one
+ * place both renderApp (what's shown) and main.js (what the mounted forms
+ * act on) derive this, so the two can never disagree about it. A bare
+ * ?view=provider (the nav's own link, no address) falls back to the
+ * connected account: it means "my own console."
+ * @param {Listing[]} services
+ * @param {'marketplace'|'provider'|'how'} view
+ * @param {string|null} routeProvider
+ * @param {string|null} account
+ * @returns {{ effectiveProvider: string|null, owned: Listing[], target: Listing|null }}
+ */
+export function resolveProviderConsole(services, view, routeProvider, account) {
+  const effectiveProvider = routeProvider ?? (view === 'provider' ? account : null);
+  const owned = effectiveProvider
+    ? services.filter((listing) => listing.provider.toLowerCase() === effectiveProvider.toLowerCase())
+    : [];
+  return { effectiveProvider, owned, target: owned[0] ?? null };
+}
+
 /** @param {unknown} value */
 const escape = (value) =>
   String(value).replace(
@@ -249,9 +269,8 @@ export function renderDetail(listing) {
  *
  * @param {Listing[]} owned
  * @param {string} provider
- * @param {string} draft
  */
-function renderProvider(owned, provider, draft) {
+function renderProvider(owned, provider) {
   const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
   const refunded = owned.reduce(
     (total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n),
@@ -343,9 +362,8 @@ function verdictFigure(stats) {
  * @param {'marketplace'|'provider'|'how'} view
  * @param {string|null} selectedSlug
  * @param {string|null} [provider]
- * @param {string} [slaDraft]
  */
-export function renderApp(marketplace, mode, view, selectedSlug, provider = null, slaDraft = '') {
+export function renderApp(marketplace, mode, view, selectedSlug, provider = null) {
   const { stats, services } = marketplace;
   const account = getConnectedAccount()?.address ?? null;
   if (view === 'how') {
@@ -354,10 +372,9 @@ export function renderApp(marketplace, mode, view, selectedSlug, provider = null
   // The nav's own "Provider" link carries no address (?view=provider only) —
   // it means "my own console", so a signed-in visitor falls back to their
   // connected address rather than landing on a page with nothing to show.
-  const effectiveProvider = provider ?? (view === 'provider' ? account : null);
+  const { effectiveProvider, owned } = resolveProviderConsole(services, view, provider, account);
   if (effectiveProvider) {
-    const owned = services.filter((listing) => listing.provider.toLowerCase() === effectiveProvider.toLowerCase());
-    return `${renderNav({ view, mode, account })}${renderProvider(owned, effectiveProvider, slaDraft)}`;
+    return `${renderNav({ view, mode, account })}${renderProvider(owned, effectiveProvider)}`;
   }
   const selected = services.find((listing) => listing.slug === selectedSlug) ?? services[0] ?? null;
 

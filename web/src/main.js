@@ -1,7 +1,7 @@
 import { ARC, SEPOLIA, registryAbi } from '@verdikt/sdk';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { formatNativeUsdc } from './format.js';
-import { renderApp } from './render.js';
+import { renderApp, resolveProviderConsole } from './render.js';
 import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
 import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
@@ -54,7 +54,7 @@ function draw() {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const route = readRoute(new URL(location.href));
   const selected = marketplace.services.find((listing) => listing.slug === route.service) ?? marketplace.services[0] ?? null;
-  root.innerHTML = renderApp(marketplace, mode, route.view, selected?.slug ?? null, route.provider, '');
+  root.innerHTML = renderApp(marketplace, mode, route.view, selected?.slug ?? null, route.provider);
   for (const row of root.querySelectorAll('.row[data-slug]')) {
     row.addEventListener('click', () => {
       const slug = /** @type {HTMLElement} */ (row).dataset.slug ?? null;
@@ -75,57 +75,65 @@ function draw() {
     });
   }
   if (route.view === 'provider' && mode === 'live') {
-    mountProviderConsole(route, selected);
+    mountProviderConsole(route);
   }
 }
 
 /**
  * @param {ReturnType<typeof readRoute>} route
- * @param {Listing | null} selected
  */
-function mountProviderConsole(route, selected) {
+function mountProviderConsole(route) {
+  const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const account = getConnectedAccount();
   const session = getSession();
-  const viewingOwnPage = Boolean(account && route.provider && account.address.toLowerCase() === route.provider.toLowerCase());
+  const { effectiveProvider, target } = resolveProviderConsole(marketplace.services, route.view, route.provider, account?.address ?? null);
+  const viewingOwnPage = Boolean(account && effectiveProvider && account.address.toLowerCase() === effectiveProvider.toLowerCase());
+  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase());
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
   const wizardMount = root.querySelector('#wizard-mount');
-  if (wizardMount && account && session && viewingOwnPage) {
-    mountWizard(/** @type {HTMLElement} */ (wizardMount), {
-      account: account.address,
-      registrarAddress: /** @type {string} */ (/** @type {any} */ (SEPOLIA.subnameRegistrar)),
-      registryAddress: /** @type {string} */ (ARC.registry),
-      depositAmount,
-      sepoliaRpcUrl: SEPOLIA_CHAIN_CONFIG.rpcUrl,
-      formatNativeUsdc,
-      walletClientFor: () => walletClientFor(ARC_CHAIN_CONFIG),
-      ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG),
-      ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG),
-      onDone: () => main()
-    });
+  if (wizardMount && account && sessionMatchesAccount && viewingOwnPage) {
+    if (SEPOLIA.subnameRegistrar) {
+      mountWizard(/** @type {HTMLElement} */ (wizardMount), {
+        account: account.address,
+        registrarAddress: SEPOLIA.subnameRegistrar,
+        registryAddress: /** @type {string} */ (ARC.registry),
+        depositAmount,
+        sepoliaRpcUrl: SEPOLIA_CHAIN_CONFIG.rpcUrl,
+        formatNativeUsdc,
+        walletClientFor: (chain) => walletClientFor(chain === 'arc' ? ARC_CHAIN_CONFIG : SEPOLIA_CHAIN_CONFIG),
+        ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG),
+        ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG),
+        onDone: () => main()
+      });
+    } else {
+      wizardMount.innerHTML = '<p class="aside">Service onboarding needs the subname registrar deployed — not yet live on this build.</p>';
+    }
   } else if (wizardMount) {
     wizardMount.innerHTML = account
       ? '<p class="aside">Connect as this provider\'s own address to add a service.</p>'
       : '<p class="aside">Connect a wallet to add a service.</p>';
   }
-  if (!selected) return;
+  if (!target) return;
   const slaMount = root.querySelector('#sla-editor-mount');
-  if (slaMount && account && session && viewingOwnPage) {
-    mountSlaEditor(/** @type {HTMLElement} */ (slaMount), selected, {
+  if (slaMount && sessionMatchesAccount && viewingOwnPage) {
+    mountSlaEditor(/** @type {HTMLElement} */ (slaMount), target, {
       walletClientFor: () => walletClientFor(SEPOLIA_CHAIN_CONFIG),
-      sepoliaChainConfig: SEPOLIA_CHAIN_CONFIG
+      sepoliaChainConfig: SEPOLIA_CHAIN_CONFIG,
+      ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG)
     });
   } else if (slaMount) {
     slaMount.innerHTML = '<p class="aside">Connect as this service\'s own provider to publish changes.</p>';
   }
   const bondMount = root.querySelector('#bond-controls-mount');
-  if (bondMount && account && session && viewingOwnPage) {
-    mountBondControls(/** @type {HTMLElement} */ (bondMount), selected, {
+  if (bondMount && sessionMatchesAccount && viewingOwnPage) {
+    mountBondControls(/** @type {HTMLElement} */ (bondMount), target, {
       walletClientFor: () => walletClientFor(ARC_CHAIN_CONFIG),
       registryAddress: /** @type {string} */ (ARC.registry),
       depositAmount,
-      formatNativeUsdc
+      formatNativeUsdc,
+      ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG)
     });
   } else if (bondMount) {
     bondMount.innerHTML = '<p class="aside">Connect as this service\'s own provider to manage its bond.</p>';
