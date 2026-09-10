@@ -20,6 +20,12 @@ export class VerdiktWizard extends LitElement {
     this.checkToken = 0;
   }
   createRenderRoot() { return this; }
+  clear() {
+    this.deps = null;
+    this.checkToken++;
+    this.message = ''; this.step = 1; this.slug = ''; this.availability = '';
+    this.available = false; this.pending = false; this.status = ''; this.url = ''; this.sla = '';
+  }
   /** @param {InputEvent} event */
   editSlug(event) {
     this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();

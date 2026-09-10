@@ -4,7 +4,7 @@ import { formatNativeUsdc } from './format.js';
 import { resolveProviderConsole } from './provider.js';
 import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
-import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
+import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
 import { savedTheme, saveTheme } from './theme.js';
 // Import tokens only. Web Awesome's all-in-one stylesheet also styles every
@@ -26,8 +26,8 @@ app.theme = savedTheme();
 const env = import.meta.env ?? {};
 const { mode, deps } = createSource(env);
 
-const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: /** @type {string} */ (env.VITE_ARC_RPC_URL), nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
-const SEPOLIA_CHAIN_CONFIG = { chainId: SEPOLIA.chainId, name: 'Ethereum Sepolia', rpcUrl: /** @type {string} */ (env.VITE_SEPOLIA_RPC_URL) };
+const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: /** @type {string} */ (env.VITE_ARC_RPC_URL || 'https://rpc.testnet.arc.network'), nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
+const SEPOLIA_CHAIN_CONFIG = { chainId: SEPOLIA.chainId, name: 'Ethereum Sepolia', rpcUrl: /** @type {string} */ (env.VITE_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com') };
 
 /** @type {Marketplace | null} */
 let marketplaceCache = null;
@@ -65,13 +65,14 @@ async function main() {
 }
 
 function draw() {
+  if (!marketplaceCache) return;
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const route = readRoute(new URL(location.href));
   // `verdikt-app` is patched asynchronously by Lit. Clear the currently
   // mounted controls before that patch removes them, otherwise a wallet that
   // owns no services can retain the prior provider's listing and dependencies.
   if (route.view === 'provider' && mode === 'live' && !resolveProviderConsole(marketplace.services, route.view, route.provider, getConnectedAccount()?.address ?? null).target) {
-    clearProviderControls();
+    clearProviderControls(false);
   }
   app.mode = mode;
   app.theme = savedTheme();
@@ -82,11 +83,19 @@ function draw() {
   }
 }
 
-function clearProviderControls() {
+function clearProviderControls(reset = true) {
+  const wizard = /** @type {import('./forms/wizard.js').VerdiktWizard|null} */ (app.querySelector('#wizard-mount'));
+  if (wizard) {
+    wizard.deps = null;
+    if (reset) wizard.clear();
+  }
   const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
   const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
-  slaMount?.clear();
-  bondMount?.clear();
+  if (reset) { slaMount?.clear(); bondMount?.clear(); }
+  else {
+    if (slaMount) slaMount.deps = null;
+    if (bondMount) bondMount.deps = null;
+  }
 }
 
 /**
@@ -98,7 +107,7 @@ function mountProviderConsole(route) {
   const session = getSession();
   const { effectiveProvider, target } = resolveProviderConsole(marketplace.services, route.view, route.provider, account?.address ?? null);
   const viewingOwnPage = Boolean(account && effectiveProvider && account.address.toLowerCase() === effectiveProvider.toLowerCase());
-  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase());
+  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && session.chainId === account.chainId);
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
@@ -114,15 +123,16 @@ function mountProviderConsole(route) {
         sepoliaRpcUrl: SEPOLIA_CHAIN_CONFIG.rpcUrl,
         formatNativeUsdc,
         walletClientFor: (chain) => walletClientFor(chain === 'arc' ? ARC_CHAIN_CONFIG : SEPOLIA_CHAIN_CONFIG),
-        ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG),
-        ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG),
+        ensureSepolia: () => ensureSignedChain(SEPOLIA_CHAIN_CONFIG),
+        ensureArc: () => ensureSignedChain(ARC_CHAIN_CONFIG),
         onDone: () => main()
       };
     } else {
       wizardMount.message = 'Service onboarding needs the subname registrar deployed — not yet live on this build.';
     }
   } else if (wizardMount) {
-    wizardMount.message = account ? "Connect as this provider's own address to add a service." : 'Connect a wallet to add a service.';
+    wizardMount.deps = null;
+    wizardMount.message = viewingOwnPage ? 'Sign in with this wallet to add a service.' : account ? "Connect as this provider's own address to add a service." : 'Connect a wallet to add a service.';
   }
   const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
   const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
@@ -138,10 +148,11 @@ function mountProviderConsole(route) {
     slaMount.listing = target;
     slaMount.deps = {
       walletClientFor: () => walletClientFor(SEPOLIA_CHAIN_CONFIG),
-      ensureSepolia: () => ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG)
+      ensureSepolia: () => ensureSignedChain(SEPOLIA_CHAIN_CONFIG)
     };
   } else if (slaMount) {
-    slaMount.message = "Connect as this service's own provider to publish changes.";
+    slaMount.deps = null;
+    slaMount.message = viewingOwnPage ? 'Sign in with this wallet to publish changes.' : "Connect as this service's own provider to publish changes.";
   }
   if (bondMount && sessionMatchesAccount && viewingOwnPage) {
     bondMount.message = '';
@@ -151,14 +162,45 @@ function mountProviderConsole(route) {
       registryAddress: /** @type {string} */ (ARC.registry),
       depositAmount,
       formatNativeUsdc,
-      ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG)
+      ensureArc: () => ensureSignedChain(ARC_CHAIN_CONFIG)
     };
   } else if (bondMount) {
-    bondMount.message = "Connect as this service's own provider to manage its bond.";
+    bondMount.deps = null;
+    bondMount.message = viewingOwnPage ? 'Sign in with this wallet to manage its bond.' : "Connect as this service's own provider to manage its bond.";
   }
 }
 
-onAccountChange(() => draw());
+onAccountChange((_address, identityChanged) => {
+  clearProviderControls(identityChanged);
+  draw();
+});
+
+async function signInConnected() {
+  const account = getConnectedAccount();
+  if (!account) throw new Error('connect a wallet first');
+  const config = account.chainId === ARC.chainId ? ARC_CHAIN_CONFIG : SEPOLIA_CHAIN_CONFIG;
+  await signIn(account.chainId, {
+    address: account.address,
+    walletClient: /** @type {any} */ (walletClientFor(config)),
+    domain: location.host,
+    origin: location.origin,
+    isCurrent: () => getConnectedAccount() === account
+  });
+}
+
+/** @param {typeof ARC_CHAIN_CONFIG | typeof SEPOLIA_CHAIN_CONFIG} config */
+async function ensureSignedChain(config) {
+  await ensureChain(config.chainId, config);
+  if (!getSession()) await signInConnected();
+  draw();
+  // Restore dependencies suspended by the chain-change event before the
+  // pending provider action resumes, preserving its draft and wizard step.
+  mountProviderConsole(readRoute(new URL(location.href)));
+}
+app.addEventListener('wallet-disconnect', async () => {
+  try { await disconnectWallet(); }
+  catch (error) { console.error('disconnect failed:', error); }
+});
 app.addEventListener('service-select', (event) => {
   const slug = /** @type {CustomEvent<string>} */ (event).detail;
   history.replaceState(null, '', withService(new URL(location.href), slug));
@@ -175,13 +217,12 @@ app.addEventListener('theme-select', (event) => {
 });
 app.addEventListener('wallet-connect', async () => {
   try {
-    const account = await connectWallet();
-    await signIn(SEPOLIA.chainId, {
-      address: account.address,
-      walletClient: /** @type {any} */ (walletClientFor(SEPOLIA_CHAIN_CONFIG)),
-      domain: location.host,
-      origin: location.origin
-    });
+    await connectWallet();
+    const account = getConnectedAccount();
+    if (account && ![ARC.chainId, SEPOLIA.chainId].includes(account.chainId)) {
+      await ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG);
+    }
+    await signInConnected();
     draw();
   } catch (error) {
     // The only place this surfaces; there is no toast system.

@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { getConnectedAccount } from './wallet.js';
+import { getSession } from './session.js';
 import { resolveProviderConsole } from './provider.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -128,7 +129,7 @@ const nav = (view, mode, theme, account, navigate, connect, changeTheme) => {
   };
   /** @param {'light'|'dark'} value @param {string} label */
   const themeButton = (value, label) => html`<wa-button class="theme-button ${theme === value ? 'selected' : ''}" appearance="outlined" size="xs" aria-pressed=${String(theme === value)} @click=${() => changeTheme(value)}>${label}</wa-button>`;
-  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${mode === 'live' ? account ? html`<span class="nav-account" title=${account}>${account.slice(0, 6)}…${account.slice(-4)}</span>` : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>` : nothing}</div></nav>`;
+  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${mode === 'live' ? account ? html`<span class="nav-account" title=${account}>${account.slice(0, 6)}…${account.slice(-4)}</span><wa-button type="button" appearance="outlined" size="s" @click=${connect}>${getSession() ? 'Change wallet' : 'Sign in / change wallet'}</wa-button><wa-button type="button" appearance="plain" size="s" @click=${(/** @type {Event} */ event) => event.target?.dispatchEvent(new CustomEvent('wallet-disconnect', { bubbles: true, composed: true }))}>Disconnect</wa-button>` : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>` : nothing}</div></nav>`;
 };
 
 const how = () => html`
