@@ -401,6 +401,9 @@ describe('the provider view', () => {
   });
 
   it('says so plainly when an address owns nothing', async () => {
-    expect(renderApp(await build(), 'demo', 'provider', null, '0xdead')).toContain('No services registered');
+    const html = renderApp(await build(), 'demo', 'provider', null, '0xdead');
+    expect(html).toContain('No services registered');
+    expect(html).not.toContain('sla-editor-mount');
+    expect(html).not.toContain('bond-controls-mount');
   });
 });

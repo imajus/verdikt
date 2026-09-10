@@ -3,11 +3,57 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Verdikt — verified x402 services</title>
+    <title>Verdikt — Verified x402 API Marketplace</title>
     <meta
       name="description"
       content="A marketplace of x402 API services whose delivery is verified per call, with refunds enforced on-chain."
     />
+    <meta name="application-name" content="Verdikt" />
+    <meta name="apple-mobile-web-app-title" content="Verdikt" />
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="https://verdikt-web.denis-perov.workers.dev/" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Verdikt" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:title" content="Verdikt — Verified x402 API Marketplace" />
+    <meta
+      property="og:description"
+      content="Discover x402 API services with per-call SLA verification and on-chain refunds backed by provider bonds."
+    />
+    <meta property="og:url" content="https://verdikt-web.denis-perov.workers.dev/" />
+    <meta property="og:image" content="https://verdikt-web.denis-perov.workers.dev/icon-512.png" />
+    <meta property="og:image:width" content="512" />
+    <meta property="og:image:height" content="512" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:alt" content="Verdikt gradient verification mark" />
+
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Verdikt — Verified x402 API Marketplace" />
+    <meta
+      name="twitter:description"
+      content="Discover x402 API services with per-call SLA verification and on-chain refunds backed by provider bonds."
+    />
+    <meta name="twitter:image" content="https://verdikt-web.denis-perov.workers.dev/icon-512.png" />
+    <meta name="twitter:image:alt" content="Verdikt gradient verification mark" />
+
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+    <meta name="theme-color" content="#f6f4ee" />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Verdikt",
+        "url": "https://verdikt-web.denis-perov.workers.dev/",
+        "description": "A marketplace of x402 API services whose delivery is verified per call, with refunds enforced on-chain."
+      }
+    </script>
     <!-- The only external request the page makes. Every face has a system
          fallback in styles.css, so offline the page is plainer, not broken. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -16,19 +62,17 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
     />
+    <script>
+      try {
+        const theme = localStorage.getItem('verdikt-theme') === 'dark' ? 'dark' : 'light';
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.classList.add(`wa-${theme}`);
+      } catch {}
+    </script>
+    <link rel="stylesheet" href="/src/styles.css" />
   </head>
   <body>
     <main id="app"></main>
-    <!-- Real favicon files under public/ (Vite copies them to dist root as-is),
-         so these are same-origin requests, not a 404 risk. -->
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="icon" href="/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <link rel="manifest" href="/site.webmanifest" />
-    <meta name="theme-color" content="#7c3aed" />
-    <link rel="stylesheet" href="/src/styles.css" />
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

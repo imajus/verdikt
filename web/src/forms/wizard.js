@@ -1,201 +1,99 @@
-// New-service onboarding: three wallet-signed transactions, ENS before Arc.
-//
-// ENS first is deliberate (docs/superpowers/specs/2026-09-08-provider-console-design.md
-// §5): by the time the Arc registration happens, the subname already exists
-// and already agrees with the caller, so the proxy's ownership check
-// (checkOwnership) can never flag a service this wizard just created.
-//
-// State is derived from the two chains on every render rather than kept in
-// localStorage: a refresh or a dropped wallet mid-flow re-enters at whichever
-// step the chains say is next, because that IS the state.
-
+// New-service onboarding: ENS is claimed before Arc registration, so a newly
+// registered service can never begin life with conflicting ownership.
+import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-/**
- * @param {HTMLElement} container
- * @param {{
- *   account: string,
- *   registrarAddress: string,
- *   registryAddress: string,
- *   depositAmount: bigint,
- *   sepoliaRpcUrl: string,
- *   formatNativeUsdc: (v: bigint) => string,
- *   walletClientFor: (chain: 'arc'|'sepolia') => { writeContract: Function, sendTransaction: Function },
- *   ensureSepolia: () => Promise<void>,
- *   ensureArc: () => Promise<void>,
- *   onDone: () => void
- * }} deps
- */
-export function mountWizard(container, deps) {
-  /** @type {{ step: 1|2|3, slug: string, claimed: boolean|null, registered: boolean|null }} */
-  const state = { step: 1, slug: '', claimed: null, registered: null };
-  const draw = () => {
-    container.innerHTML = `
-      <ol class="wizard-steps">
-        <li class="${state.step >= 1 ? 'done' : ''}">1. Claim the subname</li>
-        <li class="${state.step >= 2 ? 'done' : ''}">2. Register on Arc</li>
-        <li class="${state.step >= 3 ? 'done' : ''}">3. Publish SLA &amp; URL</li>
-      </ol>
-      <div id="wizard-step"></div>`;
-    const stepMount = /** @type {HTMLElement} */ (container.querySelector('#wizard-step'));
-    if (state.step === 1) drawStep1(stepMount);
-    else if (state.step === 2) drawStep2(stepMount);
-    else drawStep3(stepMount);
+export class VerdiktWizard extends LitElement {
+  static properties = {
+    deps: { attribute: false }, message: {}, step: { state: true }, slug: { state: true },
+    availability: { state: true }, available: { state: true }, pending: { state: true },
+    status: { state: true }, url: { state: true }, sla: { state: true }
   };
-  /** @param {HTMLElement} mount */
-  const drawStep1 = (mount) => {
-    mount.innerHTML = `
-      <label for="wizard-slug">Slug</label>
-      <input id="wizard-slug" type="text" autocomplete="off" value="${escapeHtml(state.slug)}" placeholder="weather" />
-      <p class="form-status" id="wizard-availability" hidden></p>
-      <button type="button" id="wizard-claim" disabled>Claim on Sepolia</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
-    const input = /** @type {HTMLInputElement} */ (mount.querySelector('#wizard-slug'));
-    const availability = /** @type {HTMLElement} */ (mount.querySelector('#wizard-availability'));
-    const claimButton = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-claim'));
-    const status = /** @type {HTMLElement} */ (mount.querySelector('#wizard-status'));
-    let checkToken = 0;
-    const checkAvailability = async () => {
-      const slug = input.value.trim();
-      const token = ++checkToken;
-      if (!SLUG.test(slug)) {
-        availability.hidden = false;
-        availability.textContent = 'Lowercase letters, digits and hyphens only.';
-        claimButton.disabled = true;
-        return;
-      }
-      availability.hidden = false;
-      availability.textContent = 'Checking…';
-      claimButton.disabled = true;
-      try {
-        // rpcUrl must be passed explicitly and truthy: packages/sdk/ens.js
-        // falls back to packages/sdk/env.js's env(), which reads
-        // `process.env` directly — undefined in a Vite browser bundle, so an
-        // omitted rpcUrl here would throw ReferenceError: process is not
-        // defined the moment a slug is typed. web/src/source.js already
-        // avoids this the same way, for the same reason.
-        const record = await resolveServiceRecord(slug, { rpcUrl: deps.sepoliaRpcUrl });
-        if (token !== checkToken) return;
-        if (record.owner) {
-          availability.textContent = `Already claimed by ${record.owner}.`;
-          claimButton.disabled = true;
-        } else {
-          availability.textContent = 'Available.';
-          claimButton.disabled = false;
-        }
-      } catch (error) {
-        if (token !== checkToken) return;
-        availability.textContent = `Could not check availability: ${/** @type {Error} */ (error).message}`;
-        claimButton.disabled = true;
-      }
-    };
-    input.addEventListener('input', () => {
-      state.slug = input.value.trim();
-      checkAvailability();
-    });
-    claimButton.addEventListener('click', async () => {
-      claimButton.disabled = true;
-      status.hidden = false;
-      status.textContent = 'Sending…';
-      try {
-        await deps.ensureSepolia();
-        const walletClient = deps.walletClientFor('sepolia');
-        await claimSubname({ walletClient, registrarAddress: deps.registrarAddress, slug: state.slug, payTo: deps.account });
-        state.step = 2;
-        draw();
-      } catch (error) {
-        status.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-        claimButton.disabled = false;
-      }
-    });
-  };
-  /** @param {HTMLElement} mount */
-  const drawStep2 = (mount) => {
-    mount.innerHTML = `
-      <p class="aside">Registering "${escapeHtml(state.slug)}" for ${deps.formatNativeUsdc(deps.depositAmount)}.</p>
-      <button type="button" id="wizard-register">Register on Arc</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
-    const button = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-register'));
-    const status = /** @type {HTMLElement} */ (mount.querySelector('#wizard-status'));
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      status.hidden = false;
-      status.textContent = 'Sending…';
-      try {
-        await deps.ensureArc();
-        const walletClient = deps.walletClientFor('arc');
-        await registerService({ walletClient, registryAddress: deps.registryAddress, slug: state.slug, depositAmount: deps.depositAmount });
-        state.step = 3;
-        draw();
-      } catch (error) {
-        status.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-        button.disabled = false;
-      }
-    });
-  };
-  /** @param {HTMLElement} mount */
-  const drawStep3 = (mount) => {
-    mount.innerHTML = `
-      <label for="wizard-url">Endpoint URL</label>
-      <input id="wizard-url" type="text" autocomplete="off" placeholder="https://provider.example/api" />
-      <label for="wizard-sla">SLA (JSON)</label>
-      <textarea id="wizard-sla" spellcheck="false" rows="10"></textarea>
-      <p class="check bad" id="wizard-sla-check"><i class="dot"></i>Paste an SLA to validate it.</p>
-      <button type="button" id="wizard-publish" disabled>Publish &amp; finish</button>
-      <p class="form-status" id="wizard-status" hidden></p>`;
-    const urlInput = /** @type {HTMLInputElement} */ (mount.querySelector('#wizard-url'));
-    const slaInput = /** @type {HTMLTextAreaElement} */ (mount.querySelector('#wizard-sla'));
-    const check = /** @type {HTMLElement} */ (mount.querySelector('#wizard-sla-check'));
-    const button = /** @type {HTMLButtonElement} */ (mount.querySelector('#wizard-publish'));
-    const status = /** @type {HTMLElement} */ (mount.querySelector('#wizard-status'));
-    const validate = () => {
-      const source = slaInput.value.trim();
-      const urlOk = /^https?:\/\//.test(urlInput.value.trim());
-      if (!source) {
-        check.className = 'check bad';
-        check.textContent = 'Paste an SLA to validate it.';
-        button.disabled = true;
-        return;
-      }
-      try {
-        const parsed = parseSla(source);
-        check.className = 'check ok';
-        check.textContent = `Valid. ${parsed.clauses.length} clause(s).`;
-        button.disabled = !urlOk;
-      } catch (error) {
-        check.className = 'check bad';
-        check.textContent = /** @type {Error} */ (error).message;
-        button.disabled = true;
-      }
-    };
-    urlInput.addEventListener('input', validate);
-    slaInput.addEventListener('input', validate);
-    button.addEventListener('click', async () => {
-      button.disabled = true;
-      status.hidden = false;
-      status.textContent = 'Publishing URL…';
-      try {
-        await deps.ensureSepolia();
-        const walletClient = deps.walletClientFor('sepolia');
-        await publishUrl({ walletClient, slug: state.slug, value: urlInput.value.trim() });
-        status.textContent = 'Publishing SLA…';
-        await publishSla({ walletClient, slug: state.slug, value: slaInput.value.trim() });
-        status.textContent = 'Done.';
-        deps.onDone();
-      } catch (error) {
-        status.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-        button.disabled = false;
-      }
-    });
-  };
-  draw();
+  constructor() {
+    super();
+    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void}|null} */ this.deps = null;
+    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false; this.pending = false; this.status = ''; this.url = ''; this.sla = '';
+    this.checkToken = 0;
+  }
+  createRenderRoot() { return this; }
+  /** @param {InputEvent} event */
+  editSlug(event) {
+    this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
+    this.checkAvailability();
+  }
+  async checkAvailability() {
+    const token = ++this.checkToken;
+    this.available = false;
+    if (!SLUG.test(this.slug)) { this.availability = 'Lowercase letters, digits and hyphens only.'; return; }
+    this.availability = 'Checking…';
+    try {
+      const record = await resolveServiceRecord(this.slug, { rpcUrl: /** @type {NonNullable<typeof this.deps>} */ (this.deps).sepoliaRpcUrl });
+      if (token !== this.checkToken) return;
+      this.available = !record.owner;
+      this.availability = record.owner ? `Already claimed by ${record.owner}.` : 'Available.';
+    } catch (error) {
+      if (token !== this.checkToken) return;
+      this.availability = `Could not check availability: ${/** @type {Error} */ (error).message}`;
+    }
+  }
+  async claim() {
+    if (!this.deps || !this.available) return;
+    this.pending = true; this.status = 'Sending…';
+    try {
+      await this.deps.ensureSepolia();
+      await claimSubname({ walletClient: this.deps.walletClientFor('sepolia'), registrarAddress: this.deps.registrarAddress, slug: this.slug, payTo: this.deps.account });
+      this.step = 2; this.status = '';
+    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.pending = false; }
+  }
+  async register() {
+    if (!this.deps) return;
+    this.pending = true; this.status = 'Sending…';
+    try {
+      await this.deps.ensureArc();
+      await registerService({ walletClient: this.deps.walletClientFor('arc'), registryAddress: this.deps.registryAddress, slug: this.slug, depositAmount: this.deps.depositAmount });
+      this.step = 3; this.status = '';
+    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.pending = false; }
+  }
+  /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  get slaValidity() {
+    if (!this.sla.trim()) return { ok: false, message: 'Paste an SLA to validate it.' };
+    try { const parsed = parseSla(this.sla.trim()); return { ok: true, message: `Valid. ${parsed.clauses.length} clause(s).` }; }
+    catch (error) { return { ok: false, message: /** @type {Error} */ (error).message }; }
+  }
+  async publish() {
+    if (!this.deps || !this.slaValidity.ok || !/^https?:\/\//.test(this.url.trim())) return;
+    this.pending = true; this.status = 'Publishing URL…';
+    try {
+      await this.deps.ensureSepolia();
+      const walletClient = this.deps.walletClientFor('sepolia');
+      await publishUrl({ walletClient, slug: this.slug, value: this.url.trim() });
+      this.status = 'Publishing SLA…';
+      await publishSla({ walletClient, slug: this.slug, value: this.sla.trim() });
+      this.status = 'Done.'; this.deps.onDone();
+    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.pending = false; }
+  }
+  renderStep() {
+    if (this.step === 1) return html`<wa-input id="wizard-slug" label="Slug" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug}></wa-input>
+      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}<wa-button type="button" id="wizard-claim" ?disabled=${!this.available || this.pending} ?loading=${this.pending} @click=${this.claim}>Claim on Sepolia</wa-button>`;
+    if (this.step === 2) return html`<p class="aside">Registering "${this.slug}" for ${/** @type {NonNullable<typeof this.deps>} */ (this.deps).formatNativeUsdc(/** @type {NonNullable<typeof this.deps>} */ (this.deps).depositAmount)}.</p><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.register}>Register on Arc</wa-button>`;
+    const validity = this.slaValidity;
+    return html`<wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>
+      <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
+      <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p><wa-button type="button" id="wizard-publish" ?disabled=${this.pending || !validity.ok || !/^https?:\/\//.test(this.url.trim())} ?loading=${this.pending} @click=${this.publish}>Publish &amp; finish</wa-button>`;
+  }
+  render() {
+    if (this.message) return html`<p class="aside">${this.message}</p>`;
+    if (!this.deps) return nothing;
+    return html`<ol class="wizard-steps"><li class=${this.step >= 1 ? 'done' : ''}>1. Claim the subname</li><li class=${this.step >= 2 ? 'done' : ''}>2. Register on Arc</li><li class=${this.step >= 3 ? 'done' : ''}>3. Publish SLA &amp; URL</li></ol>${this.renderStep()}${this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;
+  }
 }
 
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
-}
+if (!customElements.get('verdikt-wizard')) customElements.define('verdikt-wizard', VerdiktWizard);

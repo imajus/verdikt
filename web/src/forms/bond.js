@@ -1,103 +1,73 @@
-// Top-up and retire, as two small mounted forms sharing one container. Retire
-// is `deregister` — one-way (VerdiktRegistry.sol: the slug can never be
-// registered again) — so it is named "Retire", not "Deactivate", and gated
-// behind typing the slug back.
-
+import { LitElement, html, nothing } from 'lit';
 import { retireService, topUpBond } from '../actions.js';
 
-/**
- * @param {HTMLElement} container
- * @param {{ slug: string, serviceId: string, status: string, deposit: bigint }} listing
- * @param {{ walletClientFor: () => { writeContract: Function }, registryAddress: string, depositAmount: bigint, formatNativeUsdc: (v: bigint) => string, ensureArc: () => Promise<void> }} deps
- */
-export function mountBondControls(container, listing, deps) {
-  const shortfall = deps.depositAmount > listing.deposit ? deps.depositAmount - listing.deposit : 0n;
-  const suspended = listing.status === 'SUSPENDED';
-  container.innerHTML = `
-    <div class="bond-form">
-      <label for="topup-amount">Top up (USDC)</label>
-      <input id="topup-amount" type="text" inputmode="decimal" placeholder="0.0" />
-      ${
-        suspended
-          ? `<p class="aside warn">Suspended — needs ${deps.formatNativeUsdc(shortfall)} more to reinstate (reinstatement requires the bond back at full, not merely above zero).</p>`
-          : ''
-      }
-      <button type="button" id="topup-send">Top up</button>
-      <p class="form-status" id="topup-status" hidden></p>
-    </div>
-    <div class="retire-form">
-      <p class="aside warn">
-        Retiring is permanent: "${escapeHtml(listing.slug)}" can never be registered again, the remaining bond
-        returns to you, and the listing stops taking calls.
-      </p>
-      <label for="retire-confirm">Type "${escapeHtml(listing.slug)}" to confirm</label>
-      <input id="retire-confirm" type="text" autocomplete="off" />
-      <button type="button" id="retire-send" disabled ${suspended ? 'title="Reverts while suspended — top up first"' : ''}>Retire service</button>
-      <p class="form-status" id="retire-status" hidden></p>
-    </div>`;
-  const topUpInput = /** @type {HTMLInputElement} */ (container.querySelector('#topup-amount'));
-  const topUpButton = /** @type {HTMLButtonElement} */ (container.querySelector('#topup-send'));
-  const topUpStatus = /** @type {HTMLElement} */ (container.querySelector('#topup-status'));
-  topUpButton.addEventListener('click', async () => {
-    const amount = parseUsdcToNativeUnits(topUpInput.value);
-    if (amount === null) {
-      topUpStatus.hidden = false;
-      topUpStatus.textContent = 'Enter a valid amount.';
-      return;
-    }
-    topUpButton.disabled = true;
-    topUpStatus.hidden = false;
-    topUpStatus.textContent = 'Sending…';
-    try {
-      await deps.ensureArc();
-      const walletClient = deps.walletClientFor();
-      const { hash } = await topUpBond({ walletClient, registryAddress: deps.registryAddress, serviceId: listing.serviceId, amount });
-      topUpStatus.textContent = `Sent: ${hash}`;
-    } catch (error) {
-      topUpStatus.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-    } finally {
-      topUpButton.disabled = false;
-    }
-  });
-  const retireInput = /** @type {HTMLInputElement} */ (container.querySelector('#retire-confirm'));
-  const retireButton = /** @type {HTMLButtonElement} */ (container.querySelector('#retire-send'));
-  const retireStatus = /** @type {HTMLElement} */ (container.querySelector('#retire-status'));
-  retireInput.addEventListener('input', () => {
-    retireButton.disabled = suspended || retireInput.value !== listing.slug;
-  });
-  retireButton.addEventListener('click', async () => {
-    retireButton.disabled = true;
-    retireStatus.hidden = false;
-    retireStatus.textContent = 'Sending…';
-    try {
-      await deps.ensureArc();
-      const walletClient = deps.walletClientFor();
-      const { hash } = await retireService({ walletClient, registryAddress: deps.registryAddress, serviceId: listing.serviceId });
-      retireStatus.textContent = `Sent: ${hash}`;
-    } catch (error) {
-      retireStatus.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-      retireButton.disabled = retireInput.value !== listing.slug;
-    }
-  });
-}
-
-/**
- * "1.5" -> 1500000000000000000n (18-decimal native units). `null` for
- * anything that is not a plain non-negative decimal.
- * @param {string} input
- * @returns {bigint | null}
- */
+/** @param {string} input @returns {bigint|null} */
 function parseUsdcToNativeUnits(input) {
   const trimmed = input.trim();
   if (!/^\d+(\.\d+)?$/.test(trimmed)) return null;
   const [whole, fraction = ''] = trimmed.split('.');
-  const paddedFraction = fraction.padEnd(18, '0').slice(0, 18);
-  return BigInt(whole) * 10n ** 18n + BigInt(paddedFraction || '0');
+  return BigInt(whole) * 10n ** 18n + BigInt(fraction.padEnd(18, '0').slice(0, 18) || '0');
 }
 
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
+export class VerdiktBondControls extends LitElement {
+  static properties = { listing: { attribute: false }, deps: { attribute: false }, message: {}, topUp: { state: true }, confirmation: { state: true }, topUpStatus: { state: true }, retireStatus: { state: true }, topUpPending: { state: true }, retirePending: { state: true } };
+  constructor() {
+    super();
+    /** @type {{slug:string, serviceId:string, status:string, deposit:bigint}|null} */ this.listing = null;
+    /** @type {{walletClientFor:()=>{writeContract:Function}, registryAddress:string, depositAmount:bigint, formatNativeUsdc:(v:bigint)=>string, ensureArc:()=>Promise<void>}|null} */ this.deps = null;
+    this.message = ''; this.topUp = ''; this.confirmation = ''; this.topUpStatus = ''; this.retireStatus = ''; this.topUpPending = false; this.retirePending = false;
+  }
+  createRenderRoot() { return this; }
+  // See VerdiktSlaEditor's clear(): a wallet change must never leave this
+  // component able to submit against a service owned by the prior account.
+  clear() {
+    this.listing = null;
+    this.deps = null;
+    this.message = '';
+    this.topUp = '';
+    this.confirmation = '';
+    this.topUpStatus = '';
+    this.retireStatus = '';
+    this.topUpPending = false;
+    this.retirePending = false;
+  }
+  /** @param {InputEvent} event */ editTopUp(event) { this.topUp = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  /** @param {InputEvent} event */ editConfirmation(event) { this.confirmation = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  async submitTopUp() {
+    if (!this.listing || !this.deps) return;
+    const amount = parseUsdcToNativeUnits(this.topUp);
+    if (amount === null) { this.topUpStatus = 'Enter a valid amount.'; return; }
+    this.topUpPending = true; this.topUpStatus = 'Sending…';
+    try {
+      await this.deps.ensureArc();
+      const { hash } = await topUpBond({ walletClient: this.deps.walletClientFor(), registryAddress: this.deps.registryAddress, serviceId: this.listing.serviceId, amount });
+      this.topUpStatus = `Sent: ${hash}`;
+    } catch (error) { this.topUpStatus = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.topUpPending = false; }
+  }
+  async retire() {
+    if (!this.listing || !this.deps || this.confirmation !== this.listing.slug) return;
+    this.retirePending = true; this.retireStatus = 'Sending…';
+    try {
+      await this.deps.ensureArc();
+      const { hash } = await retireService({ walletClient: this.deps.walletClientFor(), registryAddress: this.deps.registryAddress, serviceId: this.listing.serviceId });
+      this.retireStatus = `Sent: ${hash}`;
+    } catch (error) { this.retireStatus = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.retirePending = false; }
+  }
+  render() {
+    if (this.message) return html`<p class="aside">${this.message}</p>`;
+    if (!this.listing || !this.deps) return nothing;
+    const suspended = this.listing.status === 'SUSPENDED';
+    const shortfall = this.deps.depositAmount > this.listing.deposit ? this.deps.depositAmount - this.listing.deposit : 0n;
+    return html`<div class="bond-form"><wa-input id="topup-amount" label="Top up (USDC)" inputmode="decimal" placeholder="0.0" .value=${this.topUp} @input=${this.editTopUp}></wa-input>
+        ${suspended ? html`<p class="aside warn">Suspended — needs ${this.deps.formatNativeUsdc(shortfall)} more to reinstate (reinstatement requires the bond back at full, not merely above zero).</p>` : nothing}
+        <wa-button type="button" id="topup-send" ?disabled=${this.topUpPending} ?loading=${this.topUpPending} @click=${this.submitTopUp}>Top up</wa-button>${this.topUpStatus ? html`<p class="form-status">${this.topUpStatus}</p>` : nothing}</div>
+      <div class="retire-form"><p class="aside warn">Retiring is permanent: "${this.listing.slug}" can never be registered again, the remaining bond returns to you, and the listing stops taking calls.</p>
+        <wa-input id="retire-confirm" label=${`Type "${this.listing.slug}" to confirm`} autocomplete="off" .value=${this.confirmation} @input=${this.editConfirmation}></wa-input>
+        <wa-button type="button" id="retire-send" variant="danger" ?disabled=${suspended || this.retirePending || this.confirmation !== this.listing.slug} ?loading=${this.retirePending} title=${suspended ? 'Reverts while suspended — top up first' : ''} @click=${this.retire}>Retire service</wa-button>${this.retireStatus ? html`<p class="form-status">${this.retireStatus}</p>` : nothing}</div>`;
+  }
 }
 
+if (!customElements.get('verdikt-bond-controls')) customElements.define('verdikt-bond-controls', VerdiktBondControls);
 export const __parseUsdcToNativeUnitsForTests = parseUsdcToNativeUnits;

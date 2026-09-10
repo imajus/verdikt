@@ -1,22 +1,8 @@
-// The SLA editor, as a mounted DOM node rather than a re-rendered string.
-//
-// render.js's old provider view rebuilt the whole page on every keystroke and
-// restored the caret by hand (main.js's `preserveFocus`-shaped hack, now
-// gone) — a textarea that never gets destroyed needs none of that. This
-// module owns exactly the elements inside its container and nothing else.
-
+import { LitElement, html, nothing } from 'lit';
 import { parseSla } from '@verdikt/sla';
 import { publishSla } from '../actions.js';
 
-/**
- * Pure: the same check `renderProvider`'s old inline validator ran, now
- * exported so it is testable on its own rather than only through a DOM.
- * Mirrors the wording the old string-rendered version used, since
- * `web/src/marketplace.test.js` documented that wording as behaviour worth
- * keeping ("accepts a valid SLA", "rejects an invalid SLA").
- * @param {string} source
- * @returns {{ ok: boolean, message: string }}
- */
+/** @param {string} source @returns {{ ok: boolean, message: string }} */
 export function describeSlaValidity(source) {
   const trimmed = source.trim();
   if (!trimmed) return { ok: false, message: 'Paste an SLA to validate it.' };
@@ -28,47 +14,50 @@ export function describeSlaValidity(source) {
   }
 }
 
-/**
- * @param {HTMLElement} container an empty element this function owns completely
- * @param {{ slug: string, slaRaw: string | null }} listing
- * @param {{ walletClientFor: () => { sendTransaction: Function }, sepoliaChainConfig: object, ensureSepolia: () => Promise<void> }} deps
- */
-export function mountSlaEditor(container, listing, deps) {
-  container.innerHTML = `
-    <textarea id="sla-draft" spellcheck="false" rows="14">${escapeHtml(listing.slaRaw ?? '')}</textarea>
-    <p class="check" id="sla-check"><i class="dot"></i></p>
-    <button type="button" id="sla-publish" disabled>Publish SLA</button>
-    <p class="form-status" id="sla-status" hidden></p>`;
-  const textarea = /** @type {HTMLTextAreaElement} */ (container.querySelector('#sla-draft'));
-  const check = /** @type {HTMLElement} */ (container.querySelector('#sla-check'));
-  const button = /** @type {HTMLButtonElement} */ (container.querySelector('#sla-publish'));
-  const status = /** @type {HTMLElement} */ (container.querySelector('#sla-status'));
-  const validate = () => {
-    const { ok, message } = describeSlaValidity(textarea.value);
-    check.className = `check ${ok ? 'ok' : 'bad'}`;
-    check.textContent = message;
-    button.disabled = !ok;
-  };
-  textarea.addEventListener('input', validate);
-  validate();
-  button.addEventListener('click', async () => {
-    button.disabled = true;
-    status.hidden = false;
-    status.textContent = 'Sending…';
+export class VerdiktSlaEditor extends LitElement {
+  static properties = { listing: { attribute: false }, deps: { attribute: false }, message: {}, draft: { state: true }, status: { state: true }, pending: { state: true } };
+  constructor() {
+    super();
+    /** @type {{slug:string, slaRaw:string|null}|null} */ this.listing = null;
+    /** @type {{walletClientFor:()=>{sendTransaction:Function}, ensureSepolia:()=>Promise<void>}|null} */ this.deps = null;
+    this.message = ''; this.draft = ''; this.status = ''; this.pending = false;
+  }
+  createRenderRoot() { return this; }
+  // The provider view can remain mounted while the connected wallet changes.
+  // Do not leave a previous provider's draft or transaction dependencies
+  // attached to a component that no longer has a selected service.
+  clear() {
+    this.listing = null;
+    this.deps = null;
+    this.message = '';
+    this.draft = '';
+    this.status = '';
+    this.pending = false;
+  }
+  /** @param {Map<PropertyKey, unknown>} changed */
+  willUpdate(changed) {
+    if (changed.has('listing') && this.listing) { this.draft = this.listing.slaRaw ?? ''; this.status = ''; }
+  }
+  /** @param {InputEvent} event */ edit(event) { this.draft = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  async publish() {
+    if (!this.listing || !this.deps || !describeSlaValidity(this.draft).ok) return;
+    this.pending = true; this.status = 'Sending…';
     try {
-      await deps.ensureSepolia();
-      const walletClient = deps.walletClientFor();
-      const { hash } = await publishSla({ walletClient, slug: listing.slug, value: textarea.value.trim() });
-      status.textContent = `Sent: ${hash}`;
-    } catch (error) {
-      status.textContent = `Failed: ${/** @type {Error} */ (error).message}`;
-    } finally {
-      button.disabled = false;
-    }
-  });
+      await this.deps.ensureSepolia();
+      const { hash } = await publishSla({ walletClient: this.deps.walletClientFor(), slug: this.listing.slug, value: this.draft.trim() });
+      this.status = `Sent: ${hash}`;
+    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
+    finally { this.pending = false; }
+  }
+  render() {
+    if (this.message) return html`<p class="aside">${this.message}</p>`;
+    if (!this.listing || !this.deps) return nothing;
+    const validity = describeSlaValidity(this.draft);
+    return html`<wa-textarea id="sla-draft" label="SLA (JSON)" spellcheck="false" rows="14" resize="vertical" .value=${this.draft} @input=${this.edit}></wa-textarea>
+      <p class="check ${validity.ok ? 'ok' : 'bad'}" id="sla-check"><i class="dot"></i>${validity.message}</p>
+      <wa-button type="button" id="sla-publish" ?disabled=${!validity.ok || this.pending} ?loading=${this.pending} @click=${this.publish}>Publish SLA</wa-button>
+      ${this.status ? html`<p class="form-status" id="sla-status">${this.status}</p>` : nothing}`;
+  }
 }
 
-/** @param {string} value */
-function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c] ?? c);
-}
+if (!customElements.get('verdikt-sla-editor')) customElements.define('verdikt-sla-editor', VerdiktSlaEditor);
