@@ -64,14 +64,32 @@ describe('Onboard connection state', () => {
     expect(getConnectedAccount()?.address).toBe(OTHER);
     expect(listener).toHaveBeenCalledWith(OTHER, true);
   });
-  it('notifies and invalidates on chain changes, including unsupported networks', async () => {
+  it('preserves address authentication on chain changes but blocks writes to the wrong network', async () => {
     await connectWallet(); signedIn();
     const listener = vi.fn(); onAccountChange(listener);
     emit([{ ...wallets[0], chains: [{ id: '0x1' }] }]);
     expect(getConnectedAccount()?.chainId).toBe(1);
     expect(listener).toHaveBeenCalledWith(ADDRESS, false);
-    expect(getSession()).toBeNull();
+    expect(getSession()?.address).toBe(ADDRESS);
     expect(() => walletClientFor(ARC)).toThrow('required network');
+  });
+  it('reuses an unexpired session when reconnecting the same address after a reload', async () => {
+    signedIn();
+    await connectWallet();
+    expect(getSession()?.address).toBe(ADDRESS);
+    resetWalletStateForTests();
+    await connectWallet();
+    expect(getSession()?.address).toBe(ADDRESS);
+  });
+  it('drops a saved session when connecting a different address', async () => {
+    signedIn(); wallets = [wallet(OTHER)];
+    await connectWallet();
+    expect(getSession()).toBeNull();
+  });
+  it('does not revive an expired session on connection', async () => {
+    localStorage.setItem('verdikt.session', JSON.stringify({ address: ADDRESS, chainId: ARC.chainId, expiresAt: Date.now() - 1 }));
+    await connectWallet();
+    expect(getSession()).toBeNull();
   });
   it('invalidates when a different wallet has the same address and chain', async () => {
     await connectWallet(); signedIn();

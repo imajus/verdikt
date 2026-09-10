@@ -63,7 +63,9 @@ export function getSession() {
   } catch {
     return null;
   }
-  if (!session.expiresAt || session.expiresAt <= Date.now()) {
+  // chainId records where the proof was signed. This browser-only identity
+  // is reusable across supported networks; writes verify their own chain.
+  if (!session || typeof session.address !== 'string' || !/^0x[0-9a-f]{40}$/i.test(session.address) || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) {
     localStorage.removeItem(STORAGE_KEY);
     return null;
   }

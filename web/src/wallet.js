@@ -2,7 +2,7 @@
 // use viem over the selected EIP-1193 provider.
 import { createWalletClient, custom } from 'viem';
 import { arcTestnet, sepolia } from 'viem/chains';
-import { clearSession } from './session.js';
+import { clearSession, getSession } from './session.js';
 
 /** @type {{ address: string, chainId: number } | null} */
 let connected = null;
@@ -54,11 +54,14 @@ function syncWallets(wallets) {
   const provider = next ? wallet.provider : null;
   if (provider === activeProvider && next?.address.toLowerCase() === connected?.address.toLowerCase() && next?.chainId === connected?.chainId) return;
   const identityChanged = provider !== activeProvider || next?.address.toLowerCase() !== connected?.address.toLowerCase();
+  // A fresh connection may reuse this browser's unexpired proof for the same
+  // address. Explicit disconnects and changes to an active wallet revoke it.
+  const session = getSession();
+  if (identityChanged && (connected || !next || session?.address.toLowerCase() !== next.address.toLowerCase())) clearSession();
   if (identityChanged) identityRevision++;
   activeWallet = next ? wallet : null;
   activeProvider = provider;
   connected = next;
-  clearSession();
   for (const listener of listeners) listener(connected?.address ?? null, identityChanged);
 }
 

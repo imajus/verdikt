@@ -40,7 +40,7 @@ async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 function authenticate() { state.session = { ...state.account, expiresAt: Date.now() + 60000 }; }
 function change(address = OWNER, chainId = 11155111, identityChanged = true) {
   state.account = address ? { address, chainId } : null;
-  state.session = null;
+  if (identityChanged) state.session = null;
   state.changed(address || null, identityChanged);
 }
 
@@ -84,23 +84,50 @@ it('suspends controls on an external chain change without losing drafts', async 
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   expect(controls['sla-editor-mount'].draft).toBe('draft');
 });
-it('re-authenticates an action after switching to Arc and restores its dependencies', async () => {
+it('reuses authentication after switching to Arc and restores its dependencies', async () => {
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
   await ensureArc();
   expect(state.ensureChain).toHaveBeenCalledWith(5042002, expect.objectContaining({ chainId: 5042002 }));
-  expect(state.signIn).toHaveBeenCalledWith(5042002, expect.objectContaining({ address: OWNER }));
+  expect(state.signIn).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
   expect(controls['wizard-mount'].step).toBe(2);
 });
 it('does not restore controls when re-authentication is rejected', async () => {
   state.signIn.mockRejectedValueOnce(new Error('user rejected'));
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
+  state.session = null;
   await expect(ensureArc()).rejects.toThrow('user rejected'); await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
-it('recovers from an unsupported network through connect and sign-in', async () => {
+it('connects on an unsupported network without requesting a signature or network switch', async () => {
   change(OWNER, 1, false); await settle();
   await events.get('wallet-connect')?.(); await settle();
+  expect(state.ensureChain).not.toHaveBeenCalled();
+  expect(state.signIn).not.toHaveBeenCalled();
+  expect(controls['bond-controls-mount'].deps).toBeNull();
+});
+it('recovers from an unsupported network on explicit provider activation without re-signing', async () => {
+  change(OWNER, 1, false); await settle();
+  await events.get('provider-sign-in')?.(); await settle();
   expect(state.ensureChain).toHaveBeenCalledWith(11155111, expect.objectContaining({ chainId: 11155111 }));
+  expect(state.signIn).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
+});
+it('requires an explicit provider sign-in after connecting without a saved session', async () => {
+  change(); await settle();
+  await events.get('wallet-connect')?.(); await settle();
+  expect(state.signIn).not.toHaveBeenCalled();
+  expect(controls['bond-controls-mount'].deps).toBeNull();
+  await events.get('provider-sign-in')?.(); await settle();
+  expect(state.signIn).toHaveBeenCalledOnce();
+  expect(controls['bond-controls-mount'].deps).not.toBeNull();
+});
+it('reports a rejected provider sign-in without reconnecting or enabling actions', async () => {
+  change(); await settle();
+  state.signIn.mockRejectedValueOnce(new Error('user rejected'));
+  await events.get('provider-sign-in')?.(); await settle();
+  expect(app.signInError).toContain('not completed');
+  expect(app.signInPending).toBe(false);
+  expect(state.connectWallet).not.toHaveBeenCalled();
+  expect(controls['bond-controls-mount'].deps).toBeNull();
 });

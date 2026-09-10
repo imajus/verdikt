@@ -107,7 +107,7 @@ function mountProviderConsole(route) {
   const session = getSession();
   const { effectiveProvider, target } = resolveProviderConsole(marketplace.services, route.view, route.provider, account?.address ?? null);
   const viewingOwnPage = Boolean(account && effectiveProvider && account.address.toLowerCase() === effectiveProvider.toLowerCase());
-  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && session.chainId === account.chainId);
+  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId));
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
@@ -178,6 +178,7 @@ onAccountChange((_address, identityChanged) => {
 async function signInConnected() {
   const account = getConnectedAccount();
   if (!account) throw new Error('connect a wallet first');
+  if (getSession()?.address.toLowerCase() === account.address.toLowerCase()) return;
   const config = account.chainId === ARC.chainId ? ARC_CHAIN_CONFIG : SEPOLIA_CHAIN_CONFIG;
   await signIn(account.chainId, {
     address: account.address,
@@ -191,7 +192,7 @@ async function signInConnected() {
 /** @param {typeof ARC_CHAIN_CONFIG | typeof SEPOLIA_CHAIN_CONFIG} config */
 async function ensureSignedChain(config) {
   await ensureChain(config.chainId, config);
-  if (!getSession()) await signInConnected();
+  await signInConnected();
   draw();
   // Restore dependencies suspended by the chain-change event before the
   // pending provider action resumes, preserving its draft and wizard step.
@@ -218,15 +219,28 @@ app.addEventListener('theme-select', (event) => {
 app.addEventListener('wallet-connect', async () => {
   try {
     await connectWallet();
+    draw();
+  } catch (error) {
+    console.error('connection failed:', /** @type {Error} */ (error).message);
+  }
+});
+app.addEventListener('provider-sign-in', async () => {
+  if (app.signInPending) return;
+  app.signInPending = true;
+  app.signInError = null;
+  try {
     const account = getConnectedAccount();
+    const route = readRoute(new URL(location.href));
+    if (!account || (route.provider && route.provider.toLowerCase() !== account.address.toLowerCase())) throw new Error('Connect your provider wallet first.');
     if (account && ![ARC.chainId, SEPOLIA.chainId].includes(account.chainId)) {
       await ensureChain(SEPOLIA.chainId, SEPOLIA_CHAIN_CONFIG);
     }
     await signInConnected();
     draw();
-  } catch (error) {
-    // The only place this surfaces; there is no toast system.
-    console.error('sign-in failed:', /** @type {Error} */ (error).message);
+  } catch {
+    app.signInError = 'Sign-in was not completed. You can try again when you’re ready.';
+  } finally {
+    app.signInPending = false;
   }
 });
 

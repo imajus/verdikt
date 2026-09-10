@@ -1,6 +1,8 @@
 import { LitElement, html, nothing } from 'lit';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { getConnectedAccount } from './wallet.js';
+import { getSession } from './session.js';
+import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { resolveProviderConsole } from './provider.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -143,9 +145,11 @@ const how = () => html`
   <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing seven-day scores remain public on Arc and ENS.</p></section>`;
 
 export class VerdiktApp extends LitElement {
-  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {} };
+  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {}, signInPending: { state: true }, signInError: { state: true } };
   constructor() {
     super();
+    this.signInPending = false;
+    /** @type {string|null} */ this.signInError = null;
     /** @type {Marketplace|null} */ this.marketplace = null;
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
@@ -160,15 +164,21 @@ export class VerdiktApp extends LitElement {
   navigate(view) { this.dispatchEvent(new CustomEvent('view-select', { detail: view })); }
   connect() { this.dispatchEvent(new CustomEvent('wallet-connect')); }
   disconnect() { this.dispatchEvent(new CustomEvent('wallet-disconnect')); }
+  signIn() { this.dispatchEvent(new CustomEvent('provider-sign-in')); }
   /** @param {'light'|'dark'} theme */
   changeTheme(theme) { this.dispatchEvent(new CustomEvent('theme-select', { detail: theme })); }
   /** @param {Listing[]} owned @param {string} provider */
   renderProvider(owned, provider) {
+    const account = getConnectedAccount();
+    const ownPage = account?.address.toLowerCase() === provider.toLowerCase();
+    const supported = account && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId);
+    const signedIn = ownPage && getSession()?.address.toLowerCase() === account?.address.toLowerCase();
     const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
     const target = owned[0] ?? null;
     return html`<header class="masthead"><div>${brand()}<p class="tagline">Provider <code>${provider}</code> · <a href="?">back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
+      ${ownPage && (!signedIn || !supported) ? html`<div class="aside"><p>${signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
       <section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<div class="layout"><section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, false, (slug) => this.select(slug)))}</section><section class="detail">${detailTemplate(target)}</section></div>`}
