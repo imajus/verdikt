@@ -7,7 +7,9 @@ import { createSource } from './source.js';
 import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
 import { savedTheme, saveTheme } from './theme.js';
-import '@awesome.me/webawesome/dist/styles/webawesome.css';
+// Import tokens only. Web Awesome's all-in-one stylesheet also styles every
+// native button, table, and heading, which would override the ledger UI.
+import '@awesome.me/webawesome/dist/styles/themes/default.css';
 import '@awesome.me/webawesome/dist/components/button/button.js';
 import '@awesome.me/webawesome/dist/components/button-group/button-group.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
