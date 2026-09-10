@@ -122,13 +122,30 @@ Live at
 [verdikt-web.denis-perov.workers.dev](https://verdikt-web.denis-perov.workers.dev),
 reading Arc and ENS directly.
 
-Its config is `web/.env.local` (see `web/.env.example`), not the root `.env` —
-Vite reads env files only from `web/`. Unset, the dashboard serves seeded demo
-data and says so in its own header. Two things follow from the browser being
-the RPC client: the values are baked in at build time, so a deployed Worker
-cannot be repointed without rebuilding; and every `VITE_` value is public in
-the shipped bundle, so the endpoint must allow the page's origin by CORS and
-any key in it must be origin-restricted.
+Its local config is `web/.env.local` (see `web/.env.example`), not the root
+`.env` — Vite reads env files only from `web/`. Unset, the dashboard serves
+seeded demo data and says so in its own header.
+
+For Cloudflare Workers Builds, configure these **Build Variables** for both
+Preview and Production deployments in **Workers & Pages → verdikt-web →
+Settings → Builds → Variables & Secrets**:
+
+| Name | Required value |
+|---|---|
+| `VITE_ARC_RPC_URL` | Arc Testnet JSON-RPC endpoint |
+| `VITE_SEPOLIA_RPC_URL` | Ethereum Sepolia JSON-RPC endpoint |
+
+They must be build variables, not Worker runtime Variables & Secrets: Vite
+replaces `import.meta.env.VITE_*` while producing `web/dist`, and the deployed
+assets cannot read runtime bindings afterwards. This is why a preview with
+only Worker variables falls back to demo data. For a monorepo-root build, use
+`pnpm --filter @verdikt/web build`; deploy the resulting assets with Wrangler
+using `web/wrangler.jsonc`.
+
+Two things follow from the browser being the RPC client: the values are baked
+in at build time, so a deployed Worker cannot be repointed without rebuilding;
+and every `VITE_` value is public in the shipped bundle, so the endpoint must
+allow the page's origin by CORS and any key in it must be origin-restricted.
 
 ## Layout
 
