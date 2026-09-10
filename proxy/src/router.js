@@ -183,7 +183,7 @@ export async function handleRequest(request, deps = {}) {
 
   const paymentHeader = request.headers.get('x-payment');
   if (paymentHeader) {
-    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId });
+    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body });
   }
 
   return passthrough({ request, record, upstream, body, doFetch, config });
@@ -308,12 +308,15 @@ function failureDetailHeaders(clauses) {
  *   record: ServiceRecord,
  *   upstream: URL,
  *   paymentHeader: string,
- *   decode: (header: string) => Promise<DecodedPayment>,
+ *   decode: (header: string, options: { accepts: unknown[] }) => Promise<DecodedPayment>,
  *   workflow: WorkflowClient|null,
- *   newRequestId: () => string
+ *   newRequestId: () => string,
+ *   doFetch: typeof fetch,
+ *   config: ProxyConfig,
+ *   body: ArrayBuffer|undefined
  * }} args
  */
-async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId }) {
+async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body }) {
   if (!workflow) {
     return json({
       error: 'verification_unavailable',
@@ -321,10 +324,38 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     }, 503);
   }
 
+  // decodePayment needs the challenge's own `accepts` to know the asset, name
+  // and version behind the EIP-712 domain — the X-PAYMENT header names only
+  // scheme and network (packages/sdk/payment.js). So it is fetched fresh here,
+  // the same request the unpaid leg would have made, with the payment header
+  // stripped so this probe cannot itself settle the payment.
+  const challengeHeaders = forwardRequestHeaders(Object.fromEntries(request.headers));
+  delete challengeHeaders['x-payment'];
+  /** @type {unknown[]} */
+  let accepts;
+  try {
+    const challengeResponse = await doFetch(upstream, {
+      method: request.method,
+      headers: challengeHeaders,
+      body,
+      signal: AbortSignal.timeout(config.upstreamTimeoutMs)
+    });
+    const challengeJson = await challengeResponse.json().catch(() => ({}));
+    accepts = Array.isArray(challengeJson?.accepts) ? challengeJson.accepts : [];
+  } catch (error) {
+    return json(
+      {
+        error: 'challenge_unavailable',
+        detail: `could not fetch the provider's payment challenge to verify against: ${/** @type {Error} */ (error).message}`
+      },
+      502
+    );
+  }
+
   /** @type {DecodedPayment} */
   let payment;
   try {
-    payment = await decode(paymentHeader);
+    payment = await decode(paymentHeader, { accepts });
   } catch (error) {
     // Refused before the workflow is triggered: every refund targets the payer
     // this returns, so a proxy that cannot decode a payment must not verify one.

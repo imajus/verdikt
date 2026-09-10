@@ -21,17 +21,32 @@ const verdict = (overrides = {}) => ({
   ...overrides
 });
 
+const CHALLENGE_ACCEPTS = [{ scheme: 'exact', network: 'eip155:84532', extra: { name: 'USDC', version: '2' } }];
+
 /**
  * @param {object} [options]
  * @param {VerificationResult|Error} [options.result]
  * @param {boolean} [options.noWorkflow]
  * @param {Error} [options.paymentError]
+ * @param {Response|(() => Response|Promise<Response>)} [options.upstream] what the provider answers the
+ *   accepts-probe with. Defaults to a 402 carrying `CHALLENGE_ACCEPTS`, since the verified branch now
+ *   fetches this on every paid call (see 'the accepts wiring' below) — a test that cares only about the
+ *   workflow outcome should not have to know that.
  */
-function harness({ result, noWorkflow = false, paymentError } = {}) {
+function harness({ result, noWorkflow = false, paymentError, upstream } = {}) {
   const verify = vi.fn(async (/** @type {VerificationRequest} */ _request) => {
     if (result instanceof Error) throw result;
     return result ?? verdict();
   });
+  const decodePayment = vi.fn(async () => {
+    if (paymentError) throw paymentError;
+    return { payer: PAYER, amount: 2500n };
+  });
+  const upstreamFetch = vi.fn(async (/** @type {URL|string} */ _url, /** @type {RequestInit} */ _init) =>
+    typeof upstream === 'function'
+      ? upstream()
+      : (upstream ?? new Response(JSON.stringify({ accepts: CHALLENGE_ACCEPTS }), { status: 402 }))
+  );
   const deps = /** @type {ProxyDeps} */ ({
     config,
     resolveServiceRecord: async () => ({
@@ -41,18 +56,12 @@ function harness({ result, noWorkflow = false, paymentError } = {}) {
       sla: SLA_TEXT.honest
     }),
     registry: { getService: async () => ({ provider: '0x03', status: 'ACTIVE', deposit: 10n ** 19n }) },
-    decodePayment: async () => {
-      if (paymentError) throw paymentError;
-      return { payer: PAYER, amount: 2500n };
-    },
+    decodePayment,
     workflow: noWorkflow ? null : { verify },
     newRequestId: () => REQUEST_ID,
-    // Only reached by the one test that sends no X-PAYMENT and falls through
-    // to passthrough; every other test here takes the verified branch, which
-    // never calls it.
-    fetch: async () => new Response('unused', { status: 200 })
+    fetch: /** @type {typeof fetch} */ (/** @type {unknown} */ (upstreamFetch))
   });
-  return { deps, verify };
+  return { deps, verify, decodePayment, upstreamFetch };
 }
 
 /** @param {ProxyDeps} deps */
@@ -90,6 +99,43 @@ describe('the verified branch — the happy path', () => {
     // would have moved to the wrong side of the enclave boundary.
     const packageJson = await import('../package.json', { with: { type: 'json' } });
     expect(Object.keys(packageJson.default.dependencies ?? {})).not.toContain('@verdikt/sla');
+  });
+});
+
+describe('the verified branch — the accepts wiring', () => {
+  // decodePayment refuses without the challenge's own `accepts` array — it is
+  // the only place the EIP-712 domain (asset, name, version) lives, and the
+  // X-PAYMENT header names only scheme and network (packages/sdk/payment.js).
+  // This reproduces a production incident: every real paid call to
+  // weather.verdikt.bond 500'd with `payment_undecodable`, "no accepts
+  // supplied", before ever reaching the workflow trigger.
+  it('fetches the provider’s challenge and hands decodePayment its accepts array', async () => {
+    const { deps, decodePayment, upstreamFetch } = harness();
+    await paidCall(deps);
+
+    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), { accepts: CHALLENGE_ACCEPTS });
+    expect(upstreamFetch).toHaveBeenCalledTimes(1);
+    expect(String(upstreamFetch.mock.calls[0][0])).toBe('https://provider.example/weather/current?lat=52');
+  });
+
+  it('does not forward X-PAYMENT on the accepts probe, so it cannot itself settle the payment', async () => {
+    const { deps, upstreamFetch } = harness();
+    await paidCall(deps);
+
+    const [, init] = upstreamFetch.mock.calls[0];
+    const headers = /** @type {Record<string,string>} */ (init.headers);
+    expect(headers['x-payment']).toBeUndefined();
+  });
+
+  it('surfaces a challenge fetch failure distinctly, rather than as an unrelated decode error', async () => {
+    const { deps } = harness({
+      upstream: () => {
+        throw new Error('connect timed out');
+      }
+    });
+    const response = await paidCall(deps);
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe('challenge_unavailable');
   });
 });
 
