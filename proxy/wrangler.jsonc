@@ -22,9 +22,8 @@
     // This Worker's own public URL, `/internal/verification-callback` —
     // where the enclave pushes a finished verification back to.
     "CRE_CALLBACK_URL": "https://verdikt-proxy.denis-perov.workers.dev/internal/verification-callback",
-
     // Arc's public default RPC has no embedded credential, so it's fine here.
-    "ARC_RPC_URL": "https://rpc.testnet.arc.network",
+    "ARC_RPC_URL": "https://arc-testnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
     // Same Alchemy key `web/.env.local` already bakes into the dashboard's
     // public bundle (CLAUDE.md), so it's no more exposed here than it already
     // is there.

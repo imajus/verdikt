@@ -3,7 +3,13 @@
   // Assets-only Worker: no `main`, the dashboard is a static build with no
   // server-side logic (it reads Arc/ENS straight from the browser via viem).
   // Vite values belong in the build environment, not Worker `vars`: Vite
-  // inlines VITE_* values into dist before this Worker is deployed.
+  // inlines VITE_* values into dist before this Worker is deployed. There is
+  // no `vars` block here for that reason — a Worker `vars` entry would only
+  // reach a runtime this Worker doesn't have. For Cloudflare Workers Builds
+  // (the git-connected CI), set these as Build Variables, for both Preview
+  // and Production (see web/.env.example for what each one does):
+  //   VITE_ARC_RPC_URL
+  //   VITE_SEPOLIA_RPC_URL
   "name": "verdikt-web",
   "compatibility_date": "2026-09-07",
   "assets": {
