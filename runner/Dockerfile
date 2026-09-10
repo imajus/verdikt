@@ -11,10 +11,10 @@ RUN corepack enable
 WORKDIR /app
 
 # --- CRE CLI + bun, for the workflow simulator ---------------------------
-RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip \
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates unzip gpg \
     && curl -sSfL https://cre.chain.link/install.sh | bash \
     && curl -fsSL https://bun.sh/install | bash \
-    && apt-get purge -y curl unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+    && apt-get purge -y curl unzip gpg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 ENV PATH="/root/.bun/bin:/root/.local/bin:${PATH}"
 
 # --- pnpm workspace (the runner package + its workspace deps) ------------
