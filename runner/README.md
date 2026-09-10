@@ -139,6 +139,26 @@ have signed the proxy's trigger JWT) and `RUNNER_CRE_BROADCAST` (defaults
 `false` — set `true` only once you want this host performing real testnet
 writes per verified request).
 
+## Required environment variables
+
+Provide these through the runner's environment or its external Docker
+`--env-file`. The runner passes `CRE_*` variables through to the simulator;
+it does not read `cre/workflows/.env`.
+
+| Variable | Required when | Value |
+| --- | --- | --- |
+| `RUNNER_TRIGGER_ADDRESS` | Always | The public Ethereum address derived from the proxy's `CRE_TRIGGER_PRIVATE_KEY`. The runner rejects all triggers without it. |
+| `CRE_CALLBACK_TOKEN_VAR` | Any trigger includes `callbackUrl` (including the normal proxy verification flow) | The same secret value configured on the proxy as `CRE_CALLBACK_TOKEN`. CRE maps it to the TEE-only `CALLBACK_TOKEN` secret. |
+| `CRE_ETH_PRIVATE_KEY` | `RUNNER_CRE_BROADCAST=true` | A funded Arc Testnet burner key used only by `cre workflow simulate --broadcast`. Do not use a mainnet or application signing key. |
+
+No other variable is required: `RUNNER_PORT`, `RUNNER_JWT_MAX_AGE_SECONDS`,
+`RUNNER_SIMULATOR_URL`, `RUNNER_TRIGGER_ACK_TIMEOUT_MS`,
+`RUNNER_MAX_REQUEST_BODY_BYTES`, `RUNNER_WORKFLOW_DIR`,
+`RUNNER_CRE_TARGET`, `RUNNER_WORKFLOW_NAME`, `RUNNER_CRE_BROADCAST`,
+`RUNNER_SIMULATOR_WARMUP_MS`, and `RUNNER_WORKFLOW_ID` all have defaults.
+The CRE login session is also required to run the CLI, but it is mounted state
+at `/root/.cre`, not an environment variable.
+
 ## Caveats
 
 This section exists because Denis asked for it explicitly — everything below
