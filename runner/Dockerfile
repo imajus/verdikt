@@ -3,9 +3,8 @@
 # cre/workflows is a separate bun island (cre/workflows/README.md) that this
 # image also needs, since it is what actually runs `cre workflow simulate`.
 #
-# NOT TESTED — this environment has no Docker and no `cre` CLI (see
-# runner/README.md "Status of this Dockerfile"). Treat this as a documented
-# best-effort starting point, not a verified build.
+# Validate this image in the target environment before relying on it for
+# verification traffic.
 
 FROM node:22-bookworm-slim AS base
 RUN corepack enable
