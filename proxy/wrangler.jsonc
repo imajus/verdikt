@@ -17,11 +17,11 @@
   "vars": {
     // All three required together, or the paid leg refuses every call rather
     // than relaying one unverified — see CLAUDE.md.
-    "CRE_TRIGGER_URL": "",
-    "CRE_WORKFLOW_ID": "",
+    "CRE_TRIGGER_URL": "https://cre.verdikt.bond/workflows/execute",
+    "CRE_WORKFLOW_ID": "95cc8a72edef7b3e04db4ed0f9f605bd99e8ad00ae8814c86857d3e1002bd067",
     // This Worker's own public URL, `/internal/verification-callback` —
     // where the enclave pushes a finished verification back to.
-    "CRE_CALLBACK_URL": "",
+    "CRE_CALLBACK_URL": "https://verdikt-proxy.denis-perov.workers.dev/internal/verification-callback",
 
     // Arc's public default RPC has no embedded credential, so it's fine here.
     "ARC_RPC_URL": "https://rpc.testnet.arc.network",
