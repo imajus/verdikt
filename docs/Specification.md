@@ -71,6 +71,35 @@ verification layer on operator trust; attestation is what makes handing it over
 acceptable. The proxy relays only — it does not evaluate, retain, or log
 response bodies.
 
+Confidentiality of the response body is therefore *not* the claim, and cannot be:
+the agent paid for that body, so it must reach the agent, and it transits the
+proxy to get there. The claim is that the paid call is executed exactly once and
+judged by tamper-proof, published code. Both halves need a TEE, and neither is
+about secrecy:
+
+- **Single execution of a pay-once call.** An x402 payment settles exactly once,
+  so the enclave's replayed request *is* the call — its response is the only copy
+  of what the agent bought. A non-confidential CRE workflow reaches data-trust by
+  consensus, with multiple DON nodes each executing the capability call and
+  aggregating; pointed at a pay-once POST that settles N times or fails N−1. The
+  TEE runs the handler once in a single enclave, with attestation standing in for
+  consensus-over-data. This holds even for fully public data — it is why "the
+  data isn't secret, so why CRE" does not follow.
+- **Tamper-proof judgment.** The verdict auto-refunds from the provider's bond
+  with no dispute layer (§3), so it must be produced by code neither the provider,
+  Verdikt, nor the agent can bias. The two alternatives each fail one half: a
+  plain multi-node DON is trust-minimized but re-executes the paid call; a single
+  Verdikt-run server executes once but asks the provider to trust our operator not
+  to cook the verdict. Only the TEE delivers both — one paid call, and a verdict
+  provably produced by the published workflow.
+
+What confidentiality remains is narrow and worth stating precisely: the body and
+the `X-PAYMENT` header stay out of the DON consensus observation and off-chain
+(only `outcome`/`payer`/`amount` cross to the DON via `usingTheDons()`), and the
+body is seen by one enclave plus the agent it is relayed to, not by every node
+operator as a plain workflow would expose it. The residual is that the proxy sees
+it in transit — disclosed to providers rather than papered over.
+
 Production CRE enrollment is private-beta; `cre workflow simulate` is self-serve,
 and the ETHOnline2026 Chainlink track accepts CLI simulation as sufficient
 evidence.

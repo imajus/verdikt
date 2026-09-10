@@ -181,9 +181,10 @@ the architecture diagram live in [Specification.md](./Specification.md).
   services via uptime probing and a protocol-compliance checklist
   (structural, not claim verification), and already sells a paid
   verification badge[^4] — evidence that willingness-to-pay for
-  verification exists today. No confidential-compute angle; Verdikt's
-  differentiator is verifying actual response content against a
-  provider-declared SLA, privately, not just probing uptime.
+  verification exists today. No per-call content verification; Verdikt's
+  differentiator is judging actual response content against a
+  provider-declared SLA inside attested, tamper-proof code, not just probing
+  uptime.
 - **x402disputes.com** and **x402r.org** — both address x402 refunds, but
   via manual dispute/arbitration: a party files a dispute with evidence
   (x402disputes.com) or an escrow with a pluggable arbiter resolves a claim
