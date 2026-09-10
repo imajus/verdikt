@@ -23,8 +23,7 @@ const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 const app = /** @type {import('./lit-app.js').VerdiktApp} */ (document.createElement('verdikt-app'));
 root.append(app);
 app.theme = savedTheme();
-// Vite injects the env; `import.meta.env` is not in the shared jsconfig's lib.
-const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
+const env = import.meta.env ?? {};
 const { mode, deps } = createSource(env);
 
 const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: /** @type {string} */ (env.VITE_ARC_RPC_URL), nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };

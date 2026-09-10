@@ -7,6 +7,24 @@
       "skillPath": "plugins/circle/skills/accept-agent-payments/SKILL.md",
       "computedHash": "fc7d2f13accb94134c937657d0ccd3bb408fbbb6db6b8b62ab53ae3c7aa3fb42"
     },
+    "alchemy-api": {
+      "source": "alchemyplatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/alchemy-api/SKILL.md",
+      "computedHash": "e24bf884071456eedfda5ff7c578cbcbadf817226bdf46ca72bfbd342c0e4475"
+    },
+    "alchemy-cli": {
+      "source": "alchemyplatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/alchemy-cli/SKILL.md",
+      "computedHash": "083c8ec2519b4f08b34debd256d16d8227750ef1a5f721e7ea82b7a7d31ced45"
+    },
+    "alchemy-mcp": {
+      "source": "alchemyplatform/skills",
+      "sourceType": "github",
+      "skillPath": "skills/alchemy-mcp/SKILL.md",
+      "computedHash": "2003fcfac633ae94ec660b644a8741bee5591bc1151cf4cd2618925c41339712"
+    },
     "chainlink-cre-skill": {
       "source": "smartcontractkit/chainlink-agent-skills",
       "sourceType": "github",

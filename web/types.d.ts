@@ -1,3 +1,4 @@
+/// <reference types="vite/client" />
 // Ambient types for @verdikt/web. Global by design — no `export` in this file.
 
 interface MarketplaceDeps {
