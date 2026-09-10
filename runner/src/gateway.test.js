@@ -87,6 +87,17 @@ describe('handleTrigger', () => {
     expect(body.error.message).toMatch(/could not reach the simulator/);
   });
 
+  it.each([400, 500])('rejects when the simulator returns HTTP %i', async (upstreamStatus) => {
+    const rawBody = envelope();
+    const authorization = `Bearer ${await mintFor(rawBody)}`;
+    const fetchImpl = vi.fn().mockResolvedValue({ ok: false, status: upstreamStatus, statusText: 'upstream failure' });
+
+    const { status, body } = await handle({ authorization, rawBody, config: baseConfig, fetchImpl });
+
+    expect(status).toBe(502);
+    expect(body.error.message).toContain(`HTTP ${upstreamStatus}`);
+  });
+
   it('rejects an unauthenticated request without forwarding it', async () => {
     const rawBody = envelope();
     const fetchImpl = vi.fn();

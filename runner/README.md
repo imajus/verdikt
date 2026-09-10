@@ -72,22 +72,19 @@ runner's own JWT check (`src/jwt.js`) does the equivalent thing for the
 simulate path, gated on `RUNNER_TRIGGER_ADDRESS` — but see "Known unknowns"
 below on whether `authorizedKeys` is even enforced by `--listen` mode at all.
 
-### 2. Match the callback token
+### 2. Configure the callback token as a CRE secret
 
-`cre/workflows/verify/config.staging.json` ships
-`"callbackToken": "simulate-only-callback-token"` — a placeholder value, used
-by the workflow to authenticate its own POST to `callbackUrl`
-(`Authorization: Bearer <callbackToken>`). The proxy checks that bearer token
+The workflow authenticates its POST to `callbackUrl` with a `CALLBACK_TOKEN`
+secret (`Authorization: Bearer <token>`). The proxy checks that bearer token
 against its own `CRE_CALLBACK_TOKEN` secret
-(`proxy/src/router.js`'s `bearerMatches`). **These two values must be the
-same string, or every simulated verification will run correctly and then get
-silently rejected by the proxy's callback route with 401.** Either set
-`CRE_CALLBACK_TOKEN` (proxy secret) to match the placeholder above for
-testing, or change `config.staging.json`'s `callbackToken` to match the
-proxy's real secret before pointing production traffic at this service. This
-file is not a secret store by convention elsewhere in the repo (it is
-committed), so treat the value that ends up here as a shared token scoped
-only to this stopgap, not a strong credential.
+(`proxy/src/router.js`'s `bearerMatches`). **The values must match, or every
+verification will be rejected by the proxy callback route with 401.**
+
+For local simulation, put that value in the gitignored
+`cre/workflows/.env` as `CRE_CALLBACK_TOKEN_VAR`. For a deployed workflow,
+store `CALLBACK_TOKEN` in the Vault DON. It is deliberately absent from
+`config.staging.json`, which is committed and contains only non-secret runtime
+configuration.
 
 ### 3. `cre login`, once, on the host that will run this service
 

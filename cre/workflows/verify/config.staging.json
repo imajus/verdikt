@@ -2,6 +2,5 @@
   "authorizedKeys": [],
   "arcChainSelectorName": "arc-testnet",
   "registryAddress": "0xe182626142e63ef440421cb0c5e4debeef76e4af",
-  "gasLimit": "500000",
-  "callbackToken": "simulate-only-callback-token"
+  "gasLimit": "500000"
 }

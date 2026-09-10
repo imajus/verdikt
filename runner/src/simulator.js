@@ -61,8 +61,8 @@ export function createSimulatorSupervisor(options) {
     });
     child.stderr?.on('data', (chunk) => onLog(chunk.toString('utf8'), 'stderr'));
 
-    child.on('exit', (code, signal) => {
-      onLog(`cre workflow simulate exited (code=${code}, signal=${signal})`, 'stderr');
+    function restartAfterFailure(message) {
+      onLog(message, 'stderr');
       readyResolve?.();
       if (!stopped && !restarting) {
         restarting = true;
@@ -75,6 +75,15 @@ export function createSimulatorSupervisor(options) {
           if (!stopped) spawnChild();
         }, 3000).unref?.();
       }
+    }
+
+    child.on('exit', (code, signal) => {
+      restartAfterFailure(`cre workflow simulate exited (code=${code}, signal=${signal})`);
+    });
+    // spawn() reports failures such as a missing `cre` executable or invalid
+    // cwd through `error`, often without ever emitting `exit`.
+    child.on('error', (error) => {
+      restartAfterFailure(`could not start cre workflow simulate: ${error.message}`);
     });
   }
 

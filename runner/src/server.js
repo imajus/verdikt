@@ -9,6 +9,7 @@ import { createServer } from 'node:http';
 import { loadConfig } from './config.js';
 import { handleTrigger } from './gateway.js';
 import { createSimulatorSupervisor } from './simulator.js';
+import { readRequestBody } from './request-body.js';
 
 async function main() {
   const config = loadConfig();
@@ -37,11 +38,9 @@ async function main() {
     }
 
     if (req.method === 'POST' && req.url === '/workflows/execute') {
-      /** @type {Buffer[]} */
-      const chunks = [];
-      req.on('data', (chunk) => chunks.push(chunk));
-      req.on('end', async () => {
-        const rawBody = Buffer.concat(chunks).toString('utf8');
+      void (async () => {
+        const rawBody = await readRequestBody(req, res, config.maxRequestBodyBytes);
+        if (rawBody === null) return;
         try {
           const { status, body } = await handleTrigger({
             authorization: req.headers.authorization ?? null,
@@ -55,7 +54,7 @@ async function main() {
           res.writeHead(500, { 'content-type': 'application/json' });
           res.end(JSON.stringify({ jsonrpc: '2.0', id: null, error: { code: -32603, message: 'internal error' } }));
         }
-      });
+      })();
       return;
     }
 

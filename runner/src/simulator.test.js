@@ -128,4 +128,20 @@ describe('createSimulatorSupervisor', () => {
     expect(first.kill).toHaveBeenCalled();
     expect(spawnImpl).toHaveBeenCalledTimes(1);
   });
+
+  it('restarts when spawning cre emits an error', async () => {
+    const first = fakeChild();
+    const second = fakeChild();
+    const spawnImpl = vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(second);
+    const supervisor = createSimulatorSupervisor({
+      workflowDir: '/missing/workflows', workflowName: 'verify', target: 'staging-settings',
+      broadcast: false, warmupMs: 20, spawnImpl
+    });
+
+    supervisor.start();
+    first.emit('error', new Error('ENOENT'));
+    await new Promise((resolve) => setTimeout(resolve, 3100));
+
+    expect(spawnImpl).toHaveBeenCalledTimes(2);
+  }, 5000);
 });

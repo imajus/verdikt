@@ -99,12 +99,22 @@ export async function handleTrigger({ authorization, rawBody, config, fetchImpl 
   }
 
   try {
-    await fetchImpl(config.simulatorUrl, {
+    const response = await fetchImpl(config.simulatorUrl, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ input }),
       signal: AbortSignal.timeout(config.triggerAckTimeoutMs)
     });
+    if (!response.ok) {
+      return {
+        status: 502,
+        body: rpcError(
+          id,
+          JSONRPC_ERROR.UPSTREAM_UNAVAILABLE,
+          `simulator rejected the trigger (HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''})`
+        )
+      };
+    }
     // Whether this resolved because the simulator answered, or because the
     // timeout raced it, treated identically — see the file-header caveat.
   } catch (error) {

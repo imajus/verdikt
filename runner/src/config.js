@@ -16,6 +16,7 @@ function env(source, name) {
  *   jwtMaxAgeSeconds: number,
  *   simulatorUrl: string,
  *   triggerAckTimeoutMs: number,
+ *   maxRequestBodyBytes: number,
  *   workflowDir: string,
  *   workflowTarget: string,
  *   workflowName: string,
@@ -39,6 +40,8 @@ export function loadConfig(source = process.env) {
     jwtMaxAgeSeconds: Number(env(source, 'RUNNER_JWT_MAX_AGE_SECONDS') ?? 300),
     simulatorUrl: env(source, 'RUNNER_SIMULATOR_URL') ?? 'http://127.0.0.1:2000/trigger',
     triggerAckTimeoutMs: Number(env(source, 'RUNNER_TRIGGER_ACK_TIMEOUT_MS') ?? 5000),
+    // Bound unauthenticated input before it is buffered for JWT verification.
+    maxRequestBodyBytes: Number(env(source, 'RUNNER_MAX_REQUEST_BODY_BYTES') ?? 1_048_576),
     workflowDir: env(source, 'RUNNER_WORKFLOW_DIR') ?? '/app/cre/workflows',
     workflowTarget: env(source, 'RUNNER_CRE_TARGET') ?? 'staging-settings',
     workflowName: env(source, 'RUNNER_WORKFLOW_NAME') ?? 'verify',
