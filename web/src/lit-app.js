@@ -1,7 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { getConnectedAccount } from './wallet.js';
-import { getSession } from './session.js';
 import { resolveProviderConsole } from './provider.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -119,8 +118,8 @@ export const detailTemplate = (listing) => {
     </section>`;
 };
 
-/** @param {'marketplace'|'provider'|'how'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(view: string) => void} navigate @param {() => void} connect @param {(theme: 'light'|'dark') => void} changeTheme */
-const nav = (view, mode, theme, account, navigate, connect, changeTheme) => {
+/** @param {'marketplace'|'provider'|'how'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(view: string) => void} navigate @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
+const nav = (view, mode, theme, account, navigate, connect, disconnect, changeTheme) => {
   /** @param {string} target @param {string} label */
   const item = (target, label) => {
     /** @param {Event} event */
@@ -129,7 +128,12 @@ const nav = (view, mode, theme, account, navigate, connect, changeTheme) => {
   };
   /** @param {'light'|'dark'} value @param {string} label */
   const themeButton = (value, label) => html`<wa-button class="theme-button ${theme === value ? 'selected' : ''}" appearance="outlined" size="xs" aria-pressed=${String(theme === value)} @click=${() => changeTheme(value)}>${label}</wa-button>`;
-  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${mode === 'live' ? account ? html`<span class="nav-account" title=${account}>${account.slice(0, 6)}…${account.slice(-4)}</span><wa-button type="button" appearance="outlined" size="s" @click=${connect}>${getSession() ? 'Change wallet' : 'Sign in / change wallet'}</wa-button><wa-button type="button" appearance="plain" size="s" @click=${(/** @type {Event} */ event) => event.target?.dispatchEvent(new CustomEvent('wallet-disconnect', { bubbles: true, composed: true }))}>Disconnect</wa-button>` : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>` : nothing}</div></nav>`;
+  const wallet = mode === 'live'
+    ? account
+      ? html`<details class="wallet-menu"><summary class="nav-account" title=${account} aria-label="Wallet menu for ${account}"><span>${account.slice(0, 6)}…${account.slice(-4)}</span><span aria-hidden="true">⌄</span></summary><div class="wallet-menu-popover"><span class="wallet-menu-address">${account}</span><button type="button" @click=${connect}>Change wallet</button><button type="button" @click=${disconnect}>Disconnect</button></div></details>`
+      : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`
+    : nothing;
+  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
 const how = () => html`
@@ -155,6 +159,7 @@ export class VerdiktApp extends LitElement {
   /** @param {string} view */
   navigate(view) { this.dispatchEvent(new CustomEvent('view-select', { detail: view })); }
   connect() { this.dispatchEvent(new CustomEvent('wallet-connect')); }
+  disconnect() { this.dispatchEvent(new CustomEvent('wallet-disconnect')); }
   /** @param {'light'|'dark'} theme */
   changeTheme(theme) { this.dispatchEvent(new CustomEvent('theme-select', { detail: theme })); }
   /** @param {Listing[]} owned @param {string} provider */
@@ -187,7 +192,7 @@ export class VerdiktApp extends LitElement {
     const account = getConnectedAccount()?.address ?? null;
     const { services, stats } = this.marketplace;
     const body = this.route.view === 'how' ? how() : (() => { const { effectiveProvider, owned } = resolveProviderConsole(services, this.route.view, this.route.provider, account); return effectiveProvider ? this.renderProvider(owned, effectiveProvider) : this.renderMarketplace(stats, services); })();
-    return html`${nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), (theme) => this.changeTheme(theme))}${body}`;
+    return html`${nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme))}${body}`;
   }
 }
 
