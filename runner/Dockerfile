@@ -6,7 +6,9 @@
 # Validate this image in the target environment before relying on it for
 # verification traffic.
 
-FROM node:22-bookworm-slim AS base
+# CRE CLI v1.33 requires glibc >= 2.38; Debian Bookworm provides 2.36, while
+# Trixie provides 2.41.
+FROM node:22-trixie-slim AS base
 RUN corepack enable
 WORKDIR /app
 
