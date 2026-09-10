@@ -126,9 +126,7 @@ Its local config is `web/.env.local` (see `web/.env.example`), not the root
 `.env` — Vite reads env files only from `web/`. Unset, the dashboard serves
 seeded demo data and says so in its own header.
 
-For Cloudflare Workers Builds, configure these **Build Variables** for both
-Preview and Production deployments in **Workers & Pages → verdikt-web →
-Settings → Builds → Variables & Secrets**:
+For Cloudflare Workers Builds, configure these **Build Variables**:
 
 | Name | Required value |
 |---|---|
@@ -141,6 +139,14 @@ assets cannot read runtime bindings afterwards. This is why a preview with
 only Worker variables falls back to demo data. For a monorepo-root build, use
 `pnpm --filter @verdikt/web build`; deploy the resulting assets with Wrangler
 using `web/wrangler.jsonc`.
+
+Cloudflare stores build variables separately for its Production and Preview
+build triggers. Add both values to each trigger that should build the dashboard
+and verify the build log lists their names; `Build Variables: none` means the
+trigger that ran received neither value. The dashboard may not make the trigger
+scope obvious, so use Cloudflare's [Builds API trigger configuration](https://developers.cloudflare.com/workers/ci-cd/builds/api-reference/)
+to inspect or set the exact Production or Preview trigger if its Build Variables
+editor does not affect a retried build.
 
 Two things follow from the browser being the RPC client: the values are baked
 in at build time, so a deployed Worker cannot be repointed without rebuilding;
