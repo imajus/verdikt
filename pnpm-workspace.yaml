@@ -4,6 +4,7 @@ packages:
   - fixtures
   - cre
   - proxy
+  - runner
   - scripts
   - web
 allowBuilds:

@@ -42,13 +42,6 @@ export type Config = {
   /** VerdiktRegistry on Arc — the report receiver. */
   registryAddress: string;
   gasLimit: string;
-  /**
-   * Shared secret presented on the callback. Kept in config rather than in
-   * `secrets.yaml` only because that is not wired yet — it authenticates bytes
-   * that reach a paying agent, so it belongs in the Vault DON before this is
-   * deployed anywhere real.
-   */
-  callbackToken?: string;
 };
 
 /**
@@ -104,6 +97,10 @@ const clauseHash = (id: string | null): Hex =>
 export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayload): string => {
   const config = runtime.config;
   const request = decodeJson(trigger.input) as VerifyRequest;
+  // Callback authentication is a credential, not workflow configuration. Read
+  // it inside the TEE so it is available in simulation from .env and, when
+  // deployed, only from the Vault DON.
+  const callbackToken = request.callbackUrl ? runtime.getSecret({ id: 'CALLBACK_TOKEN' }).result().value : undefined;
 
   const network = getNetwork({ chainFamily: 'evm', chainSelectorName: config.arcChainSelectorName });
   if (!network) throw new Error(`unknown chain selector name: ${config.arcChainSelectorName}`);
@@ -172,7 +169,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   // skip has to happen before a report is built. The payload still comes back:
   // no verdict is not the same as no delivery.
   if (!shouldWriteVerdict(judgement)) {
-    return finish(runtime, request, config, {
+    return finish(runtime, request, callbackToken, {
       ...relay,
       outcome: null,
       mode: judgement.mode,
@@ -212,7 +209,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   // the miss (Tasks.md 4.4); the verdict can be rewritten, the response cannot.
   const wrote = txResult.txStatus === TxStatus.SUCCESS;
 
-  return finish(runtime, request, config, {
+  return finish(runtime, request, callbackToken, {
     ...relay,
     outcome: judgement.outcome,
     mode: judgement.mode,
@@ -238,7 +235,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
 const finish = (
   runtime: TeeRuntime<Config>,
   request: VerifyRequest,
-  config: Config,
+  callbackToken: string | undefined,
   result: Record<string, unknown>
 ): string => {
   const payload = JSON.stringify({ requestId: request.requestId, ...result });
@@ -251,8 +248,8 @@ const finish = (
           body: new TextEncoder().encode(payload),
           multiHeaders: {
             'Content-Type': { values: ['application/json'] },
-            ...(config.callbackToken
-              ? { Authorization: { values: [`Bearer ${config.callbackToken}`] } }
+            ...(callbackToken
+              ? { Authorization: { values: [`Bearer ${callbackToken}`] } }
               : {})
           }
         })
