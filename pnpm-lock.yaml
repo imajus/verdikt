@@ -168,6 +168,12 @@ importers:
         specifier: ^4.129.0
         version: 4.129.0
 
+  runner:
+    dependencies:
+      '@verdikt/sdk':
+        specifier: workspace:*
+        version: link:../packages/sdk
+
   scripts:
     dependencies:
       '@verdikt/fixtures':

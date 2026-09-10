@@ -1,0 +1,14 @@
+{
+  "name": "@verdikt/runner",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Stand-in CRE gateway: bridges the proxy's `workflows.execute` trigger to a long-lived `cre workflow simulate --listen` process, so per-request verification runs for real without production CRE enrollment",
+  "comment": "Never imports @verdikt/sla, same reason as the proxy: this process relays a trigger, it does not judge anything itself.",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "@verdikt/sdk": "workspace:*"
+  }
+}

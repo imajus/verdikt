@@ -22,6 +22,8 @@
     "cre/*.d.ts",
     "proxy/**/*.js",
     "proxy/**/*.d.ts",
+    "runner/**/*.js",
+    "runner/**/*.d.ts",
     "web/src/**/*.js",
     "web/*.d.ts",
     "vitest.config.js"
