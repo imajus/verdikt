@@ -68,6 +68,12 @@ async function main() {
 function draw() {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const route = readRoute(new URL(location.href));
+  // `verdikt-app` is patched asynchronously by Lit. Clear the currently
+  // mounted controls before that patch removes them, otherwise a wallet that
+  // owns no services can retain the prior provider's listing and dependencies.
+  if (route.view === 'provider' && mode === 'live' && !resolveProviderConsole(marketplace.services, route.view, route.provider, getConnectedAccount()?.address ?? null).target) {
+    clearProviderControls();
+  }
   app.mode = mode;
   app.theme = savedTheme();
   app.route = route;
@@ -75,6 +81,13 @@ function draw() {
   if (route.view === 'provider' && mode === 'live') {
     app.updateComplete.then(() => mountProviderConsole(route));
   }
+}
+
+function clearProviderControls() {
+  const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
+  const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
+  slaMount?.clear();
+  bondMount?.clear();
 }
 
 /**
@@ -112,8 +125,15 @@ function mountProviderConsole(route) {
   } else if (wizardMount) {
     wizardMount.message = account ? "Connect as this provider's own address to add a service." : 'Connect a wallet to add a service.';
   }
-  if (!target) return;
   const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
+  const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
+  // Defensive duplicate of the pre-render reset in draw(). It keeps this
+  // invariant true if this mounting sequence is called independently later.
+  if (!target) {
+    slaMount?.clear();
+    bondMount?.clear();
+    return;
+  }
   if (slaMount && sessionMatchesAccount && viewingOwnPage) {
     slaMount.message = '';
     slaMount.listing = target;
@@ -124,7 +144,6 @@ function mountProviderConsole(route) {
   } else if (slaMount) {
     slaMount.message = "Connect as this service's own provider to publish changes.";
   }
-  const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
   if (bondMount && sessionMatchesAccount && viewingOwnPage) {
     bondMount.message = '';
     bondMount.listing = target;

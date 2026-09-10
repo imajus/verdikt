@@ -166,8 +166,9 @@ export class VerdiktApp extends LitElement {
       <section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<div class="layout"><section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, false, (slug) => this.select(slug)))}</section><section class="detail">${detailTemplate(target)}</section></div>`}
-      <section class="editor block"><h3>SLA editor <small>${target?.name ?? ''}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
-      <section class="block"><h3>Bond <small>${target?.name ?? ''}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>`;
+      ${target ? html`
+        <section class="editor block"><h3>SLA editor <small>${target.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
+        <section class="block"><h3>Bond <small>${target.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
   }
   /** @param {PlatformStats} stats @param {Listing[]} services */
   renderMarketplace(stats, services) {

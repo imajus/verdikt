@@ -18,6 +18,19 @@ export class VerdiktBondControls extends LitElement {
     this.message = ''; this.topUp = ''; this.confirmation = ''; this.topUpStatus = ''; this.retireStatus = ''; this.topUpPending = false; this.retirePending = false;
   }
   createRenderRoot() { return this; }
+  // See VerdiktSlaEditor's clear(): a wallet change must never leave this
+  // component able to submit against a service owned by the prior account.
+  clear() {
+    this.listing = null;
+    this.deps = null;
+    this.message = '';
+    this.topUp = '';
+    this.confirmation = '';
+    this.topUpStatus = '';
+    this.retireStatus = '';
+    this.topUpPending = false;
+    this.retirePending = false;
+  }
   /** @param {InputEvent} event */ editTopUp(event) { this.topUp = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   /** @param {InputEvent} event */ editConfirmation(event) { this.confirmation = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   async submitTopUp() {

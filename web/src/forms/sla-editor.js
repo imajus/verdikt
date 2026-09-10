@@ -23,6 +23,17 @@ export class VerdiktSlaEditor extends LitElement {
     this.message = ''; this.draft = ''; this.status = ''; this.pending = false;
   }
   createRenderRoot() { return this; }
+  // The provider view can remain mounted while the connected wallet changes.
+  // Do not leave a previous provider's draft or transaction dependencies
+  // attached to a component that no longer has a selected service.
+  clear() {
+    this.listing = null;
+    this.deps = null;
+    this.message = '';
+    this.draft = '';
+    this.status = '';
+    this.pending = false;
+  }
   /** @param {Map<PropertyKey, unknown>} changed */
   willUpdate(changed) {
     if (changed.has('listing') && this.listing) { this.draft = this.listing.slaRaw ?? ''; this.status = ''; }
