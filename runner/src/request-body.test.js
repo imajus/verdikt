@@ -3,13 +3,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { readRequestBody } from './request-body.js';
 
 function fakeRequest() {
-  const req = new EventEmitter();
+  // The production helper only consumes EventEmitter methods plus resume();
+  // avoid pretending this fixture implements every IncomingMessage field.
+  const req = /** @type {any} */ (new EventEmitter());
   req.resume = vi.fn();
   return req;
 }
 
 function fakeResponse() {
-  return { writeHead: vi.fn(), end: vi.fn() };
+  return /** @type {any} */ ({ writeHead: vi.fn(), end: vi.fn() });
 }
 
 describe('readRequestBody', () => {

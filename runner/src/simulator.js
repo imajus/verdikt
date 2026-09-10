@@ -61,6 +61,7 @@ export function createSimulatorSupervisor(options) {
     });
     child.stderr?.on('data', (chunk) => onLog(chunk.toString('utf8'), 'stderr'));
 
+    /** @param {string} message */
     function restartAfterFailure(message) {
       onLog(message, 'stderr');
       readyResolve?.();
