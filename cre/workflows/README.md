@@ -38,12 +38,13 @@ linked with `file:` plus a bun `overrides` entry.
 | File | What it is |
 |---|---|
 | `project.yaml` | CRE project settings: the Arc and Sepolia RPCs both workflows resolve. |
-| `.env.example` | The CRE CLI's own env file — copy to `.env`. Only `CRE_ETH_PRIVATE_KEY`, and only `link-key`, `deploy` and `simulate --broadcast` need it. |
-| `secrets.yaml` | Empty and unreferenced today. Where provider request credentials go when the enclave needs them (Specification.md §2). |
+| `.env.example` | Optional standalone-CLI environment example. The runner container instead supplies needed values through its own environment. |
+| `secrets.yaml` | Verify workflow secret declarations. `CALLBACK_TOKEN` is sourced from `CRE_CALLBACK_TOKEN_VAR` during runner simulation and from the Vault DON when deployed. |
 
-The CLI reads `.env` from the project root — this directory, the one holding
-`project.yaml` — not from the repo root. The repo-root `.env` is for everything
-else; nothing in the CLI reads it.
+The CLI can read `.env` from the project root, but it also reads normal process
+environment variables. The runner container uses the latter: it passes
+`CRE_CALLBACK_TOKEN_VAR` (and, only for `--broadcast`, `CRE_ETH_PRIVATE_KEY`)
+to the `cre` child, so it does not expect `cre/workflows/.env` to exist.
 
 ## Running them
 

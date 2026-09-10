@@ -105,7 +105,7 @@ session file survives.
 ```bash
 pnpm install
 cp runner/.env.example runner/.env
-# fill in RUNNER_TRIGGER_ADDRESS at minimum
+# fill in RUNNER_TRIGGER_ADDRESS and CRE_CALLBACK_TOKEN_VAR
 node --env-file=runner/.env runner/src/server.js
 ```
 
@@ -116,8 +116,10 @@ absolute path, since the process `cwd`s into it to spawn the simulator).
 
 ```bash
 docker build -f runner/Dockerfile -t verdikt-runner .
+cp runner/.env.example /secure/path/verdikt-runner.env
+# fill the copied file with the runner settings and CRE secrets
 docker run -p 8787:8787 \
-  -e RUNNER_TRIGGER_ADDRESS=0x... \
+  --env-file /secure/path/verdikt-runner.env \
   -v <path-to-your-cre-login-session>:/root/.cre:ro \
   verdikt-runner
 ```
@@ -126,6 +128,8 @@ The `-v` mount is load-bearing — see "Credentials" below for why it can't be
 baked into the image, and why this repo cannot tell you the exact host path
 (it depends on where `cre login` stores its session on your machine, which
 this environment has no way to inspect since `cre` is not installed here).
+The runner's process environment is inherited by `cre workflow simulate`, so
+do **not** create or mount `cre/workflows/.env` for this container.
 
 ## Config reference
 
@@ -246,9 +250,11 @@ runner adds a second instance of the same constraint, not a new kind of one.
   running container via `docker exec`, then keeping the resulting state
   directory mounted) rather than baked into a built image layer.
 - If `RUNNER_CRE_BROADCAST=true` is ever used, `CRE_ETH_PRIVATE_KEY` (a
-  funded testnet key) goes in `cre/workflows/.env`
-  (`cre/workflows/README.md`) — not in `runner/.env`, not in this
-  Dockerfile, and not in any file this repo tracks.
+  funded testnet key) is provisioned as a container environment variable (or
+  in the external `--env-file` shown above). `CRE_CALLBACK_TOKEN_VAR` is
+  provisioned the same way and must equal the proxy's `CRE_CALLBACK_TOKEN`.
+  The runner passes both variables to its CRE child; neither belongs in
+  `cre/workflows/.env`, the Dockerfile, or any tracked file.
 - This service's own JWT verifier (`src/jwt.js`) never sees a private key —
   only a public address (`RUNNER_TRIGGER_ADDRESS`) and signatures to check
   against it.
