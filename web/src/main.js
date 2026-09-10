@@ -4,7 +4,7 @@ import { formatNativeUsdc } from './format.js';
 import { resolveProviderConsole } from './provider.js';
 import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
-import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
+import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, restoreWallet, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
 import { savedTheme, saveTheme } from './theme.js';
 // Import tokens only. Web Awesome's all-in-one stylesheet also styles every
@@ -245,3 +245,6 @@ app.addEventListener('provider-sign-in', async () => {
 });
 
 main();
+if (mode === 'live') {
+  restoreWallet().catch(error => console.warn('wallet restoration failed:', error));
+}

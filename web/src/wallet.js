@@ -35,7 +35,7 @@ async function onboard() {
           blockExplorerUrl: chain.blockExplorers.default.url
         })),
         appMetadata: { name: 'Verdikt', description: 'Verified API marketplace' },
-        connect: { autoConnectLastWallet: false },
+        connect: { autoConnectLastWallet: true },
         accountCenter: { desktop: { enabled: false }, mobile: { enabled: false } }
       });
       subscription = api.state.select('wallets').subscribe(syncWallets);
@@ -81,6 +81,13 @@ export async function connectWallet() {
   syncWallets(await api.connectWallet());
   if (!connected) throw new Error('no wallet selected');
   return connected;
+}
+
+// Initializing Onboard restores its last connected wallet without opening the
+// selection modal. Its wallet subscription reconciles the saved SIWE session
+// with the extension's current account; never authenticate from storage alone.
+export async function restoreWallet() {
+  await onboard();
 }
 
 export async function disconnectWallet() {

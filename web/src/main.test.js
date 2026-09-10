@@ -6,7 +6,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   account: /** @type {any} */ (null), session: /** @type {any} */ (null),
   changed: /** @type {any} */ (null), signIn: vi.fn(), ensureChain: vi.fn(),
-  connectWallet: vi.fn(), disconnectWallet: vi.fn()
+  connectWallet: vi.fn(), disconnectWallet: vi.fn(), restoreWallet: vi.fn()
 }));
 const OWNER = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -16,6 +16,7 @@ vi.mock('./wallet.js', () => ({
   onAccountChange: (/** @type {Function} */ fn) => { state.changed = fn; },
   connectWallet: state.connectWallet,
   disconnectWallet: state.disconnectWallet,
+  restoreWallet: state.restoreWallet,
   ensureChain: state.ensureChain,
   walletClientFor: vi.fn(() => ({}))
 }));
@@ -49,6 +50,7 @@ beforeEach(async () => {
   state.account = { address: OWNER, chainId: 11155111 }; authenticate();
   state.signIn.mockImplementation(async () => authenticate());
   state.connectWallet.mockImplementation(async () => state.account);
+  state.restoreWallet.mockResolvedValue(undefined);
   state.disconnectWallet.mockImplementation(async () => change(''));
   state.ensureChain.mockImplementation(async chainId => change(OWNER, chainId, false));
   controls = Object.fromEntries(['sla-editor-mount', 'bond-controls-mount', 'wizard-mount'].map(id => [id, {
@@ -67,6 +69,11 @@ it('mounts provider actions only for the signed-in owner', () => {
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
   expect(controls['sla-editor-mount'].deps).not.toBeNull();
   expect(controls['wizard-mount'].deps.account).toBe(OWNER);
+});
+it('starts wallet restoration on load without requesting connection or sign-in', () => {
+  expect(state.restoreWallet).toHaveBeenCalledOnce();
+  expect(state.connectWallet).not.toHaveBeenCalled();
+  expect(state.signIn).not.toHaveBeenCalled();
 });
 it('immediately removes stale controls when a different account views an explicit provider URL', async () => {
   change(OTHER);

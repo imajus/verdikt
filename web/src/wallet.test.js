@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, resetWalletStateForTests, walletClientFor } from './wallet.js';
+import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, resetWalletStateForTests, restoreWallet, walletClientFor } from './wallet.js';
 import { getSession } from './session.js';
 
 const mock = vi.hoisted(() => ({ init: vi.fn(), injected: vi.fn(() => ({})) }));
@@ -42,6 +42,27 @@ beforeEach(() => {
 afterEach(() => { resetWalletStateForTests(); vi.unstubAllGlobals(); });
 
 describe('Onboard connection state', () => {
+  it('starts automatic restoration on load and preserves the matching session when Onboard reports the wallet', async () => {
+    signedIn();
+    await restoreWallet();
+    expect(mock.init).toHaveBeenCalledWith(expect.objectContaining({ connect: { autoConnectLastWallet: true } }));
+    expect(api.connectWallet).not.toHaveBeenCalled();
+    // Onboard initially emits no wallets, then restores the extension.
+    const restored = wallets;
+    emit([]);
+    expect(getConnectedAccount()).toBeNull();
+    expect(getSession()?.address).toBe(ADDRESS);
+    emit(restored);
+    expect(getConnectedAccount()?.address).toBe(ADDRESS);
+    expect(getSession()?.address).toBe(ADDRESS);
+  });
+  it('invalidates saved authentication if the restored wallet now exposes another account', async () => {
+    signedIn();
+    await restoreWallet();
+    emit([wallet(OTHER)]);
+    expect(getConnectedAccount()?.address).toBe(OTHER);
+    expect(getSession()).toBeNull();
+  });
   it('opens wallet selection and configures both networks with injected support', async () => {
     expect(await connectWallet()).toEqual({ address: ADDRESS, chainId: ARC.chainId });
     expect(api.connectWallet).toHaveBeenCalledOnce();
