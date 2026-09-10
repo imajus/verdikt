@@ -18,8 +18,8 @@ export class VerdiktBondControls extends LitElement {
     this.message = ''; this.topUp = ''; this.confirmation = ''; this.topUpStatus = ''; this.retireStatus = ''; this.topUpPending = false; this.retirePending = false;
   }
   createRenderRoot() { return this; }
-  /** @param {InputEvent} event */ editTopUp(event) { this.topUp = /** @type {HTMLInputElement} */ (event.currentTarget).value; }
-  /** @param {InputEvent} event */ editConfirmation(event) { this.confirmation = /** @type {HTMLInputElement} */ (event.currentTarget).value; }
+  /** @param {InputEvent} event */ editTopUp(event) { this.topUp = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  /** @param {InputEvent} event */ editConfirmation(event) { this.confirmation = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   async submitTopUp() {
     if (!this.listing || !this.deps) return;
     const amount = parseUsdcToNativeUnits(this.topUp);
@@ -47,12 +47,12 @@ export class VerdiktBondControls extends LitElement {
     if (!this.listing || !this.deps) return nothing;
     const suspended = this.listing.status === 'SUSPENDED';
     const shortfall = this.deps.depositAmount > this.listing.deposit ? this.deps.depositAmount - this.listing.deposit : 0n;
-    return html`<div class="bond-form"><label for="topup-amount">Top up (USDC)</label><input id="topup-amount" type="text" inputmode="decimal" placeholder="0.0" .value=${this.topUp} @input=${this.editTopUp} />
+    return html`<div class="bond-form"><wa-input id="topup-amount" label="Top up (USDC)" inputmode="decimal" placeholder="0.0" .value=${this.topUp} @input=${this.editTopUp}></wa-input>
         ${suspended ? html`<p class="aside warn">Suspended — needs ${this.deps.formatNativeUsdc(shortfall)} more to reinstate (reinstatement requires the bond back at full, not merely above zero).</p>` : nothing}
-        <button type="button" id="topup-send" ?disabled=${this.topUpPending} @click=${this.submitTopUp}>Top up</button>${this.topUpStatus ? html`<p class="form-status">${this.topUpStatus}</p>` : nothing}</div>
+        <wa-button type="button" id="topup-send" ?disabled=${this.topUpPending} ?loading=${this.topUpPending} @click=${this.submitTopUp}>Top up</wa-button>${this.topUpStatus ? html`<p class="form-status">${this.topUpStatus}</p>` : nothing}</div>
       <div class="retire-form"><p class="aside warn">Retiring is permanent: "${this.listing.slug}" can never be registered again, the remaining bond returns to you, and the listing stops taking calls.</p>
-        <label for="retire-confirm">Type "${this.listing.slug}" to confirm</label><input id="retire-confirm" type="text" autocomplete="off" .value=${this.confirmation} @input=${this.editConfirmation} />
-        <button type="button" id="retire-send" ?disabled=${suspended || this.retirePending || this.confirmation !== this.listing.slug} title=${suspended ? 'Reverts while suspended — top up first' : ''} @click=${this.retire}>Retire service</button>${this.retireStatus ? html`<p class="form-status">${this.retireStatus}</p>` : nothing}</div>`;
+        <wa-input id="retire-confirm" label=${`Type "${this.listing.slug}" to confirm`} autocomplete="off" .value=${this.confirmation} @input=${this.editConfirmation}></wa-input>
+        <wa-button type="button" id="retire-send" variant="danger" ?disabled=${suspended || this.retirePending || this.confirmation !== this.listing.slug} ?loading=${this.retirePending} title=${suspended ? 'Reverts while suspended — top up first' : ''} @click=${this.retire}>Retire service</wa-button>${this.retireStatus ? html`<p class="form-status">${this.retireStatus}</p>` : nothing}</div>`;
   }
 }
 

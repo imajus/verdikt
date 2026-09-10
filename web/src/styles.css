@@ -6,10 +6,11 @@
  * everything that came off a chain, so an address never pretends to be prose.
  *
  * Light and dark are both defined explicitly: a comparison surface with a
- * half-themed table is unreadable. */
+ * half-themed table is unreadable. The selected scheme is set on <html> so
+ * native controls and Web Awesome components share the same context. */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --paper: #f6f4ee;
   --paper-2: #edeae2;
   --rule: #d8d3c7;
@@ -28,26 +29,43 @@
   --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
   --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --wa-font-family-body: var(--sans);
+  --wa-font-family-heading: var(--display);
+  --wa-font-family-code: var(--mono);
+  --wa-color-surface-raised: var(--paper-2);
+  --wa-color-surface-default: var(--paper);
+  --wa-color-surface-lowered: var(--paper-2);
+  --wa-color-surface-border: var(--rule);
+  --wa-color-text-normal: var(--ink);
+  --wa-color-text-quiet: var(--muted);
+  --wa-color-text-link: var(--link);
+  --wa-color-focus: var(--ink);
+  --wa-color-brand-fill-loud: var(--ink);
+  --wa-color-brand-border-loud: var(--rule-strong);
+  --wa-color-brand-on-loud: var(--paper);
+  --wa-border-radius-scale: 0.33;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --paper: #141310;
-    --paper-2: #1d1b17;
-    --rule: #2f2c26;
-    --rule-strong: #ece7dc;
-    --ink: #ece7dc;
-    --ink-2: #c5bfb2;
-    --muted: #8f897d;
-    --link: #8fb0ff;
-    --good: #4cc38a;
-    --fair: #e0b040;
-    --poor: #f0705a;
-    --down: #93a3c4;
-    --good-track: #1f3a2c;
-    --fair-track: #3d3218;
-    --poor-track: #45231d;
-  }
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+:root[data-theme="dark"] {
+  --paper: #141310;
+  --paper-2: #1d1b17;
+  --rule: #2f2c26;
+  --rule-strong: #ece7dc;
+  --ink: #ece7dc;
+  --ink-2: #c5bfb2;
+  --muted: #8f897d;
+  --link: #8fb0ff;
+  --good: #4cc38a;
+  --fair: #e0b040;
+  --poor: #f0705a;
+  --down: #93a3c4;
+  --good-track: #1f3a2c;
+  --fair-track: #3d3218;
+  --poor-track: #45231d;
 }
 
 * { box-sizing: border-box; }
@@ -119,6 +137,9 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .nav-external a { color: var(--muted); display: inline-flex; }
 .nav-external a:hover { color: var(--ink); }
 .nav-account { font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); }
+.theme-control { margin-right: 2px; }
+.theme-button::part(button) { min-width: 48px; }
+.theme-button.selected::part(button) { background: var(--ink); border-color: var(--rule-strong); color: var(--paper); }
 
 /* Standing notes: a rule down the left, no fill. A tinted box is how every
    generated dashboard says "notice"; a marginal rule is how a ledger does. */
@@ -283,6 +304,11 @@ footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule);
 
 .editor { margin-top: 44px; }
 verdikt-wizard, verdikt-sla-editor, verdikt-bond-controls { display: block; }
+wa-input, wa-textarea { display: block; margin: 14px 0 10px; }
+wa-textarea::part(textarea), wa-input::part(input) { font-family: var(--mono); }
+wa-textarea::part(textarea) { line-height: 1.55; }
+wa-button { margin-top: 10px; }
+wa-button::part(button) { font-family: var(--sans); }
 textarea {
   width: 100%; min-height: 240px; padding: 12px 14px; margin: 0;
   background: var(--paper-2); color: var(--ink);
@@ -318,7 +344,6 @@ label { display: block; font-size: 13px; color: var(--muted); margin-top: 14px; 
 
 .form-status { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; font-family: var(--mono); overflow-wrap: anywhere; }
 .bond-form, .retire-form { max-width: 420px; margin-top: 16px; }
-.retire-form button { background: var(--poor); border-color: var(--poor); }
 
 /* Onboarding wizard ------------------------------------------------------------ */
 

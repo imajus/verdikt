@@ -27,7 +27,7 @@ export class VerdiktSlaEditor extends LitElement {
   willUpdate(changed) {
     if (changed.has('listing') && this.listing) { this.draft = this.listing.slaRaw ?? ''; this.status = ''; }
   }
-  /** @param {InputEvent} event */ edit(event) { this.draft = /** @type {HTMLTextAreaElement} */ (event.currentTarget).value; }
+  /** @param {InputEvent} event */ edit(event) { this.draft = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   async publish() {
     if (!this.listing || !this.deps || !describeSlaValidity(this.draft).ok) return;
     this.pending = true; this.status = 'Sending…';
@@ -42,9 +42,9 @@ export class VerdiktSlaEditor extends LitElement {
     if (this.message) return html`<p class="aside">${this.message}</p>`;
     if (!this.listing || !this.deps) return nothing;
     const validity = describeSlaValidity(this.draft);
-    return html`<textarea id="sla-draft" spellcheck="false" rows="14" .value=${this.draft} @input=${this.edit}></textarea>
+    return html`<wa-textarea id="sla-draft" label="SLA (JSON)" spellcheck="false" rows="14" resize="vertical" .value=${this.draft} @input=${this.edit}></wa-textarea>
       <p class="check ${validity.ok ? 'ok' : 'bad'}" id="sla-check"><i class="dot"></i>${validity.message}</p>
-      <button type="button" id="sla-publish" ?disabled=${!validity.ok || this.pending} @click=${this.publish}>Publish SLA</button>
+      <wa-button type="button" id="sla-publish" ?disabled=${!validity.ok || this.pending} ?loading=${this.pending} @click=${this.publish}>Publish SLA</wa-button>
       ${this.status ? html`<p class="form-status" id="sla-status">${this.status}</p>` : nothing}`;
   }
 }

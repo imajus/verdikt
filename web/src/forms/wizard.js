@@ -22,7 +22,7 @@ export class VerdiktWizard extends LitElement {
   createRenderRoot() { return this; }
   /** @param {InputEvent} event */
   editSlug(event) {
-    this.slug = /** @type {HTMLInputElement} */ (event.currentTarget).value.trim();
+    this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
     this.checkAvailability();
   }
   async checkAvailability() {
@@ -60,8 +60,8 @@ export class VerdiktWizard extends LitElement {
     } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
     finally { this.pending = false; }
   }
-  /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {HTMLInputElement} */ (event.currentTarget).value; }
-  /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {HTMLTextAreaElement} */ (event.currentTarget).value; }
+  /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   get slaValidity() {
     if (!this.sla.trim()) return { ok: false, message: 'Paste an SLA to validate it.' };
     try { const parsed = parseSla(this.sla.trim()); return { ok: true, message: `Valid. ${parsed.clauses.length} clause(s).` }; }
@@ -81,13 +81,13 @@ export class VerdiktWizard extends LitElement {
     finally { this.pending = false; }
   }
   renderStep() {
-    if (this.step === 1) return html`<label for="wizard-slug">Slug</label><input id="wizard-slug" type="text" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug} />
-      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}<button type="button" id="wizard-claim" ?disabled=${!this.available || this.pending} @click=${this.claim}>Claim on Sepolia</button>`;
-    if (this.step === 2) return html`<p class="aside">Registering "${this.slug}" for ${/** @type {NonNullable<typeof this.deps>} */ (this.deps).formatNativeUsdc(/** @type {NonNullable<typeof this.deps>} */ (this.deps).depositAmount)}.</p><button type="button" id="wizard-register" ?disabled=${this.pending} @click=${this.register}>Register on Arc</button>`;
+    if (this.step === 1) return html`<wa-input id="wizard-slug" label="Slug" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug}></wa-input>
+      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}<wa-button type="button" id="wizard-claim" ?disabled=${!this.available || this.pending} ?loading=${this.pending} @click=${this.claim}>Claim on Sepolia</wa-button>`;
+    if (this.step === 2) return html`<p class="aside">Registering "${this.slug}" for ${/** @type {NonNullable<typeof this.deps>} */ (this.deps).formatNativeUsdc(/** @type {NonNullable<typeof this.deps>} */ (this.deps).depositAmount)}.</p><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.register}>Register on Arc</wa-button>`;
     const validity = this.slaValidity;
-    return html`<label for="wizard-url">Endpoint URL</label><input id="wizard-url" type="text" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl} />
-      <label for="wizard-sla">SLA (JSON)</label><textarea id="wizard-sla" spellcheck="false" rows="10" .value=${this.sla} @input=${this.editSla}></textarea>
-      <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p><button type="button" id="wizard-publish" ?disabled=${this.pending || !validity.ok || !/^https?:\/\//.test(this.url.trim())} @click=${this.publish}>Publish &amp; finish</button>`;
+    return html`<wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>
+      <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
+      <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p><wa-button type="button" id="wizard-publish" ?disabled=${this.pending || !validity.ok || !/^https?:\/\//.test(this.url.trim())} ?loading=${this.pending} @click=${this.publish}>Publish &amp; finish</wa-button>`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;

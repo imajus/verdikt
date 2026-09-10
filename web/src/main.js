@@ -6,6 +6,12 @@ import { readRoute, withService, withView } from './router.js';
 import { createSource } from './source.js';
 import { connectWallet, ensureChain, getConnectedAccount, onAccountChange, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
+import { savedTheme, saveTheme } from './theme.js';
+import '@awesome.me/webawesome/dist/styles/webawesome.css';
+import '@awesome.me/webawesome/dist/components/button/button.js';
+import '@awesome.me/webawesome/dist/components/button-group/button-group.js';
+import '@awesome.me/webawesome/dist/components/input/input.js';
+import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './forms/sla-editor.js';
 import './forms/bond.js';
 import './forms/wizard.js';
@@ -14,6 +20,7 @@ import './lit-app.js';
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 const app = /** @type {import('./lit-app.js').VerdiktApp} */ (document.createElement('verdikt-app'));
 root.append(app);
+app.theme = savedTheme();
 // Vite injects the env; `import.meta.env` is not in the shared jsconfig's lib.
 const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
 const { mode, deps } = createSource(env);
@@ -60,6 +67,7 @@ function draw() {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const route = readRoute(new URL(location.href));
   app.mode = mode;
+  app.theme = savedTheme();
   app.route = route;
   app.marketplace = marketplace;
   if (route.view === 'provider' && mode === 'live') {
@@ -140,6 +148,10 @@ app.addEventListener('view-select', (event) => {
   const view = /** @type {CustomEvent<string>} */ (event).detail;
   history.replaceState(null, '', withView(new URL(location.href), view));
   draw();
+});
+app.addEventListener('theme-select', (event) => {
+  saveTheme(/** @type {CustomEvent<'light'|'dark'>} */ (event).detail);
+  app.theme = savedTheme();
 });
 app.addEventListener('wallet-connect', async () => {
   try {
