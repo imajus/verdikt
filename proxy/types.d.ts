@@ -76,6 +76,16 @@ interface VerificationRequest {
    * name — a v2 provider like Alchemy does not recognize `x-payment` at all.
    */
   paymentHeaderName: string;
+  /**
+   * The agent's request body, hex-encoded, or null for GET/HEAD and empty
+   * bodies. The enclave's replay IS the paid call (Spike B, CRE-3), so a body
+   * that does not travel with it never reaches the provider at all — a POST
+   * service then sees an empty request and answers 4xx, which the status-only
+   * fallback correctly declines to score as the provider's fault.
+   */
+  bodyHex: string | null;
+  /** Replayed alongside the body: a provider handed bytes with no content type cannot parse them. */
+  contentType: string | null;
   payer: string;
   /** Decimal string: JSON has no bigint, and the amount is in USDC minor units. */
   paidAmountMinorUnits: string;

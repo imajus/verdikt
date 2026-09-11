@@ -16,7 +16,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkOwnership, decodeChallenge } from './challenge.js';
 import { discover, toListing } from './discovery.js';
-import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
+import { assertRelayableUrl, bodyToHex, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
 
@@ -375,6 +375,8 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
       method: request.method,
       paymentHeader: paymentHeader.value,
       paymentHeaderName: paymentHeader.name,
+      bodyHex: bodyToHex(body),
+      contentType: request.headers.get('content-type'),
       payer: payment.payer,
       paidAmountMinorUnits: payment.amount.toString(),
       sla: record.sla
