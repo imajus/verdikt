@@ -64,7 +64,17 @@ export function parseRoute(url) {
   if (staticView) return { view: /** @type {any} */ (staticView), slug: null, address: null, canonicalPath: path };
 
   const service = path.match(/^\/services\/([^/]+)$/);
-  if (service) return { view: 'service', slug: decodeURIComponent(service[1]), address: null, canonicalPath: path };
+  if (service) {
+    try {
+      const slug = decodeURIComponent(service[1]);
+      return { view: 'service', slug, address: null, canonicalPath: path };
+    } catch (e) {
+      if (e instanceof URIError) {
+        return { view: 'marketplace', slug: null, address: null, canonicalPath: MARKETPLACE_PATH };
+      }
+      throw e;
+    }
+  }
 
   if (path === PROVIDER_PATH) return { view: 'provider', slug: null, address: null, canonicalPath: path };
   const provider = path.match(/^\/provider\/(.+)$/);

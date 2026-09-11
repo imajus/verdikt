@@ -33,6 +33,10 @@ describe('parseRoute', () => {
     expect(route.view).toBe('marketplace');
     expect(route.canonicalPath).toBe(MARKETPLACE_PATH);
   });
+  it('falls back to the marketplace for a malformed percent-encoded service path', () => {
+    const route = parseRoute(new URL('https://verdikt.example/services/%E0%A4%A'));
+    expect(route).toEqual({ view: 'marketplace', slug: null, address: null, canonicalPath: MARKETPLACE_PATH });
+  });
   it('rewrites the legacy ?provider= deep link forward, regardless of path', () => {
     const route = parseRoute(new URL('https://verdikt.example/?provider=0xAaAa'));
     expect(route).toEqual({ view: 'provider', slug: null, address: '0xAaAa', canonicalPath: '/provider/0xAaAa' });
