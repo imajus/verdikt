@@ -175,6 +175,7 @@ describe('the trigger request', () => {
     providerUrl: 'https://provider.example/x',
     method: 'GET',
     paymentHeader: 'abc',
+    paymentHeaderName: 'x-payment',
     payer: '0x1111111111111111111111111111111111111111',
     paidAmountMinorUnits: '2500',
     sla: null

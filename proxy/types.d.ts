@@ -69,6 +69,13 @@ interface VerificationRequest {
   providerUrl: string;
   method: string;
   paymentHeader: string;
+  /**
+   * Which header name `paymentHeader` actually arrived as (`payment-signature`
+   * in x402 v2, `x-payment` in v1). The enclave replays the payment to the
+   * provider itself (Specification.md §2) and must send it back under the same
+   * name — a v2 provider like Alchemy does not recognize `x-payment` at all.
+   */
+  paymentHeaderName: string;
   payer: string;
   /** Decimal string: JSON has no bigint, and the amount is in USDC minor units. */
   paidAmountMinorUnits: string;

@@ -12,12 +12,19 @@
 
 import { describe, expect, it } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
+import { DECODED_PAYMENT } from '@verdikt/fixtures';
 import { decodePayment, decodePaymentEnvelope, isPaymentDecodingImplemented } from './payment.js';
 
 const PAYER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
 const OTHER = privateKeyToAccount('0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba');
 
-/** The Base Sepolia `exact`/eip3009 option, verbatim from the captured 402. */
+/**
+ * The Base Sepolia `exact`/eip3009 option, verbatim from the captured 402
+ * except for `extra.assetTransferMethod` — real challenges don't reliably
+ * carry it (Alchemy's own eip3009 option doesn't), so `verifyExact` no
+ * longer reads it; keeping it here would test a field production code
+ * ignores.
+ */
 const EIP3009_OPTION = {
   scheme: 'exact',
   network: 'eip155:84532',
@@ -25,7 +32,7 @@ const EIP3009_OPTION = {
   asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
   payTo: '0x5c33f23555313256b71f2b0a7ea1938425516505',
   maxTimeoutSeconds: 300,
-  extra: { name: 'USDC', version: '2', assetTransferMethod: 'eip3009' }
+  extra: { name: 'USDC', version: '2' }
 };
 
 /** The Arc `GatewayWalletBatched` option, verbatim from the same challenge. */
@@ -39,6 +46,34 @@ const GATEWAY_OPTION = {
 };
 
 const ACCEPTS = [EIP3009_OPTION, GATEWAY_OPTION];
+
+/**
+ * Two options sharing both scheme and network — mirrors a real challenge
+ * captured live from Alchemy (2026-09-11), which offers a plain token
+ * transfer and GatewayWalletBatched as `exact`/`eip155:8453` side by side.
+ * `matchingOption`'s scheme+network match alone cannot tell these apart.
+ */
+const COLLIDING_EIP3009_OPTION = {
+  scheme: 'exact',
+  network: 'eip155:8453',
+  amount: '1000',
+  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  payTo: '0x0573c4dA7fC31E944e5FF959fEf3b42199C308B2',
+  maxTimeoutSeconds: 300,
+  extra: { name: 'USD Coin', version: '2' }
+};
+
+const COLLIDING_GATEWAY_OPTION = {
+  scheme: 'exact',
+  network: 'eip155:8453',
+  amount: '1000',
+  asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+  payTo: '0x0573c4dA7fC31E944e5FF959fEf3b42199C308B2',
+  maxTimeoutSeconds: 605400,
+  extra: { name: 'GatewayWalletBatched', version: '1', verifyingContract: '0x77777777dcc4d5a8b6e418fd04d8997ef11000ee' }
+};
+
+const COLLIDING_ACCEPTS = [COLLIDING_EIP3009_OPTION, COLLIDING_GATEWAY_OPTION];
 
 const AUTHORIZATION = {
   from: PAYER.address,
@@ -70,6 +105,13 @@ const TYPES = {
  * exposed the bug: `decodePaymentEnvelope` only looked at the top level, so
  * every v2 payment refused with "envelope is missing scheme or network" even
  * once the proxy's header-name detection was fixed.
+ *
+ * @param {{
+ *   account?: import('viem/accounts').PrivateKeyAccount,
+ *   authorization?: Record<string, string>,
+ *   option?: { scheme: string, network: string, asset: string, payTo: string, extra: Record<string, any> },
+ *   shape?: 'v1' | 'v2'
+ * }} [args]
  */
 async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, option = EIP3009_OPTION, shape = 'v1' } = {}) {
   const signature = await account.signTypedData({
@@ -77,7 +119,12 @@ async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, op
       name: option.extra.name,
       version: option.extra.version,
       chainId: Number(option.network.split(':')[1]),
-      verifyingContract: /** @type {`0x${string}`} */ (option.asset)
+      // GatewayWalletBatched signs against the Gateway contract named in
+      // `extra.verifyingContract`, standing in for the token; a plain
+      // transfer has no such field and signs against the token itself —
+      // exactly `verifyExact`'s own fallback, mirrored here so this ever
+      // produces a signature that verifier will actually accept.
+      verifyingContract: /** @type {`0x${string}`} */ (option.extra.verifyingContract ?? option.asset)
     },
     types: TYPES,
     primaryType: 'TransferWithAuthorization',
@@ -93,7 +140,11 @@ async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, op
   const payload = { signature, authorization };
   return shape === 'v2'
     ? Buffer.from(
-        JSON.stringify({ x402Version: 2, payload, accepted: { scheme: option.scheme, network: option.network } })
+        JSON.stringify({
+          x402Version: 2,
+          payload,
+          accepted: { scheme: option.scheme, network: option.network, extra: option.extra }
+        })
       ).toString('base64')
     : header({ scheme: option.scheme, network: option.network, payload });
 }
@@ -105,9 +156,10 @@ const header = (envelope) => Buffer.from(JSON.stringify({ x402Version: 2, ...env
  * Re-encode a signed header with one authorization field edited.
  *
  * @param {Record<string, string>} patch
+ * @param {{ option?: any }} [options]
  */
-async function tamperedWith(patch) {
-  const original = JSON.parse(Buffer.from(await signedHeader(), 'base64').toString('utf8'));
+async function tamperedWith(patch, { option } = {}) {
+  const original = JSON.parse(Buffer.from(await signedHeader(option ? { option } : {}), 'base64').toString('utf8'));
   original.payload.authorization = { ...original.payload.authorization, ...patch };
   return Buffer.from(JSON.stringify(original)).toString('base64');
 }
@@ -231,23 +283,118 @@ describe('decodePayment — the eip3009 path, which is an open standard end to e
   });
 });
 
-describe('decodePayment — the scheme Spike C still cannot answer', () => {
-  const gatewayHeader = header({
-    scheme: 'exact',
-    network: 'eip155:5042002',
-    payload: { somethingCircleShaped: true }
+describe('decodePayment — GatewayWalletBatched (issue #41)', () => {
+  // Until 2026-09-11 this scheme refused unconditionally: its payload shape
+  // was believed unpublished. A real captured `PAYMENT-SIGNATURE` header
+  // settled that — it is the same ERC-3009 `TransferWithAuthorization`
+  // `eip3009` already verifies, signed against the Gateway contract instead
+  // of the token. These tests sign one the same way and check it recovers.
+  it('recovers the payer and amount from a real GatewayWalletBatched signature', async () => {
+    const payment = await decodePayment(await signedHeader({ option: GATEWAY_OPTION }), { accepts: ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(payment.amount).toBe(2500n);
   });
 
-  it('refuses GatewayWalletBatched rather than guessing its payload', async () => {
-    await expect(decodePayment(gatewayHeader, { accepts: ACCEPTS })).rejects.toThrow(/GatewayWalletBatched/);
+  it('signs against the Gateway contract, not the token — a token-domain signature does not verify', async () => {
+    // Same authorization, but signed as if it were a plain transfer (domain
+    // verifyingContract = option.asset, the token) rather than against the
+    // Gateway contract GATEWAY_OPTION actually names. Proves the domain
+    // selection is load-bearing, not incidental.
+    const wrongDomainOption = { ...GATEWAY_OPTION, extra: { ...GATEWAY_OPTION.extra, verifyingContract: undefined } };
+    const signed = await signedHeader({ option: wrongDomainOption });
+    await expect(decodePayment(signed, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
+  });
+
+  it('rejects a GatewayWalletBatched header whose payer was swapped for someone else', async () => {
+    const forged = await tamperedWith({ from: OTHER.address }, { option: GATEWAY_OPTION });
+    await expect(decodePayment(forged, { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
+  });
+
+  it('refuses a GatewayWalletBatched header with no real signature, rather than guessing its payload', async () => {
+    const placeholderHeader = header({
+      scheme: 'exact',
+      network: 'eip155:5042002',
+      payload: { somethingCircleShaped: true }
+    });
+    await expect(decodePayment(placeholderHeader, { accepts: ACCEPTS })).rejects.toThrow(
+      /payload needs a signature and an authorization/
+    );
+  });
+});
+
+describe('decodePayment — disambiguating options that share scheme and network', () => {
+  // Alchemy's real challenge offers a plain token transfer and
+  // GatewayWalletBatched as `exact`/`eip155:8453` side by side — scheme and
+  // network alone cannot tell `matchingOption` which one a header answers.
+  const COLLIDING_AUTHORIZATION = { ...AUTHORIZATION, to: COLLIDING_EIP3009_OPTION.payTo };
+
+  it('picks the GatewayWalletBatched option when the v2 envelope names it', async () => {
+    const signed = await signedHeader({
+      option: COLLIDING_GATEWAY_OPTION,
+      authorization: COLLIDING_AUTHORIZATION,
+      shape: 'v2'
+    });
+    const payment = await decodePayment(signed, { accepts: COLLIDING_ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+  });
+
+  it('picks the plain-transfer option when the v2 envelope names it', async () => {
+    const signed = await signedHeader({
+      option: COLLIDING_EIP3009_OPTION,
+      authorization: COLLIDING_AUTHORIZATION,
+      shape: 'v2'
+    });
+    const payment = await decodePayment(signed, { accepts: COLLIDING_ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+  });
+
+  it('refuses rather than guessing when nothing in the envelope names which option', async () => {
+    // A v1 header carries no `accepted`, so there is no name to disambiguate
+    // with — and picking either colliding option silently would mean
+    // verifying against a domain the payer may never have signed.
+    const v1Header = await signedHeader({ option: COLLIDING_EIP3009_OPTION, shape: 'v1' });
+    await expect(decodePayment(v1Header, { accepts: COLLIDING_ACCEPTS })).rejects.toThrow(
+      /2 ambiguous exact options on eip155:8453/
+    );
+  });
+
+  it('refuses when the envelope names an option that matches none of the candidates', async () => {
+    const mismatched = Buffer.from(
+      JSON.stringify({
+        x402Version: 2,
+        payload: { a: 1 },
+        accepted: { scheme: 'exact', network: 'eip155:8453', extra: { name: 'Some Other Option' } }
+      })
+    ).toString('base64');
+    await expect(decodePayment(mismatched, { accepts: COLLIDING_ACCEPTS })).rejects.toThrow(/ambiguous/);
+  });
+});
+
+describe('decodePayment — schemes it does not implement', () => {
+  it('refuses a scheme it has never seen, even with a matching accepts entry', async () => {
+    const weirdOption = { scheme: 'weird', network: 'eip155:1', payTo: '0x1', extra: { name: 'Weird' } };
+    const weirdHeader = header({ scheme: 'weird', network: 'eip155:1', payload: { anything: true } });
+    await expect(decodePayment(weirdHeader, { accepts: [weirdOption] })).rejects.toThrow(/cannot verify a "weird" payment/);
   });
 
   it('refuses when no challenge was supplied, since nothing can be verified without one', async () => {
     await expect(decodePayment(await signedHeader())).rejects.toThrow(/no accepts supplied/);
   });
+});
 
-  it('still answers with the fixture under an explicit opt-in, for development', async () => {
-    const payment = await decodePayment(gatewayHeader, { accepts: ACCEPTS, allowStub: true });
-    expect(payment.amount).toBe(2500n);
+describe('decodePayment — the development stub', () => {
+  // allowStub is an unconditional override, checked before any real
+  // verification is attempted — including a header that would otherwise
+  // verify for real, which is what proves it is not merely a fallback for
+  // schemes decodePayment cannot yet reach.
+  it('short-circuits to the fixture under an explicit opt-in, without attempting real verification', async () => {
+    const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS, allowStub: true });
+    expect(payment).toEqual({ payer: DECODED_PAYMENT.payer, amount: DECODED_PAYMENT.amount });
+  });
+
+  it('answers even a placeholder GatewayWalletBatched header under the opt-in', async () => {
+    const placeholderHeader = header({ scheme: 'exact', network: 'eip155:5042002', payload: { somethingCircleShaped: true } });
+    const payment = await decodePayment(placeholderHeader, { accepts: ACCEPTS, allowStub: true });
+    expect(payment.amount).toBe(DECODED_PAYMENT.amount);
   });
 });

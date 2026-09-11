@@ -56,6 +56,14 @@ type VerifyRequest = {
   providerUrl: string;
   method?: string;
   paymentHeader: string;
+  /**
+   * Which header name `paymentHeader` actually arrived as (`payment-signature`
+   * in x402 v2, `x-payment` in v1). This replay sends it back to the provider
+   * under the same name — a v2 provider does not recognize the other one, so
+   * hardcoding either name here would make the enclave's own call fail exactly
+   * the way the proxy's detection used to.
+   */
+  paymentHeaderName: string;
   payer: Address;
   paidAmountMinorUnits: string;
   /** The `sla` ENS text record, verbatim, or null if it could not be read. */
@@ -116,7 +124,10 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
       .sendRequest(runtime, {
         url: request.providerUrl,
         method: request.method ?? 'GET',
-        multiHeaders: { 'X-PAYMENT': { values: [request.paymentHeader] } }
+        // Replayed under whichever header name the agent actually sent
+        // (`payment-signature` in x402 v2, `x-payment` in v1) — a v2
+        // provider like Alchemy does not recognize the other name at all.
+        multiHeaders: { [request.paymentHeaderName]: { values: [request.paymentHeader] } }
       })
       .result();
     status = Number(response.statusCode);

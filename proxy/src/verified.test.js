@@ -187,6 +187,26 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
     await paidCall(deps);
     expect(decodePayment).toHaveBeenCalledWith(expect.any(String), { accepts: CHALLENGE_ACCEPTS });
   });
+
+  // The enclave replays the payment to the provider itself (workflow.ts) and
+  // must send it back under the same header name it arrived as — a v2
+  // provider like Alchemy does not recognize `x-payment` at all. So the name,
+  // not just the value, has to reach the workflow trigger.
+  it('tells the workflow which header name the payment actually arrived as', async () => {
+    const { deps, verify } = harness();
+    await call(deps, {
+      method: 'GET',
+      url: '/weather/current?lat=52',
+      headers: { host: 'proxy.local', 'payment-signature': 'v2-header' }
+    });
+    expect(verify.mock.lastCall?.[0]).toMatchObject({ paymentHeader: 'v2-header', paymentHeaderName: 'payment-signature' });
+  });
+
+  it('names `x-payment` when that is the header a v1 caller actually sent', async () => {
+    const { deps, verify } = harness();
+    await paidCall(deps);
+    expect(verify.mock.lastCall?.[0]).toMatchObject({ paymentHeaderName: 'x-payment' });
+  });
 });
 
 describe('the verified branch — outcomes that are not PASS', () => {
