@@ -6,7 +6,7 @@
 
 import { html } from 'lit';
 
-export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider\'s bond.';
+export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
 
 /** @param {(path: string) => void} go @param {string} path */
 const follow = (go, path) => (/** @type {Event} */ event) => { event.preventDefault(); go(path); };
