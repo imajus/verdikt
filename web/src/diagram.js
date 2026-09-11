@@ -13,11 +13,16 @@
 //
 // This is a custom element rather than a template function for one reason: the
 // page's single authored motion lives here. The flow lines trace themselves
-// once when the figure scrolls into view, which needs a lifecycle hook and an
+// once when the figure scrolls into view, each block coming up to full ink as
+// the line reaching it lands, which needs a lifecycle hook and an
 // IntersectionObserver. Nothing is hidden to achieve it — the paths render
-// fully drawn, and `.drawing` is added only at the moment the animation starts,
-// so a reader with no JavaScript, or with reduced motion asked for, sees the
-// finished figure instead of an empty frame.
+// fully drawn and every block at full opacity, and `.drawing` is added only at
+// the moment the animation starts, so a reader with no JavaScript, or with
+// reduced motion asked for, sees the finished figure instead of an empty frame.
+//
+// A block is a `<g class="dg-stage">` carrying its own `--r` reveal delay; the
+// grouping is what the fade needs, since a block is a frame, a logo and three
+// or four labels that have to come up together. Timings live in styles.css.
 
 import { LitElement, html } from 'lit';
 
@@ -47,56 +52,67 @@ const wide = () => html`
       </marker>
     </defs>
 
-    <text class="dg-band dg-sepolia" x="0" y="20">ETHEREUM SEPOLIA · ENS</text>
-    <text class="dg-cap dg-sepolia" x="204" y="20">&lt;slug&gt;.verdikt.eth</text>
-    <rect class="dg-box dg-sepolia" x="204" y="28" width="440" height="64"></rect>
-    <line class="dg-div dg-sepolia" x1="424" y1="28" x2="424" y2="92"></line>
-    <use class="dg-logo dg-sepolia" href="#lg-ens" x="216" y="41" width="13" height="13"></use>
-    <text class="dg-key" x="235" y="52">sla · url · address</text>
-    <text class="dg-sub" x="216" y="72">the provider writes these</text>
-    <text class="dg-key" x="436" y="52">conformance · availability</text>
-    <text class="dg-sub" x="436" y="72">only the CRE signer can</text>
+    <g class="dg-stage" style="--r:5066ms">
+      <text class="dg-band dg-sepolia" x="0" y="20">ETHEREUM SEPOLIA · ENS</text>
+      <text class="dg-cap dg-sepolia" x="204" y="20">&lt;slug&gt;.verdikt.eth</text>
+      <rect class="dg-box dg-sepolia" x="204" y="28" width="440" height="64"></rect>
+      <line class="dg-div dg-sepolia" x1="424" y1="28" x2="424" y2="92"></line>
+      <use class="dg-logo dg-sepolia" href="#lg-ens" x="216" y="41" width="13" height="13"></use>
+      <text class="dg-key" x="235" y="52">sla · url · address</text>
+      <text class="dg-sub" x="216" y="72">the provider writes these</text>
+      <text class="dg-key" x="436" y="52">conformance · availability</text>
+      <text class="dg-sub" x="436" y="72">only the CRE signer can</text>
+    </g>
 
-    <rect class="dg-bound dg-cre" x="422" y="150" width="228" height="90"></rect>
-    <text class="dg-band end dg-cre" x="640" y="236.5">ENCLAVE BOUNDARY</text>
+    <g class="dg-stage" style="--r:1900ms">
+      <rect class="dg-bound dg-cre" x="422" y="150" width="228" height="90"></rect>
+      <text class="dg-band end dg-cre" x="640" y="236.5">ENCLAVE BOUNDARY</text>
+      <rect class="dg-box dg-cre" x="428" y="164" width="216" height="62"></rect>
+      <use class="dg-logo dg-cre" href="#lg-cre" x="440" y="177" width="13" height="13"></use>
+      <text class="dg-title" x="459" y="188">CRE confidential workflow</text>
+      <text class="dg-sub" x="440" y="206">replays the payment, in a TEE</text>
+    </g>
 
-    <rect class="dg-box" x="0" y="164" width="136" height="62"></rect>
-    <use class="dg-logo" href="#lg-agent" x="12" y="177" width="13" height="13"></use>
-    <text class="dg-title" x="31" y="188">paying agent</text>
-    <text class="dg-sub" x="12" y="206">signs its own x402</text>
+    <g class="dg-stage" style="--r:0ms">
+      <rect class="dg-box" x="0" y="164" width="136" height="62"></rect>
+      <use class="dg-logo" href="#lg-agent" x="12" y="177" width="13" height="13"></use>
+      <text class="dg-title" x="31" y="188">paying agent</text>
+      <text class="dg-sub" x="12" y="206">signs its own x402</text>
+    </g>
 
-    <rect class="dg-box dg-verdikt" x="192" y="164" width="176" height="62"></rect>
-    <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="204" y="177" width="13" height="13"></use>
-    <text class="dg-title" x="223" y="188">proxy</text>
-    <text class="dg-key sm dg-verdikt" x="204" y="206">&lt;slug&gt;.verdikt.bond</text>
+    <g class="dg-stage" style="--r:900ms">
+      <rect class="dg-box dg-verdikt" x="192" y="164" width="176" height="62"></rect>
+      <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="204" y="177" width="13" height="13"></use>
+      <text class="dg-title" x="223" y="188">proxy</text>
+      <text class="dg-key sm dg-verdikt" x="204" y="206">&lt;slug&gt;.verdikt.bond</text>
+    </g>
 
-    <rect class="dg-box dg-cre" x="428" y="164" width="216" height="62"></rect>
-    <use class="dg-logo dg-cre" href="#lg-cre" x="440" y="177" width="13" height="13"></use>
-    <text class="dg-title" x="459" y="188">CRE confidential workflow</text>
-    <text class="dg-sub" x="440" y="206">replays the payment, in a TEE</text>
+    <g class="dg-stage" style="--r:2900ms">
+      <rect class="dg-box" x="708" y="164" width="144" height="62"></rect>
+      <use class="dg-logo" href="#lg-x402" x="720" y="177" width="13" height="13"></use>
+      <text class="dg-title" x="739" y="188">provider</text>
+      <text class="dg-key sm" x="720" y="206">x402 endpoint</text>
+    </g>
 
-    <rect class="dg-box" x="708" y="164" width="144" height="62"></rect>
-    <use class="dg-logo" href="#lg-x402" x="720" y="177" width="13" height="13"></use>
-    <text class="dg-title" x="739" y="188">provider</text>
-    <text class="dg-key sm" x="720" y="206">x402 endpoint</text>
-
-    <text class="dg-band dg-arc" x="0" y="288">ARC TESTNET</text>
-    <text class="dg-cap dg-arc" x="192" y="288">VerdiktRegistry</text>
-    <rect class="dg-box dg-arc" x="192" y="296" width="468" height="62"></rect>
-    <line class="dg-div dg-arc" x1="424" y1="296" x2="424" y2="358"></line>
-    <use class="dg-logo dg-arc" href="#lg-arc" x="204" y="309" width="13" height="13"></use>
-    <text class="dg-title" x="223" y="320">the verdict ledger</text>
-    <text class="dg-sub" x="204" y="340"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
-    <text class="dg-key" x="436" y="320">bond and owed[payer]</text>
-    <text class="dg-sub" x="436" y="340">refund ≤ min(fixed, paid, bond)</text>
+    <g class="dg-stage" style="--r:3900ms">
+      <text class="dg-band dg-arc" x="0" y="288">ARC TESTNET</text>
+      <text class="dg-cap dg-arc" x="192" y="288">VerdiktRegistry</text>
+      <rect class="dg-box dg-arc" x="192" y="296" width="468" height="62"></rect>
+      <line class="dg-div dg-arc" x1="424" y1="296" x2="424" y2="358"></line>
+      <use class="dg-logo dg-arc" href="#lg-arc" x="204" y="309" width="13" height="13"></use>
+      <text class="dg-title" x="223" y="320">the verdict ledger</text>
+      <text class="dg-sub" x="204" y="340"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
+      <text class="dg-key" x="436" y="320">bond and owed[payer]</text>
+      <text class="dg-sub" x="436" y="340">refund ≤ min(fixed, paid, bond)</text>
+    </g>
 
     <path class="dg-flow" style="--d:0ms" pathLength="1" marker-end="url(#dgw-tip)" d="M136,195 H186"></path>
     <text class="dg-note mid" x="164" y="183">pays</text>
 
-    <path class="dg-flow" style="--d:500ms" pathLength="1" marker-end="url(#dgw-tip)" d="M368,195 H424"></path>
+    <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M368,195 H424"></path>
     <text class="dg-note mid" x="398" y="183">replays</text>
 
-    <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M644,187 H702"></path>
+    <path class="dg-flow" style="--d:2000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M644,187 H702"></path>
     <text class="dg-note mid" x="676" y="175">calls</text>
     <path class="dg-read" pathLength="1" marker-end="url(#dgw-tip-quiet)" d="M702,205 H648"></path>
     <text class="dg-note mid" x="676" y="221">response</text>
@@ -108,11 +124,11 @@ const wide = () => html`
     <path class="dg-read dg-sepolia" marker-end="url(#dgw-tip-quiet)" d="M540,150 V98"></path>
     <text class="dg-note" x="550" y="118">reads the sla</text>
 
-    <path class="dg-flow dg-arc" style="--d:1500ms" pathLength="1" marker-end="url(#dgw-tip)" d="M540,240 V290"></path>
+    <path class="dg-flow dg-arc" style="--d:3000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M540,240 V290"></path>
     <text class="dg-note end" x="530" y="262">setVerdict</text>
     <text class="dg-note end" x="530" y="276"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan></text>
 
-    <path class="dg-flow dg-arc" style="--d:2000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M192,326 H68 V232"></path>
+    <path class="dg-flow dg-arc" style="--d:4000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M192,326 H68 V232"></path>
     <text class="dg-note" x="78" y="252">owed[payer]</text>
     <text class="dg-note" x="78" y="266">the agent calls withdraw()</text>
 
@@ -134,56 +150,68 @@ const tall = () => html`
       </marker>
     </defs>
 
-    <rect class="dg-box" x="44" y="8" width="304" height="64"></rect>
-    <use class="dg-logo" href="#lg-agent" x="56" y="22" width="15" height="15"></use>
-    <text class="dg-title" x="77" y="34">paying agent</text>
-    <text class="dg-sub" x="56" y="54">signs its own x402 payment</text>
+    <g class="dg-stage" style="--r:0ms">
+      <rect class="dg-box" x="44" y="8" width="304" height="64"></rect>
+      <use class="dg-logo" href="#lg-agent" x="56" y="22" width="15" height="15"></use>
+      <text class="dg-title" x="77" y="34">paying agent</text>
+      <text class="dg-sub" x="56" y="54">signs its own x402 payment</text>
+    </g>
 
     <path class="dg-flow" style="--d:0ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,72 V118"></path>
     <text class="dg-note" x="206" y="100">pays</text>
 
-    <rect class="dg-box dg-verdikt" x="44" y="124" width="304" height="64"></rect>
-    <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="56" y="138" width="15" height="15"></use>
-    <text class="dg-key sm dg-verdikt" x="77" y="150">proxy · &lt;slug&gt;.verdikt.bond</text>
-    <text class="dg-sub" x="56" y="170">checks payTo against ENS</text>
+    <g class="dg-stage" style="--r:900ms">
+      <rect class="dg-box dg-verdikt" x="44" y="124" width="304" height="64"></rect>
+      <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="56" y="138" width="15" height="15"></use>
+      <text class="dg-key sm dg-verdikt" x="77" y="150">proxy · &lt;slug&gt;.verdikt.bond</text>
+      <text class="dg-sub" x="56" y="170">checks payTo against ENS</text>
+    </g>
 
-    <path class="dg-flow" style="--d:500ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,188 V232"></path>
+    <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,188 V232"></path>
     <text class="dg-note" x="206" y="214">replayed in a TEE</text>
 
-    <rect class="dg-bound dg-cre" x="34" y="238" width="314" height="92"></rect>
-    <rect class="dg-box dg-cre" x="44" y="248" width="304" height="72"></rect>
-    <use class="dg-logo dg-cre" href="#lg-cre" x="56" y="260" width="15" height="15"></use>
-    <text class="dg-title" x="77" y="272">CRE confidential workflow</text>
-    <text class="dg-sub" x="56" y="292">replays the payment in a TEE</text>
-    <text class="dg-sub" x="56" y="308">evaluates it against the sla</text>
+    <g class="dg-stage" style="--r:1900ms">
+      <rect class="dg-bound dg-cre" x="34" y="238" width="314" height="92"></rect>
+      <rect class="dg-box dg-cre" x="44" y="248" width="304" height="72"></rect>
+      <use class="dg-logo dg-cre" href="#lg-cre" x="56" y="260" width="15" height="15"></use>
+      <text class="dg-title" x="77" y="272">CRE confidential workflow</text>
+      <text class="dg-sub" x="56" y="292">replays the payment in a TEE</text>
+      <text class="dg-sub" x="56" y="308">evaluates it against the sla</text>
+    </g>
 
-    <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,330 V366"></path>
+    <path class="dg-flow" style="--d:2000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,330 V366"></path>
     <text class="dg-note" x="206" y="354">calls the endpoint</text>
 
-    <rect class="dg-box" x="44" y="372" width="304" height="64"></rect>
-    <use class="dg-logo" href="#lg-x402" x="56" y="386" width="15" height="15"></use>
-    <text class="dg-title" x="77" y="398">provider’s x402 endpoint</text>
-    <text class="dg-sub" x="56" y="418">the body never leaves it</text>
+    <g class="dg-stage" style="--r:2900ms">
+      <rect class="dg-box" x="44" y="372" width="304" height="64"></rect>
+      <use class="dg-logo" href="#lg-x402" x="56" y="386" width="15" height="15"></use>
+      <text class="dg-title" x="77" y="398">provider’s x402 endpoint</text>
+      <text class="dg-sub" x="56" y="418">the body never leaves it</text>
+    </g>
 
-    <path class="dg-flow dg-arc" style="--d:1500ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,436 V482"></path>
+    <path class="dg-flow dg-arc" style="--d:3000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,436 V482"></path>
     <text class="dg-note" x="206" y="462">writes the verdict</text>
 
-    <rect class="dg-box dg-arc" x="44" y="488" width="304" height="80"></rect>
-    <use class="dg-logo dg-arc" href="#lg-arc" x="56" y="500" width="15" height="15"></use>
-    <text class="dg-cap dg-arc" x="77" y="512">VerdiktRegistry on Arc</text>
-    <text class="dg-sub" x="56" y="532"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
-    <text class="dg-sub" x="56" y="550">refund ≤ min(fixed, paid, bond)</text>
+    <g class="dg-stage" style="--r:3900ms">
+      <rect class="dg-box dg-arc" x="44" y="488" width="304" height="80"></rect>
+      <use class="dg-logo dg-arc" href="#lg-arc" x="56" y="500" width="15" height="15"></use>
+      <text class="dg-cap dg-arc" x="77" y="512">VerdiktRegistry on Arc</text>
+      <text class="dg-sub" x="56" y="532"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
+      <text class="dg-sub" x="56" y="550">refund ≤ min(fixed, paid, bond)</text>
+    </g>
 
-    <path class="dg-flow dg-arc" style="--d:2000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M44,528 H24 V38 H38"></path>
+    <path class="dg-flow dg-arc" style="--d:4000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M44,528 H24 V38 H38"></path>
     <text class="dg-note mid" transform="rotate(-90 18 300)" x="18" y="300">owed[payer] · withdraw()</text>
 
     <path class="dg-read dg-sepolia" marker-end="url(#dgt-tip-quiet)" d="M196,568 V618"></path>
     <text class="dg-note" x="206" y="598">hourly aggregate</text>
 
-    <rect class="dg-box dg-sepolia" x="44" y="624" width="304" height="60"></rect>
-    <use class="dg-logo dg-sepolia" href="#lg-ens" x="56" y="638" width="15" height="15"></use>
-    <text class="dg-key sm dg-sepolia" x="77" y="650">conformance · availability on ENS</text>
-    <text class="dg-sub" x="56" y="670">trailing 1 day, hourly</text>
+    <g class="dg-stage" style="--r:5066ms">
+      <rect class="dg-box dg-sepolia" x="44" y="624" width="304" height="60"></rect>
+      <use class="dg-logo dg-sepolia" href="#lg-ens" x="56" y="638" width="15" height="15"></use>
+      <text class="dg-key sm dg-sepolia" x="77" y="650">conformance · availability on ENS</text>
+      <text class="dg-sub" x="56" y="670">trailing 1 day, hourly</text>
+    </g>
   </svg>`;
 
 // Partner marks, each taken from its owner's own artwork and normalised into a

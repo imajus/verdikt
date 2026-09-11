@@ -575,18 +575,28 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    renders finished, and `.drawing` only arrives at the instant the animation
    starts, so no JavaScript or reduced motion means the completed drawing. */
 /* Trace duration, the per-line --d delays (in the markup) and the reads'
-   fade-in are all the original timing at 0.3x speed (i.e. ÷0.3), scaled
+   fade-in are all the original timing at 0.15x speed (i.e. ÷0.15), scaled
    together so the sequence still reads as one continuous draw rather than a
-   quick flash followed by a long wait. */
+   quick flash followed by a long wait.
+
+   Each block is held back at a fifth of its ink until the line that reaches it
+   arrives, so the figure lights up in the order a call actually travels. The
+   trace easing is a hard out-expo — a line is visually at its arrowhead about a
+   fifth of the way through its duration — so a block's --r is its line's --d
+   plus ~900ms, not plus the whole 5066. The two blocks nothing draws into (the
+   agent, which starts the call; ENS, which is only ever read) take the two ends
+   of the sequence. */
 @media (prefers-reduced-motion: no-preference) {
   .diagram.drawing .dg-flow {
     stroke-dasharray: 1; stroke-dashoffset: 1;
-    animation: dg-trace 2533ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
+    animation: dg-trace 5066ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
   }
-  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 1733ms ease-out 2533ms both; }
+  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 3466ms ease-out 5066ms both; }
+  .diagram.drawing .dg-stage { opacity: 0.2; animation: dg-settle 700ms ease-out var(--r, 0ms) both; }
 }
 @keyframes dg-trace { to { stroke-dashoffset: 0; } }
 @keyframes dg-surface { to { opacity: 1; } }
+@keyframes dg-settle { to { opacity: 1; } }
 
 .figure-source { margin: 16px 0 0; font-size: 14.5px; color: var(--muted); max-width: 70ch; }
 .figure-source a { color: var(--link); }
