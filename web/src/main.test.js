@@ -63,6 +63,8 @@ beforeEach(async () => {
   app = { querySelector: (/** @type {string} */ selector) => controls[selector.slice(1)], updateComplete: Promise.resolve(), addEventListener: (/** @type {string} */ name, /** @type {Function} */ fn) => events.set(name, fn) };
   vi.stubGlobal('document', { getElementById: () => ({ append: vi.fn() }), createElement: () => app });
   vi.stubGlobal('location', new URL(`https://verdikt.example/?provider=${OWNER}`));
+  vi.stubGlobal('history', { replaceState: vi.fn(), pushState: vi.fn() });
+  vi.stubGlobal('window', { addEventListener: vi.fn() });
   await import('./main.js'); await settle();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -139,4 +141,13 @@ it('reports a rejected provider sign-in without reconnecting or enabling actions
   expect(app.signInPending).toBe(false);
   expect(state.connectWallet).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).toBeNull();
+});
+it('navigates to the provider console after an explicit wallet connect', async () => {
+  await events.get('wallet-connect')?.(); await settle();
+  expect(history.pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+});
+it('does not navigate to the provider console on a silent wallet restoration', async () => {
+  change(OTHER);
+  await settle();
+  expect(history.pushState).not.toHaveBeenCalled();
 });
