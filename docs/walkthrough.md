@@ -11,8 +11,11 @@ order, with the commands and the numbers to expect.
 **`weather` and `weather-lite` were deregistered on 2026-09-11**, after this
 walkthrough and its evidence were captured. Steps 1–7 below are an accurate
 record of what happened and every number is still readable from the chain —
-but re-running step 6 or 7 today shows both services `DEREGISTERED` with a
-zero bond, not the bonded state described here. Recording a fresh video needs
+`getService` reports both `DEREGISTERED` with a zero bond, and `getVerdict`
+still returns every verdict below. But the two surfaces that show a *live
+listing* now show nothing: step 6's marketplace is empty, and step 7 scores
+neither service. A retired service is delisted (Specification.md §3), so
+both the dashboard and the aggregate drop it. Recording a fresh video needs
 both slugs re-registered first.
 
 ## What is deployed

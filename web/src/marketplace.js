@@ -81,6 +81,23 @@ export async function loadMarketplace({ registry, resolve }) {
   return { services: listings, stats: platformStats(listings, verdicts, refunds) };
 }
 
+/**
+ * Whether a listing belongs on the marketplace at all.
+ *
+ * `deregister` delists (Specification.md §3): the bond is returned, the proxy
+ * answers `service_not_active` to any call, and the slug can never be
+ * registered again. Keeping such a row on the marketplace advertises a route
+ * that cannot be taken — and since deregistering on Arc leaves the ENS records
+ * standing, its published scores would still rank it under `byReputation`.
+ *
+ * The listing is filtered, not the data: `loadMarketplace` still returns every
+ * service, because a retired one keeps a verdict history on Arc and its own
+ * page has to stay reachable by slug.
+ *
+ * @param {Listing} listing
+ */
+export const isListed = (listing) => listing.status !== 'DEREGISTERED';
+
 /** @param {string|null} raw */
 function parseSlaOrNull(raw) {
   if (!raw) return null;
@@ -105,7 +122,10 @@ function platformStats(listings, verdicts, refunds) {
   for (const verdict of verdicts) breakdown[verdict.outcome] += 1;
 
   return {
-    services: listings.length,
+    // The same set the marketplace lists, so "N services · X active" adds up.
+    // Verdicts and refunds are not filtered: they happened, and a retired
+    // service's history stays part of the platform's record.
+    services: listings.filter(isListed).length,
     active: listings.filter((listing) => listing.status === 'ACTIVE').length,
     suspended: listings.filter((listing) => listing.status === 'SUSPENDED').length,
     bonded: listings.reduce((total, listing) => total + listing.deposit, 0n),
