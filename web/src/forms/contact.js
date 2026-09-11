@@ -96,7 +96,7 @@ export class VerdiktContact extends LitElement {
             .value=${this.message}
             @input=${this.editMessage}></textarea>
         </div>
-        <wa-button type="submit" ?disabled=${this.pending} ?loading=${this.pending}>Send</wa-button>
+        <wa-button type="submit" variant="brand" ?disabled=${this.pending} ?loading=${this.pending}>Send</wa-button>
         ${this.error
           ? html`<p class="form-error" id="contact-error" role="alert">${this.error}</p>`
           : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
