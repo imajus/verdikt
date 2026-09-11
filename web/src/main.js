@@ -93,9 +93,12 @@ function draw() {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   // `verdikt-app` is patched asynchronously by Lit. Clear the currently
   // mounted controls before that patch removes them, otherwise a wallet that
-  // owns no services can retain the prior provider's listing and dependencies.
-  if (route.view === 'provider' && mode === 'live' && !resolveProviderConsole(marketplace.services, route.view, route.address, getConnectedAccount()?.address ?? null).target) {
-    clearProviderControls(false);
+  // owns no services — or one looking at somebody else's console, where the
+  // controls are not rendered at all — can retain the prior provider's
+  // listing and dependencies.
+  if (route.view === 'provider' && mode === 'live') {
+    const { canWrite, target } = providerAuthorization(marketplace, route);
+    if (!canWrite || !target) clearProviderControls(false);
   }
   app.marketplace = marketplace;
   if (route.view === 'provider' && mode === 'live') {
@@ -119,20 +122,34 @@ function clearProviderControls(reset = true) {
 }
 
 /**
+ * Whether the connected wallet may write on the console currently on screen,
+ * and which listing its controls act on. This is the mount-side half of
+ * `canWrite` in lit-app.js's renderProvider — the two conditions must agree,
+ * or a section renders without a mount behind it (a dead control) or a mount
+ * appears with no section around it (an invisible one).
+ * @param {Marketplace} marketplace
+ * @param {ReturnType<typeof parseRoute>} route
+ */
+function providerAuthorization(marketplace, route) {
+  const account = getConnectedAccount();
+  const session = getSession();
+  const { target } = resolveProviderConsole(marketplace.services, route.address);
+  const viewingOwnPage = Boolean(account && route.address && account.address.toLowerCase() === route.address.toLowerCase());
+  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId));
+  return { account, target, canWrite: viewingOwnPage && sessionMatchesAccount };
+}
+
+/**
  * @param {ReturnType<typeof parseRoute>} route
  */
 function mountProviderConsole(route) {
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
-  const account = getConnectedAccount();
-  const session = getSession();
-  const { effectiveProvider, target } = resolveProviderConsole(marketplace.services, route.view, route.address, account?.address ?? null);
-  const viewingOwnPage = Boolean(account && effectiveProvider && account.address.toLowerCase() === effectiveProvider.toLowerCase());
-  const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId));
+  const { account, target, canWrite } = providerAuthorization(marketplace, route);
   // Set in main() before draw() is ever called in live mode — see the guard
   // in main() above. Not null here.
   const depositAmount = /** @type {bigint} */ (depositAmountCache);
   const wizardMount = /** @type {import('./forms/wizard.js').VerdiktWizard|null} */ (app.querySelector('#wizard-mount'));
-  if (wizardMount && account && sessionMatchesAccount && viewingOwnPage) {
+  if (wizardMount && account && canWrite) {
     if (SEPOLIA.subnameRegistrar) {
       wizardMount.message = '';
       wizardMount.deps = {
@@ -148,11 +165,12 @@ function mountProviderConsole(route) {
         onDone: () => main()
       };
     } else {
+      // A build-configuration fact, not an authorization one: this renders on
+      // a page whose owner is signed in and may otherwise write.
       wizardMount.message = 'Service onboarding needs the subname registrar deployed — not yet live on this build.';
     }
   } else if (wizardMount) {
     wizardMount.deps = null;
-    wizardMount.message = viewingOwnPage ? 'Sign in with this wallet to add a service.' : account ? "Connect as this provider's own address to add a service." : 'Connect a wallet to add a service.';
   }
   const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
   const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
@@ -163,7 +181,7 @@ function mountProviderConsole(route) {
     bondMount?.clear();
     return;
   }
-  if (slaMount && sessionMatchesAccount && viewingOwnPage) {
+  if (slaMount && canWrite) {
     slaMount.message = '';
     slaMount.listing = target;
     slaMount.deps = {
@@ -172,9 +190,8 @@ function mountProviderConsole(route) {
     };
   } else if (slaMount) {
     slaMount.deps = null;
-    slaMount.message = viewingOwnPage ? 'Sign in with this wallet to publish changes.' : "Connect as this service's own provider to publish changes.";
   }
-  if (bondMount && sessionMatchesAccount && viewingOwnPage) {
+  if (bondMount && canWrite) {
     bondMount.message = '';
     bondMount.listing = target;
     bondMount.deps = {
@@ -186,7 +203,6 @@ function mountProviderConsole(route) {
     };
   } else if (bondMount) {
     bondMount.deps = null;
-    bondMount.message = viewingOwnPage ? 'Sign in with this wallet to manage its bond.' : "Connect as this service's own provider to manage its bond.";
   }
 }
 

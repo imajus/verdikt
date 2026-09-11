@@ -32,7 +32,7 @@ export const pageHead = (title, description, aside = nothing) => html`
 // survives a dead RPC.
 /** @param {'live'|'demo'} mode @param {string|null} account @param {string|null} rejected @param {() => void} connect @param {(path: string) => void} go */
 export const providerPrompt = (mode, account, rejected, connect, go) => html`
-  ${pageHead('Provider', 'A provider console is a public page: one address’s services, bonds and verdicts, addressed by that address.')}
+  ${pageHead('Provider', 'A provider console is a public page: one address’s services, bonds and verdicts, keyed by the address in its URL.')}
   ${rejected ? html`<p class="aside warn"><code>${rejected}</code> is not a wallet address.</p>` : nothing}
   <section class="block">
     ${account

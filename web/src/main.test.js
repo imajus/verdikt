@@ -162,6 +162,15 @@ it('does not push a redundant history entry when reconnecting the same provider 
   await events.get('wallet-connect')?.(); await settle();
   expect(pushState).not.toHaveBeenCalled();
 });
+// /provider selects no provider, so there is nothing for the controls to act
+// on — not even for the wallet that would own the console one path segment
+// later. The connected account never stands in for a missing address.
+it('mounts nothing on the address-less provider path, signed in or not', async () => {
+  vi.stubGlobal('location', new URL('https://verdikt.example/provider'));
+  events.get('navigate')?.({ detail: '/provider' });
+  await settle();
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
 it('does not navigate to the provider console on a silent wallet restoration', async () => {
   change(OTHER);
   await settle();

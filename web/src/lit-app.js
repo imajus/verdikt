@@ -5,7 +5,7 @@ import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
-import { TAGLINE, legalFooter, pageHead, privacy, terms } from './pages.js';
+import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
 import { amount, landing } from './landing.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -146,7 +146,11 @@ const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) =
         </wa-dropdown>`
       : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`
     : nothing;
-  return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(PROVIDER_PATH, 'Provider', 'provider') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
+  // Points at the connected address's own console when there is one — the
+  // bare path renders a prompt, not somebody's data, so leaving it static
+  // would cost a connected provider a second click for nothing.
+  const providerPath = account ? providerUrl(account) : PROVIDER_PATH;
+  return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
 /** @param {string} width */
@@ -192,8 +196,8 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'light'|'dark'} */ this.theme = 'light';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy', slug: string|null, address: string|null}} */
-    this.route = { view: 'landing', slug: null, address: null };
+    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    this.route = { view: 'landing', slug: null, address: null, rejected: null };
   }
   createRenderRoot() { return this; }
   /** @param {string} path */
@@ -208,17 +212,23 @@ export class VerdiktApp extends LitElement {
     const account = getConnectedAccount();
     const ownPage = account?.address.toLowerCase() === provider.toLowerCase();
     const supported = account && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId);
+    // `ownPage &&` first keeps getSession() — and localStorage — out of the
+    // server-side render used by the tests.
     const signedIn = ownPage && getSession()?.address.toLowerCase() === account?.address.toLowerCase();
+    // Mirrors mountProviderConsole's `sessionMatchesAccount && viewingOwnPage`
+    // in main.js: a section rendered without a matching mount is a dead
+    // control, a mount without a section is invisible. Pinned by a test.
+    const canWrite = Boolean(signedIn && supported);
     const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
     const target = owned[0] ?? null;
     return html`<header class="page-head"><div><p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
       ${ownPage && (!signedIn || !supported) ? html`<div class="aside"><p>${signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
-      <section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>
-      <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
+      ${canWrite ? html`<section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>` : nothing}
+      <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">${ownPage ? 'refunded from your bonds' : 'refunded from these bonds'}</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<div class="layout"><section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, go))}</section><section class="detail">${detailTemplate(target)}</section></div>`}
-      ${target ? html`
+      ${target && canWrite ? html`
         <section class="editor block"><h3>SLA editor <small>${target.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
         <section class="block"><h3>Bond <small>${target.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
   }
@@ -241,7 +251,7 @@ export class VerdiktApp extends LitElement {
     const go = (path) => this.go(path);
     const account = getConnectedAccount()?.address ?? null;
     const navBar = nav(this.route.view, this.mode, this.theme, account, go, () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme));
-    // These three views need no chain data, so they render even when the
+    // These views need no chain data, so they render even when the
     // marketplace failed to load — a dead RPC must not also strand a visitor
     // on a page with no navigation and no way to reach the legal pages.
     // The landing page reads the marketplace but does not need it: its figures
@@ -249,6 +259,11 @@ export class VerdiktApp extends LitElement {
     if (this.route.view === 'landing') return html`${navBar}${landing(go, this.marketplace, this.mode, this.error)}${legalFooter(go)}`;
     if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter(go)}`;
     if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter(go)}`;
+    // A provider page with no address in it selects nobody, so there is
+    // nothing to read off a chain either.
+    if (this.route.view === 'provider' && !this.route.address) {
+      return html`${navBar}${providerPrompt(this.mode, account, this.route.rejected ?? null, () => this.connect(), go)}${legalFooter(go)}`;
+    }
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
     if (!this.marketplace) return html`${navBar}${skeleton()}${legalFooter(go)}`;
     const { services, stats } = this.marketplace;
@@ -256,10 +271,9 @@ export class VerdiktApp extends LitElement {
       ? how()
       : this.route.view === 'service'
         ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
-        : (() => {
-            const { effectiveProvider, owned } = resolveProviderConsole(services, this.route.view, this.route.address, account);
-            return effectiveProvider ? this.renderProvider(owned, effectiveProvider, go) : this.renderMarketplace(stats, services, go);
-          })();
+        : this.route.view === 'provider'
+          ? this.renderProvider(resolveProviderConsole(services, this.route.address).owned, /** @type {string} */ (this.route.address), go)
+          : this.renderMarketplace(stats, services, go);
     return html`${navBar}${body}${legalFooter(go)}`;
   }
 }

@@ -19,12 +19,13 @@ export function renderDetail(listing) {
  * @param {'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy'} view
  * @param {string|null} selectedSlug
  * @param {string|null} [address]
+ * @param {string|null} [rejected]
  */
-export function renderApp(marketplace, mode, view, selectedSlug, address = null) {
+export function renderApp(marketplace, mode, view, selectedSlug, address = null, rejected = null) {
   const app = new VerdiktApp();
   app.marketplace = marketplace;
   app.mode = mode;
-  app.route = { view, slug: selectedSlug, address };
+  app.route = { view, slug: selectedSlug, address, rejected };
   return stringify(app.render());
 }
 
