@@ -33,6 +33,17 @@ the drawing, the form, or `/how` carry the rest. Anything the schematic already
 labels does not get a paragraph above it, and anything a form's own label or
 placeholder says does not get restated in the prose that introduces it.
 
+Entry 04 is the page's forward look, and the user's call is that it reads as
+momentum rather than as a confession: it names what lands next — a paid call
+carried the whole way, the workflow in production rather than simulation, the
+walkthrough — as the work in front, and closes on three ranked invitations
+(subscribe, then write, then a muted `star` / `follow` link row). The facts are
+unchanged and still stated plainly, so `/how` and the margin keep carrying the
+limits; what changed is that the entry asks the visitor to come along. Its
+margin holds the countervailing "Already shipped", which is what keeps the
+forward claim from reading as vapour. Neither may acquire traction the project
+does not have — PRODUCT.md's *Absent, and must not be invented* still binds.
+
 Unresolved: the two form endpoint URLs are not yet supplied.
 
 ## Direction contract
@@ -60,14 +71,22 @@ marketplace, reads the path, or leaves an address. They get there by reading
 five entries, not by reading an essay: entry 02 states the gap in two
 paragraphs and hands the answer to the drawing below it.
 
-FIRST VIEWPORT: Nav, then entry 00. The index rail runs down the far left in
-mono at 13px. `00` sits in it, level with a display line at 60px/1.02 across an
-8-column measure: "Verified per call. Refunded on failure. No arbitration." The
-tagline follows at 19px, then two actions on one baseline — a filled
-`Browse the marketplace` and a ruled `How the loop works`. In the outer margin,
-right of a hairline, the latest real verdict is set in mono: outcome, block,
-paid, refunded, and the registry address it was read from. That margin column is
-the page's proof and it is present above the fold.
+FIRST VIEWPORT: Nav, then entries 00 and 01. The index rail runs down the far
+left in mono at 13px. `00` sits in it, level with a display line at 60px/1.02
+across an 8-column measure: "Verified per call. Refunded on failure. No
+arbitration." The tagline follows at 19px, then two actions on one baseline — a
+filled `Browse the marketplace` and a ruled `How the loop works`. Entry 00 takes
+no margin: the hero states the terms and leaves its outer column empty, which is
+the page's one piece of air.
+
+Entry 01 follows inside the same viewport and carries all of the chain evidence:
+the four platform figures on the measure, and in the outer margin, right of a
+hairline, the latest real verdict in mono — outcome, service, block, paid,
+refunded, and the registry address it was read from. The figures are the totals
+and the verdict is the newest line behind them, so they belong level with each
+other. That margin column is the page's only claim about provenance: it names a
+chain address in live mode and flags `seeded` in amber in demo mode, and it must
+never do both or neither.
 
 FORM: The Running Ledger — candidate 3 of my seven ordered structures, dealt by
 the roll and locked by the user over the dealt lead (The Settlement Statement).

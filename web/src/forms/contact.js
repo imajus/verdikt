@@ -1,9 +1,6 @@
 import { LitElement, html } from 'lit';
 import { CONTACT_ENDPOINT, looksLikeEmail, postForm } from './submit.js';
 
-const GITHUB_ISSUES_URL = 'https://github.com/imajus/verdikt/issues/new';
-const X_URL = 'https://x.com/denismajus';
-
 /**
  * The field starts at the height of the message most people write and grows
  * into the one some people write, so it never shows a block of dead rule
@@ -67,7 +64,9 @@ export class VerdiktContact extends LitElement {
       return html`<p class="form-done" role="status">Sent. You will get an answer at <code>${this.email}</code> — from a person, not a sequence.</p>`;
     }
     if (!this.endpoint) {
-      return html`<p class="form-off">No contact endpoint is wired into this build, so there is nothing here to submit to. <a href=${GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer">Open an issue</a> or <a href=${X_URL} target="_blank" rel="noopener noreferrer">write on X</a> — both reach the same person.</p>`;
+      // Both links this used to carry now sit in the entry's own link row,
+      // below this form, and reach the same person.
+      return html`<p class="form-off">No contact endpoint is wired into this build yet, so there is nothing here to submit to. An issue on the repository reaches the same person.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>

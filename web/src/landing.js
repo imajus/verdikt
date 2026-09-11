@@ -7,12 +7,15 @@
 // index — which is the one thing that earns section numbers on a page like
 // this. See web/.impeccable/surfaces/web-src-pages-js.md.
 //
-// Unlike pages.js, this one shows chain data: the platform figures moved here
-// from the marketplace listing, and the margin of entry 00 carries the most
-// recent verdict the registry has actually written. Both degrade to the chain's
-// own identity while the first read is in flight, and both say "demo" out loud
-// when no RPC is configured — a number on this page that could be mistaken for
-// a real one is the single worst thing it could do.
+// Unlike pages.js, this one shows chain data, and all of it lives in entry 01:
+// the platform figures moved here from the marketplace listing, and the margin
+// beside them carries the most recent verdict the registry has actually
+// written. Entry 00 has no margin at all — the hero states the terms and the
+// proof of them sits one entry below, where the totals it summarises are.
+// Figures and verdict degrade together to the chain's own identity while the
+// first read is in flight, and the verdict's head flags "seeded" when no RPC is
+// configured — a number on this page that could be mistaken for a real one is
+// the single worst thing it could do.
 
 import { html, nothing } from 'lit';
 import { ARC } from '@verdikt/sdk';
@@ -20,6 +23,9 @@ import { formatMinorUsdc, formatNativeUsdc, shortHex } from './format.js';
 import { HOW_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
 import './diagram.js';
+
+const GITHUB_URL = 'https://github.com/imajus/verdikt';
+const X_URL = 'https://x.com/denismajus';
 
 /**
  * Splits "12.34 USDC" so the unit can be set quieter than the figure. Shared
@@ -71,11 +77,6 @@ export function newestVerdict(marketplace) {
 }
 
 /**
-// One rule for every margin on the page: a chain address is named only where a
-// chain was actually read. Demo mode names none, because printing the real
-// registry under "seeded demo data, not a live chain" invites exactly the
-// reading the sentence above it denies.
-/**
  * One entry on the sheet: its index in the rail, its body on the measure, and
  * its annotation in the outer margin. The index is decorative for a screen
  * reader — nothing on the page refers to an entry by number — so the headings
@@ -89,14 +90,22 @@ const entry = (index, body, note = nothing, wide = false) => html`
     ${note === nothing ? nothing : html`<aside class="entry-note">${note}</aside>`}
   </section>`;
 
-/** @param {Marketplace|null} marketplace @param {'live'|'demo'} mode @param {string|null} error */
+/**
+ * The margin beside the figures, and the page's only one. A chain address is
+ * named here only where a chain was actually read: demo mode names none, and
+ * says "seeded" in the head instead, because printing the real registry beside
+ * numbers that did not come from it invites exactly the reading the flag denies.
+ * On an error the body's own aside already names the failure, so this stays on
+ * the one thing the body does not say — that nothing was estimated in its place.
+ * @param {Marketplace|null} marketplace @param {'live'|'demo'} mode @param {string|null} error
+ */
 const verdictNote = (marketplace, mode, error) => {
   const newest = newestVerdict(marketplace);
   if (!newest) {
     return html`
       <p class="note-head">Latest verdict</p>
       <p class="note-line ${error ? 'warn' : 'muted'}">${error
-        ? 'The registry did not answer, so there is nothing to read back. Nothing on this page is estimated in its place.'
+        ? 'Nothing to read back, and nothing on this page estimated in its place.'
         : marketplace
           ? 'No paid call has been judged yet. A service nobody has called is presumed healthy — that is why a new listing scores 1000 and not 0.'
           : 'Reading the registry…'}</p>`;
@@ -143,25 +152,18 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
         <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
         <wa-button appearance="outlined" href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>How the loop works</wa-button>
         ${mode === 'live' ? html`<a class="cta-aside" href=${PROVIDER_PATH} @click=${navigateOnClick(go, PROVIDER_PATH)}>or list a service of your own</a>` : nothing}
-      </p>`, verdictNote(marketplace, mode, error))}
+      </p>`)}
 
     ${entry('01', html`
       <h2>The record so far</h2>
-      ${figuresFor(marketplace, error)}`, html`
-      <p class="note-head">Where these come from</p>
-      <p class="note-line">${mode === 'demo'
-        ? html`Seeded demo data, not a live chain — this build has no <code>VITE_ARC_RPC_URL</code>, and an empty marketplace would be indistinguishable from a broken one.`
-        : html`Arc Testnet, read over public RPC by your own browser. There is no Verdikt server and no indexer between you and the registry’s events.`}</p>
-      ${mode === 'live' && ARC.registry
-        ? html`<p class="note-line"><code>${ARC.registry}</code>${ARC.deployBlock ? html` from block ${ARC.deployBlock}` : nothing}</p>`
-        : nothing}`)}
+      ${figuresFor(marketplace, error)}`, verdictNote(marketplace, mode, error))}
 
     ${entry('02', html`
       <h2>The payment is verifiable. The delivery is not.</h2>
       <p>x402 proves a call was paid for. Nothing proves it was answered. The promise lives in a README, the record of whether it was kept lives nowhere, and an arbitration queue would cost more than the call it was arguing about — so reliability stays whatever the provider says it is.</p>
       <p>Verdikt deletes the claim.</p>`, html`
       <p class="note-head">Why no dispute layer</p>
-      <p class="note-line">A refund is capped at <code>min(fixed refund, what was paid, what remains of the bond)</code> — never a penalty on top. A FAIL someone manufactured is never worth more than the call it broke, which is what lets the verdict be final with nothing to appeal to.</p>`)}
+      <p class="note-line">A refund is money back, never a penalty: it cannot exceed what the call cost, or what is left of the provider’s bond. Breaking a call on purpose earns nothing, so there is nothing to appeal.</p>`)}
 
     ${entry('03', html`
       <h2>The request path</h2>
@@ -172,11 +174,15 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p class="note-line">The observed value stays off the chain. It is a slice of a response the agent paid for, so it comes back to that agent on its own response as <code>x-verdikt-expected</code> and <code>x-verdikt-actual</code>, and to nobody else.</p>`, true)}
 
     ${entry('04', html`
-      <h2>Leave an address, or a message</h2>
-      <p>Three things here are deliberately unfinished, and each is argued in the open rather than hidden: a paid call carried end to end, production enrollment of the verification workflow, and the recorded walkthrough. One short message as each lands.</p>
+      <h2>What lands next</h2>
+      <p>The loop already runs end to end. What comes next is what makes it usable by someone who is not us: a paid call carried the whole way, the verification workflow running in production rather than in simulation, and a walkthrough you can watch. One short message as each lands.</p>
       <verdikt-subscribe></verdikt-subscribe>
       <p>Or write instead. A hole in the mechanism is the most welcome thing in the inbox.</p>
-      <verdikt-contact></verdikt-contact>`, html`
+      <verdikt-contact></verdikt-contact>
+      <p class="landing-social">
+        <a class="cta-aside" href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Star the repository</a>
+        <a class="cta-aside" href=${X_URL} target="_blank" rel="noopener noreferrer">Follow on X</a>
+      </p>`, html`
       <p class="note-head">Already shipped</p>
-      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written through the real KeystoneForwarder, refunds credited and withdrawn, and scores published hourly to ENS.</p>`)}
+      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written by the real workflow, refunds credited and withdrawn, and scores published hourly to ENS.</p>`)}
   </div>`;

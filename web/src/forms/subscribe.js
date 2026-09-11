@@ -1,8 +1,6 @@
 import { LitElement, html } from 'lit';
 import { NEWSLETTER_ENDPOINT, looksLikeEmail, postForm } from './submit.js';
 
-const GITHUB_URL = 'https://github.com/imajus/verdikt';
-
 export class VerdiktSubscribe extends LitElement {
   static properties = { endpoint: {}, email: { state: true }, pending: { state: true }, done: { state: true }, error: { state: true } };
   constructor() {
@@ -43,7 +41,9 @@ export class VerdiktSubscribe extends LitElement {
       return html`<p class="form-done" role="status">Noted — <code>${this.email}</code> gets one message per milestone, and nothing else.</p>`;
     }
     if (!this.endpoint) {
-      return html`<p class="form-off">No list is wired into this build, so there is nothing here to submit to. <a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Watch the repository</a> instead — each milestone lands there first.</p>`;
+      // The entry's own link row sits below both forms and reaches the same two
+      // places, so an off-state that repeated them would say it twice.
+      return html`<p class="form-off">No list is wired into this build yet, so there is nothing here to submit to. Every milestone lands in the repository first.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>
