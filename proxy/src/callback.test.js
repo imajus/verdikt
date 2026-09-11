@@ -176,6 +176,8 @@ describe('the trigger request', () => {
     method: 'GET',
     paymentHeader: 'abc',
     paymentHeaderName: 'x-payment',
+    bodyHex: null,
+    contentType: null,
     payer: '0x1111111111111111111111111111111111111111',
     paidAmountMinorUnits: '2500',
     sla: null

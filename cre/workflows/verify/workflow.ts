@@ -23,7 +23,7 @@ import {
   type HTTPPayload,
   type TeeRuntime
 } from '@chainlink/cre-sdk';
-import { encodeAbiParameters, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, hexToBytes, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
 
 import { failedClauseOf, judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
 import { outcomeToOrdinal } from '@verdikt/sdk/registry';
@@ -64,6 +64,15 @@ type VerifyRequest = {
    * the way the proxy's detection used to.
    */
   paymentHeaderName: string;
+  /**
+   * The agent's request body, hex-encoded, or null for GET/HEAD. This replay IS
+   * the paid call — an x402 payment settles once (CRE-3), so a body that does
+   * not travel with it never reaches the provider on any other leg. Hex because
+   * the trigger input is JSON and the body is not necessarily text.
+   */
+  bodyHex: string | null;
+  /** Sent with the body: a provider handed bytes with no content type cannot parse them. */
+  contentType: string | null;
   payer: Address;
   paidAmountMinorUnits: string;
   /** The `sla` ENS text record, verbatim, or null if it could not be read. */
@@ -124,10 +133,18 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
       .sendRequest(runtime, {
         url: request.providerUrl,
         method: request.method ?? 'GET',
+        // The agent's own body, replayed byte for byte. Without it a POST
+        // provider receives an empty request and answers 4xx — which the
+        // status-only fallback then correctly refuses to blame it for, so the
+        // agent pays and no verdict is written.
+        body: request.bodyHex ? hexToBytes(request.bodyHex as Hex) : undefined,
         // Replayed under whichever header name the agent actually sent
         // (`payment-signature` in x402 v2, `x-payment` in v1) — a v2
         // provider like Alchemy does not recognize the other name at all.
-        multiHeaders: { [request.paymentHeaderName]: { values: [request.paymentHeader] } }
+        multiHeaders: {
+          [request.paymentHeaderName]: { values: [request.paymentHeader] },
+          ...(request.contentType ? { 'Content-Type': { values: [request.contentType] } } : {})
+        }
       })
       .result();
     status = Number(response.statusCode);

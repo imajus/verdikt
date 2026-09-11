@@ -72,6 +72,44 @@ const paidCall = (deps) =>
     headers: { host: 'proxy.local', 'x-payment': 'eyJzY2hlbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCJ9' }
   });
 
+describe('the verified branch — the agent’s request body', () => {
+  const BODY = { addresses: [{ address: '0xd8dA6BF26964aF9D7eEd9e03E53415D37aA96045', networks: ['base-mainnet'] }] };
+
+  /** @param {ProxyDeps} deps */
+  const paidPost = (deps) =>
+    call(deps, {
+      method: 'POST',
+      url: '/weather/current',
+      headers: {
+        host: 'proxy.local',
+        'content-type': 'application/json',
+        'x-payment': 'eyJzY2hlbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCJ9'
+      },
+      payload: BODY
+    });
+
+  // The enclave's replay IS the paid call — an x402 payment settles once, so a
+  // body that does not reach the trigger never reaches the provider on any
+  // other leg. This shipped broken: every POST service saw an empty request and
+  // answered 4xx, and the 4xx invariant then correctly declined to score it as
+  // the provider's fault, so the agent paid and no verdict was written. Two
+  // live calls to portfolio.verdikt.bond burned $0.001 each proving it.
+  it('travels to the enclave hex-encoded, with its content type', async () => {
+    const { deps, verify } = harness();
+    await paidPost(deps);
+    const sent = verify.mock.lastCall?.[0];
+
+    expect(sent?.contentType).toBe('application/json');
+    expect(Buffer.from(String(sent?.bodyHex).slice(2), 'hex').toString()).toBe(JSON.stringify(BODY));
+  });
+
+  it('is null for a GET, so the replay sends nothing the agent did not', async () => {
+    const { deps, verify } = harness();
+    await paidCall(deps);
+    expect(verify.mock.lastCall?.[0]?.bodyHex).toBeNull();
+  });
+});
+
 describe('the verified branch — the happy path', () => {
   it('relays the provider’s payload with the verdict attached', async () => {
     const { deps } = harness();

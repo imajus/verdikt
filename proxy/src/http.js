@@ -46,6 +46,24 @@ export function forwardRequestHeaders(headers) {
 }
 
 /**
+ * The agent's request body, as hex, for the trip through the enclave trigger.
+ *
+ * Hex rather than base64 or a plain string: the trigger input is JSON, so the
+ * body cannot travel as bytes, and it is not necessarily text — a provider may
+ * take any content type. The workflow bundles to WASM, where viem's
+ * `hexToBytes` is already present and `atob` is not guaranteed to be.
+ *
+ * @param {ArrayBuffer|undefined} body
+ * @returns {string|null} `0x`-prefixed hex, or null when there is no body
+ */
+export function bodyToHex(body) {
+  if (!body || body.byteLength === 0) return null;
+  let out = '0x';
+  for (const byte of new Uint8Array(body)) out += byte.toString(16).padStart(2, '0');
+  return out;
+}
+
+/**
  * @param {Headers} headers
  * @returns {Record<string, string>}
  */
