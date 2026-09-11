@@ -24,7 +24,12 @@ async function onboard() {
       const [{ default: init }, { default: injected }] = await Promise.all([
         import('@web3-onboard/core'), import('@web3-onboard/injected-wallets')
       ]);
-      const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
+      // Written as a plain `import.meta.env`: Vite's dev server decides
+      // whether to inject its env shim by scanning the module for that exact
+      // contiguous text, so a parenthesised cast around `import.meta` leaves
+      // this undefined in dev and silently falls back to the public RPC —
+      // the same trap main.js was fixed for (web/.claude/skills/run-web).
+      const env = /** @type {Record<string, string|undefined>} */ (import.meta.env ?? {});
       const api = init({
         wallets: [injected()],
         chains: [arcTestnet, sepolia].map(chain => ({

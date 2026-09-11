@@ -5,7 +5,7 @@ import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { isListed } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
 import { amount, landing } from './landing.js';
 
@@ -124,7 +124,7 @@ export const detailTemplate = (listing) => {
     </section>`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
+/** @param {'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
 const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
@@ -202,7 +202,7 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'light'|'dark'} */ this.theme = 'light';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
   }
   createRenderRoot() { return this; }
@@ -213,30 +213,34 @@ export class VerdiktApp extends LitElement {
   signIn() { this.dispatchEvent(new CustomEvent('provider-sign-in')); }
   /** @param {'light'|'dark'} theme */
   changeTheme(theme) { this.dispatchEvent(new CustomEvent('theme-select', { detail: theme })); }
-  /** @param {Listing[]} owned @param {string} provider @param {(path: string) => void} go */
-  renderProvider(owned, provider, go) {
+  /**
+   * Whether the connected wallet may write against `providerAddress`, and
+   * why not when it can't. Shared by renderProvider, renderService and
+   * renderRegister — a provider's own service page and the registration
+   * wizard gate on the exact same four facts a provider console did before
+   * this address moved off it.
+   * @param {string|null} providerAddress
+   */
+  writeAuthorization(providerAddress) {
     const account = getConnectedAccount();
-    const ownPage = account?.address.toLowerCase() === provider.toLowerCase();
-    const supported = account && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId);
+    const ownPage = Boolean(providerAddress && account?.address.toLowerCase() === providerAddress.toLowerCase());
+    const supported = Boolean(account) && [ARC.chainId, SEPOLIA.chainId].includes(/** @type {{chainId: number}} */ (account).chainId);
     // `ownPage &&` first keeps getSession() — and localStorage — out of the
     // server-side render used by the tests.
     const signedIn = ownPage && getSession()?.address.toLowerCase() === account?.address.toLowerCase();
-    // Mirrors mountProviderConsole's `sessionMatchesAccount && viewingOwnPage`
-    // in main.js: a section rendered without a matching mount is a dead
-    // control, a mount without a section is invisible. Pinned by a test.
     const canWrite = Boolean(signedIn && supported);
+    return { ownPage, signedIn, supported, canWrite };
+  }
+  /** @param {Listing[]} owned @param {string} provider @param {(path: string) => void} go */
+  renderProvider(owned, provider, go) {
+    const auth = this.writeAuthorization(provider);
     const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
-    const target = owned[0] ?? null;
-    return html`<header class="page-head"><div><p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
-      ${ownPage && (!signedIn || !supported) ? html`<div class="aside"><p>${signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
-      ${canWrite ? html`<section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>` : nothing}
-      <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">${ownPage ? 'refunded from your bonds' : 'refunded from these bonds'}</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
-      ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<div class="layout"><section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, go))}</section><section class="detail">${detailTemplate(target)}</section></div>`}
-      ${target && canWrite ? html`
-        <section class="editor block"><h3>SLA editor <small>${target.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
-        <section class="block"><h3>Bond <small>${target.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
+    return html`<header class="page-head"><div><p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><div class="head-actions"><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p>${auth.signedIn ? html`<wa-button size="s" href=${REGISTER_PATH} @click=${navigateOnClick(go, REGISTER_PATH)}>Add a service</wa-button>` : nothing}</div></header>
+      ${auth.ownPage && (!auth.signedIn || !auth.supported) ? html`<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
+      <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">${auth.ownPage ? 'refunded from your bonds' : 'refunded from these bonds'}</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
+      ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, go))}</section>`}`;
   }
   /** @param {PlatformStats} stats @param {Listing[]} services @param {(path: string) => void} go */
   renderMarketplace(stats, services, go) {
@@ -254,7 +258,28 @@ export class VerdiktApp extends LitElement {
     const listing = services.find((service) => service.slug === slug) ?? null;
     const back = html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>`;
     if (!listing) return html`${back}<p class="empty">No service found for “${slug}”.</p>`;
-    return html`${back}${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}${detailTemplate(listing)}`;
+    const auth = this.writeAuthorization(listing.provider);
+    return html`${back}${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}${detailTemplate(listing)}
+      ${auth.ownPage && (!auth.signedIn || !auth.supported) ? html`<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage this service.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
+      ${auth.canWrite ? html`
+        <section class="editor block"><h3>SLA editor <small>${listing.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
+        <section class="block"><h3>Bond <small>${listing.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
+  }
+  /** @param {(path: string) => void} go */
+  renderRegister(go) {
+    const account = getConnectedAccount();
+    const auth = this.writeAuthorization(account?.address ?? null);
+    const consoleUrl = account ? providerUrl(account.address) : PROVIDER_PATH;
+    return html`${pageHead('List a service', 'Claim the ENS subname, register the bond and publish the SLA that calls will be judged against.')}
+      <p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>
+      ${this.mode !== 'live' ? html`<p class="aside warn">Registration needs a live chain. This build is showing seeded demo data.</p>` : nothing}
+      <section class="block">
+        ${!account
+          ? html`<p>Connect a wallet to register a service.${this.mode === 'live' ? '' : ' Provider consoles read Arc Testnet; this build is showing seeded demo data.'}</p>${this.mode === 'live' ? html`<wa-button type="button" appearance="outlined" size="s" @click=${this.connect}>Connect wallet</wa-button>` : nothing}`
+          : !auth.canWrite
+            ? html`<p>${auth.signedIn ? 'Switch to a supported network to register a service.' : 'Sign in once to register a service. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}`
+            : html`<verdikt-wizard id="wizard-mount"></verdikt-wizard>`}
+      </section>`;
   }
   render() {
     /** @type {(path: string) => void} */
@@ -273,6 +298,11 @@ export class VerdiktApp extends LitElement {
     // nothing to read off a chain either.
     if (this.route.view === 'provider' && !this.route.address) {
       return html`${navBar}${providerPrompt(this.mode, account, this.route.rejected ?? null, () => this.connect(), go)}${legalFooter(go)}`;
+    }
+    // /register needs no listing to be itself — like landing/terms/privacy,
+    // it must survive a dead RPC or a marketplace still in flight.
+    if (this.route.view === 'register') {
+      return html`${navBar}${this.renderRegister(go)}${legalFooter(go)}`;
     }
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
     if (!this.marketplace) return html`${navBar}${skeleton()}${legalFooter(go)}`;

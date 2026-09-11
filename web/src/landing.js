@@ -20,7 +20,7 @@
 import { html, nothing } from 'lit';
 import { ARC } from '@verdikt/sdk';
 import { formatMinorUsdc, formatNativeUsdc, shortHex } from './format.js';
-import { HOW_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick } from './router.js';
+import { HOW_PATH, MARKETPLACE_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
 import './diagram.js';
 
@@ -151,7 +151,7 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p class="landing-cta">
         <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
         <wa-button appearance="outlined" href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>How the loop works</wa-button>
-        ${mode === 'live' ? html`<a class="cta-aside" href=${PROVIDER_PATH} @click=${navigateOnClick(go, PROVIDER_PATH)}>or list a service of your own</a>` : nothing}
+        ${mode === 'live' ? html`<a class="cta-aside" href=${REGISTER_PATH} @click=${navigateOnClick(go, REGISTER_PATH)}>or list a service of your own</a>` : nothing}
       </p>`)}
 
     ${entry('01', html`

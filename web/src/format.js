@@ -74,6 +74,29 @@ export const scoreBand = (score) => {
 export const shortHex = (value) =>
   typeof value === 'string' && value.length > 14 ? `${value.slice(0, 8)}…${value.slice(-6)}` : String(value);
 
+const MAX_ERROR_LENGTH = 160;
+
+/**
+ * A wallet or RPC failure as one line a provider can act on.
+ *
+ * viem puts the human sentence on `shortMessage` and a full diagnostic body on
+ * `message`: the request arguments, the raw calldata, a docs URL and its own
+ * version. That body is written for a console, not a page — it buries the one
+ * fact that matters under an unbroken hex blob wide enough to break a layout.
+ * Prefer the short form, keep whatever is left to a single capped line, and
+ * never invent a reason the error did not give.
+ *
+ * @param {unknown} error
+ */
+export const formatTxError = (error) => {
+  const source = /** @type {{ shortMessage?: unknown, message?: unknown }} */ (error ?? {});
+  const short = typeof source.shortMessage === 'string' ? source.shortMessage : '';
+  const full = typeof source.message === 'string' ? source.message : '';
+  const line = (short || full).split('\n')[0].trim();
+  if (!line) return 'The request failed without a message.';
+  return line.length > MAX_ERROR_LENGTH ? `${line.slice(0, MAX_ERROR_LENGTH - 1).trimEnd()}…` : line;
+};
+
 /** @param {number} unixSeconds */
 export const formatWhen = (unixSeconds) => {
   if (!Number.isFinite(unixSeconds) || unixSeconds <= 0) return 'unknown';

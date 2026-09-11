@@ -29,13 +29,15 @@ export const PROVIDER_PATH = '/provider';
 export const HOW_PATH = '/how';
 export const TERMS_PATH = '/terms';
 export const PRIVACY_PATH = '/privacy';
+export const REGISTER_PATH = '/register';
 
 const STATIC_VIEWS = /** @type {Record<string, string>} */ ({
   '/': 'landing',
   [MARKETPLACE_PATH]: 'marketplace',
   [HOW_PATH]: 'how',
   [TERMS_PATH]: 'terms',
-  [PRIVACY_PATH]: 'privacy'
+  [PRIVACY_PATH]: 'privacy',
+  [REGISTER_PATH]: 'register'
 });
 
 /** @param {string} slug */
@@ -72,7 +74,7 @@ function normalize(pathname) {
 /**
  * @param {URL} url
  * @returns {{
- *   view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy',
+ *   view: 'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy',
  *   slug: string|null,
  *   address: string|null,
  *   rejected: string|null,
@@ -126,6 +128,7 @@ const TITLES = /** @type {Record<string, string>} */ ({
   landing: 'Verdikt — Verified x402 API Marketplace',
   marketplace: 'Marketplace — Verdikt',
   provider: 'Provider — Verdikt',
+  register: 'List a service — Verdikt',
   how: 'How it works — Verdikt',
   terms: 'Terms — Verdikt',
   privacy: 'Privacy — Verdikt'

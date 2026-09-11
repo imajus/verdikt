@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
 import { ARC } from '@verdikt/sdk';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
-import { formatMinorUsdc, formatNativeUsdc, formatScore, scoreBand, shortHex } from './format.js';
+import { formatMinorUsdc, formatNativeUsdc, formatScore, formatTxError, scoreBand, shortHex } from './format.js';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
 
@@ -86,6 +86,48 @@ const verdict = (serviceId, outcome, requestId, failedClause = NO_CLAUSE) => ({
   failedClause,
   blockNumber: 10n,
   transactionHash: `0x${'ab'.repeat(32)}`
+});
+
+// viem throws with the human sentence on `shortMessage` and a full diagnostic
+// body on `message` — calldata, a docs URL, its own version. The body puts an
+// unbroken hex blob through the layout and buries the one fact a provider can
+// act on.
+describe('formatting a wallet error', () => {
+  const rejection = Object.assign(
+    new Error([
+      'User rejected the request.',
+      '',
+      'Request Arguments:',
+      '  from:  0x9cbb40d45ec9dd095309bba505f3bc54e63a3a79',
+      '  data:  0xf2c298be0000000000000000000000000000000000000000000000000000000000000020',
+      '',
+      'Docs: https://viem.sh/docs/contract/writeContract',
+      'Version: viem@2.56.3'
+    ].join('\n')),
+    { shortMessage: 'User rejected the request.' }
+  );
+
+  it('keeps the short sentence and drops the diagnostic body', () => {
+    expect(formatTxError(rejection)).toBe('User rejected the request.');
+  });
+  it('never carries calldata, a docs link or a version through to the page', () => {
+    const shown = formatTxError(rejection);
+    expect(shown).not.toContain('0xf2c298be');
+    expect(shown).not.toContain('viem.sh');
+    expect(shown).not.toContain('Version:');
+  });
+  it('falls back to the first line when an error carries no short form', () => {
+    expect(formatTxError(new Error('Transport failed.\nstack line\nanother'))).toBe('Transport failed.');
+  });
+  it('caps a single long line rather than letting it run', () => {
+    const shown = formatTxError(new Error('x'.repeat(400)));
+    expect(shown.length).toBeLessThanOrEqual(160);
+    expect(shown.endsWith('…')).toBe(true);
+  });
+  it('says something honest when the throw carries no message at all', () => {
+    expect(formatTxError(null)).toBe('The request failed without a message.');
+    expect(formatTxError({})).toBe('The request failed without a message.');
+  });
 });
 
 describe('formatting the two USDC views', () => {
@@ -480,7 +522,7 @@ describe('the provider view', () => {
   it('shows what has been refunded out of that provider’s own bonds', async () => {
     const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
     expect(html).toContain('refunded from these bonds');
-    expect(html).toContain('1 USDC');
+    expect(html).toContain('class="value fail"');
   });
 
   it('matches the address case-insensitively', async () => {
@@ -491,33 +533,78 @@ describe('the provider view', () => {
   it('says so plainly when an address owns nothing', async () => {
     const html = renderApp(await build(), 'demo', 'provider', null, '0xdead00000000000000000000000000000000dead');
     expect(html).toContain('No services registered');
-    expect(html).not.toContain('sla-editor-mount');
-    expect(html).not.toContain('bond-controls-mount');
   });
 
-  // A console is a public page, so a visitor sees the record and nothing to
-  // act on it with. No wallet is connected in this render, which is exactly
-  // the case: the write sections are absent, not disabled.
-  it('renders no write controls for anyone but the signed-in owner', async () => {
+  // The provider console is a listing now, full stop — SLA and bond
+  // management live on the service's own page (Task 4), registration at
+  // /register (Task 5). No mount of any kind belongs here, signed in or not.
+  it('renders no write controls at all, signed in or not', async () => {
     const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
     expect(html).toContain('weather');
     expect(html).not.toContain('wizard-mount');
     expect(html).not.toContain('sla-editor-mount');
     expect(html).not.toContain('bond-controls-mount');
   });
+
+  it('rows link to the service page, the same as the marketplace listing', async () => {
+    const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
+    expect(html).toContain('href="/services/weather"');
+  });
+});
+
+// The provider console's one write-adjacent affordance: a link to /register,
+// shown only on your own page. Whether that page lets you proceed is its own
+// concern (Task 5) — this link must not itself require being signed in, or an
+// owner who hasn't signed in yet would have no way to find registration.
+// Registering acts on the signed-in wallet, so the button appears only where
+// that wallet could actually use it: signed in, on its own console. A
+// console belonging to someone else never offers it, however you arrived.
+describe('the provider console’s "add a service" button', () => {
+  const build = async () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
+  /** @param {any} account @param {any} session */
+  const as = (account, session = null) => { wallet.account = account; wallet.session = session; };
+  const session = { address: PROVIDER, expiresAt: Date.now() + 60_000 };
+
+  afterEach(() => as(null, null));
+
+  it('shows it to the signed-in owner of this console', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, session);
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(html).toContain('href="/register"');
+  });
+
+  it('withholds it from an owner who has connected but not signed in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, null);
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(html).not.toContain('href="/register"');
+  });
+
+  it('withholds it from a signed-in wallet viewing somebody else’s console', async () => {
+    const other = '0xB0b0000000000000000000000000000000000002';
+    as({ address: other, chainId: ARC.chainId }, { address: other, expiresAt: Date.now() + 60_000 });
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(html).not.toContain('href="/register"');
+  });
+
+  it('withholds it from an unconnected visitor', async () => {
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(html).not.toContain('href="/register"');
+  });
 });
 
 // The rendering half of the pair main.js's providerAuthorization mounts
-// against: a section without a mount behind it is a dead control, a mount
-// with no section around it is an invisible one. These four cases are the
-// same four that function distinguishes.
-describe('who gets the provider console’s write controls', () => {
+// against (Task 7): a section without a mount behind it is a dead control, a
+// mount with no section around it is invisible. These four cases are the
+// same four resolveProviderConsole's replacement in lit-app.js distinguishes,
+// now asked of a single service rather than a whole console.
+describe('who gets a service page’s write controls', () => {
   const build = async () =>
     loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
   /** @param {any} account @param {any} session */
   const as = (account, session) => { wallet.account = account; wallet.session = session; };
   const signedIn = { address: PROVIDER, expiresAt: Date.now() + 60_000 };
-  const controls = ['wizard-mount', 'sla-editor-mount', 'bond-controls-mount'];
+  const controls = ['sla-editor-mount', 'bond-controls-mount'];
   /** @param {string} html */
   const present = (html) => controls.filter((id) => html.includes(id));
 
@@ -525,28 +612,69 @@ describe('who gets the provider console’s write controls', () => {
 
   it('gives them to the owner, connected on a supported chain and signed in', async () => {
     as({ address: PROVIDER, chainId: ARC.chainId }, signedIn);
-    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
     expect(present(html)).toEqual(controls);
-    expect(html).toContain('refunded from your bonds');
   });
   it('withholds them from the owner until they sign in', async () => {
     as({ address: PROVIDER, chainId: ARC.chainId }, null);
-    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
     expect(present(html)).toEqual([]);
     expect(html).toContain('Enable provider actions');
   });
   it('withholds them on an unsupported chain, and says which way out', async () => {
     as({ address: PROVIDER, chainId: 1 }, signedIn);
-    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
     expect(present(html)).toEqual([]);
     expect(html).toContain('Switch network');
   });
-  it('withholds them from a signed-in wallet viewing somebody else’s console', async () => {
+  it('withholds them from a signed-in wallet viewing somebody else’s service', async () => {
     const other = '0xB0b0000000000000000000000000000000000002';
     as({ address: other, chainId: ARC.chainId }, { address: other, expiresAt: Date.now() + 60_000 });
-    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
     expect(present(html)).toEqual([]);
     expect(html).not.toContain('Enable provider actions');
+  });
+  it('shows no write section at all to an unconnected visitor', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
+    expect(present(html)).toEqual([]);
+  });
+});
+
+describe('the registration page', () => {
+  /** @param {any} account */
+  const as = (account) => { wallet.account = account; };
+
+  afterEach(() => as(null));
+
+  it('renders with no marketplace loaded at all', () => {
+    expect(renderApp(null, 'live', 'register', null)).toContain('List a service');
+  });
+
+  it('prompts a visitor with no wallet connected to connect one', () => {
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('Connect a wallet');
+    expect(html).not.toContain('wizard-mount');
+  });
+
+  it('prompts a connected but unsigned wallet to sign in, not the wizard', () => {
+    as({ address: '0xA11ce00000000000000000000000000000000001', chainId: ARC.chainId });
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('Enable provider actions');
+    expect(html).not.toContain('wizard-mount');
+  });
+
+  it('mounts the wizard for a signed-in, supported-chain wallet', () => {
+    as({ address: '0xA11ce00000000000000000000000000000000001', chainId: ARC.chainId });
+    wallet.session = { address: '0xA11ce00000000000000000000000000000000001', expiresAt: Date.now() + 60_000 };
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('wizard-mount');
+    wallet.session = null;
+  });
+
+  it('shows a demo-mode notice instead of a wallet prompt', () => {
+    const html = renderApp(null, 'demo', 'register', null);
+    expect(html).toContain('List a service');
+    expect(html).not.toContain('wizard-mount');
   });
 });
 

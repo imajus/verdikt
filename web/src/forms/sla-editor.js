@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { parseSla } from '@verdikt/sla';
 import { publishSla } from '../actions.js';
+import { formatTxError } from '../format.js';
 
 /** @param {string} source @returns {{ ok: boolean, message: string }} */
 export function describeSlaValidity(source) {
@@ -46,7 +47,7 @@ export class VerdiktSlaEditor extends LitElement {
       await this.deps.ensureSepolia();
       const { hash } = await publishSla({ walletClient: this.deps.walletClientFor(), slug: this.listing.slug, value: this.draft.trim() });
       this.status = `Sent: ${hash}`;
-    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
+    } catch (error) { this.status = `Failed: ${formatTxError(error)}`; }
     finally { this.pending = false; }
   }
   render() {

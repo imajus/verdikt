@@ -142,6 +142,10 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 }
 .source.live { color: var(--good); }
 .source.demo { color: var(--fair); }
+/* The provider console's count sits beside its one action, so the pair stays
+   together on the head's right edge rather than the count drifting alone. */
+.head-actions { display: flex; align-items: center; gap: 16px; flex: none; }
+.head-actions wa-button { margin-top: 0; }
 
 @media (max-width: 560px) {
   .page-head { align-items: flex-start; }
@@ -710,7 +714,9 @@ textarea {
   resize: vertical;
 }
 textarea:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
-.check { display: flex; align-items: baseline; gap: 9px; font-size: 15.5px; margin: 10px 0 0; }
+/* A wallet or RPC message is arbitrary text this page does not author, so it
+   wraps anywhere rather than pushing the layout wider than its column. */
+.check { display: flex; align-items: baseline; gap: 9px; font-size: 15.5px; margin: 10px 0 0; min-width: 0; overflow-wrap: anywhere; }
 .check.ok { color: var(--good); }
 .check.bad { color: var(--poor); }
 code.wrap { display: block; max-height: 9em; overflow: auto; line-height: 1.45; }
@@ -742,3 +748,51 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 
 .wizard-steps { display: flex; gap: 24px; list-style: none; padding: 0; margin: 0 0 16px; font-size: 14.5px; color: var(--muted); }
 .wizard-steps li.done { color: var(--good); font-weight: 500; }
+.wizard-nav { display: flex; gap: 12px; margin-top: 18px; }
+.wizard-nav wa-button { margin-top: 0; }
+/* At the same breakpoint the rest of the app splits on, the record and the
+   transactions that write it sit side by side. The record is four short rows
+   and the docket is the work, so the record takes the narrower column and the
+   grid gap — not the sections' own margins — sets the space between them. */
+.wizard-docket { display: grid; grid-template-columns: minmax(0, 1fr); gap: 30px; margin-top: 30px; }
+.wizard-docket > .block { margin-top: 0; }
+@media (min-width: 1040px) {
+  .wizard-docket { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 48px; align-items: start; }
+}
+
+/* The transaction docket: one ruled row per transaction, in the order they
+   must run. Built from the listing row's vocabulary rather than a stack of
+   buttons — the sequence is the information, so it is indexed and ruled.
+   Only the row the cursor is on carries a control, because a wallet raises
+   its popup only while the browser still holds user activation (runStep() in
+   forms/wizard.js). */
+/* No top rule: the section heading's own bottom border already draws that
+   line, and two hairlines never sit within a few pixels of each other — the
+   same reason the marketplace listing runs `flush` under a page head. */
+.wizard-run { list-style: none; padding: 0; margin: 0; }
+.wizard-run li {
+  /* Every track is fixed but the label's, so the four independent row grids
+     still line their chain and action columns up with each other — an `auto`
+     action column collapses on the rows that carry no control. */
+  display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 6rem 7rem;
+  align-items: center; gap: 4px 14px;
+  padding: 11px 2px; border-bottom: 1px solid var(--rule);
+}
+.wizard-run .run-index { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wizard-run .run-label { font-size: 15.5px; }
+.wizard-run .run-chain {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.wizard-run .run-action { justify-self: end; display: flex; align-items: center; }
+/* Only a row that carries a control reserves its height; a pending row that
+   did so left the rhythm slack where it should be tight. */
+.wizard-run li.current .run-action, .wizard-run li.done .run-action { min-height: 30px; }
+.wizard-run .run-action wa-button { margin-top: 0; }
+.wizard-run li.later .run-label, .wizard-run li.later .run-index, .wizard-run li.later .run-chain { color: var(--muted); }
+.wizard-run li.current .run-label { font-weight: 500; }
+.wizard-run li .check { grid-column: 2 / -1; margin: 0; }
+@media (max-width: 560px) {
+  .wizard-run li { grid-template-columns: 2rem minmax(0, 1fr); }
+  .wizard-run .run-chain, .wizard-run .run-action { grid-column: 2; justify-self: start; }
+}

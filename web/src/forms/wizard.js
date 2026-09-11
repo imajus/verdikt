@@ -1,41 +1,135 @@
 // New-service onboarding: ENS is claimed before Arc registration, so a newly
 // registered service can never begin life with conflicting ownership.
+//
+// Steps 1-3 are pure form state — no wallet involved, Back/Next only. Step 4
+// reviews the draft and, on confirmation, runs the four transactions above
+// in that fixed order from a resumable cursor (`done`): a step that fails
+// leaves `done` where it stopped, and Retry resumes from there rather than
+// from the top — a claimed subname is never re-claimed.
 import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
+import { formatTxError } from '../format.js';
+import { navigateOnClick, serviceUrl } from '../router.js';
+import { describeSlaValidity } from './sla-editor.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+// A keystroke-per-RPC-call availability check would spam the Sepolia
+// endpoint on every letter typed; this is the pause after the last keystroke
+// before the real lookup fires.
+const SLUG_CHECK_DEBOUNCE_MS = 400;
+
+/**
+ * The SLA as a record value rather than a validator verdict: what the service
+ * is about to promise, not whether the draft parses. Step 3's Next gate
+ * already refuses an unparseable draft, so the fallback is only there because
+ * render() must never throw.
+ * @param {string} source
+ */
+function describeSlaRecord(source) {
+  try {
+    const { clauses } = parseSla(source.trim());
+    const types = [...new Set(clauses.map((clause) => clause.type))].join(', ');
+    return `${clauses.length} clause${clauses.length === 1 ? '' : 's'} · ${types}`;
+  } catch {
+    return 'unreadable';
+  }
+}
+
+/**
+ * The four transactions registration requires, in the order the module
+ * comment above mandates. A pure builder so it's testable without mounting
+ * the element: `run()` closures capture `deps` and the draft, nothing else.
+ * @param {NonNullable<VerdiktWizard['deps']>} deps
+ * @param {{ slug: string, url: string, sla: string }} draft
+ */
+export function buildExecutionSteps(deps, { slug, url, sla }) {
+  return [
+    {
+      key: 'claim', label: 'Claim the subname', chain: /** @type {const} */ ('Sepolia'),
+      ensure: deps.ensureSepolia,
+      run: () => claimSubname({ walletClient: deps.walletClientFor('sepolia'), registrarAddress: deps.registrarAddress, slug, payTo: deps.account })
+    },
+    {
+      key: 'register', label: `Register and bond · ${deps.formatNativeUsdc(deps.depositAmount)}`, chain: /** @type {const} */ ('Arc'),
+      ensure: deps.ensureArc,
+      run: () => registerService({ walletClient: deps.walletClientFor('arc'), registryAddress: deps.registryAddress, slug, depositAmount: deps.depositAmount })
+    },
+    {
+      key: 'url', label: 'Publish the endpoint URL', chain: /** @type {const} */ ('Sepolia'),
+      ensure: deps.ensureSepolia,
+      run: () => publishUrl({ walletClient: deps.walletClientFor('sepolia'), slug, value: url.trim() })
+    },
+    {
+      key: 'sla', label: 'Publish the SLA', chain: /** @type {const} */ ('Sepolia'),
+      ensure: deps.ensureSepolia,
+      run: () => publishSla({ walletClient: deps.walletClientFor('sepolia'), slug, value: sla.trim() })
+    }
+  ];
+}
 
 export class VerdiktWizard extends LitElement {
   static properties = {
     deps: { attribute: false }, message: {}, step: { state: true }, slug: { state: true },
-    availability: { state: true }, available: { state: true }, pending: { state: true },
-    status: { state: true }, url: { state: true }, sla: { state: true }
+    availability: { state: true }, available: { state: true }, url: { state: true }, sla: { state: true },
+    done: { state: true }, execError: { state: true }, pending: { state: true }
   };
   constructor() {
     super();
-    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void}|null} */ this.deps = null;
-    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false; this.pending = false; this.status = ''; this.url = ''; this.sla = '';
+    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void, pushStep:(step:number)=>void, backStep:()=>void}|null} */ this.deps = null;
+    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
+    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
     this.checkToken = 0;
+    this.slugDebounceTimer = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
   }
   createRenderRoot() { return this; }
   clear() {
     this.deps = null;
     this.checkToken++;
-    this.message = ''; this.step = 1; this.slug = ''; this.availability = '';
-    this.available = false; this.pending = false; this.status = ''; this.url = ''; this.sla = '';
+    clearTimeout(this.slugDebounceTimer ?? undefined);
+    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
+    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
+  }
+  // The four steps share one URL, so each forward move records a same-URL
+  // history entry and in-page Back walks that history rather than pushing a
+  // third entry. Without this the browser's own Back leaves /register from
+  // step 3 instead of returning to step 2, taking the draft with it.
+  // `history` itself is main.js's to touch (router.js's header), so both
+  // directions arrive as injected dependencies.
+  /** @param {number} step */
+  goStep(step) {
+    this.step = step;
+    this.deps?.pushStep(step);
+  }
+  stepBack() { this.deps?.backStep(); }
+  /**
+   * Apply a step carried by a popped history entry. Refused in two cases:
+   * once a transaction has landed (`done > 0`), where the slug is frozen
+   * because the remaining transactions target it; and on a wizard with no
+   * draft, which is what navigating back to /register builds — the entry
+   * still says "step 3" but the draft that step reviewed is gone.
+   * @param {number} step
+   */
+  restoreStep(step) {
+    if (this.done > 0) return;
+    if (step > 1 && !this.slug) return;
+    this.step = Math.min(Math.max(Math.trunc(step), 1), 4);
   }
   /** @param {InputEvent} event */
   editSlug(event) {
     this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
-    this.checkAvailability();
-  }
-  async checkAvailability() {
-    const token = ++this.checkToken;
     this.available = false;
+    // Invalidate any check already scheduled or in flight for the previous
+    // value — its result must never land after a keystroke has moved on.
+    this.checkToken++;
+    clearTimeout(this.slugDebounceTimer ?? undefined);
     if (!SLUG.test(this.slug)) { this.availability = 'Lowercase letters, digits and hyphens only.'; return; }
     this.availability = 'Checking…';
+    this.slugDebounceTimer = setTimeout(() => this.checkAvailability(), SLUG_CHECK_DEBOUNCE_MS);
+  }
+  async checkAvailability() {
+    const token = this.checkToken;
     try {
       const record = await resolveServiceRecord(this.slug, { rpcUrl: /** @type {NonNullable<typeof this.deps>} */ (this.deps).sepoliaRpcUrl });
       if (token !== this.checkToken) return;
@@ -43,62 +137,114 @@ export class VerdiktWizard extends LitElement {
       this.availability = record.owner ? `Already claimed by ${record.owner}.` : 'Available.';
     } catch (error) {
       if (token !== this.checkToken) return;
-      this.availability = `Could not check availability: ${/** @type {Error} */ (error).message}`;
+      this.availability = `Could not check availability: ${formatTxError(error)}`;
     }
-  }
-  async claim() {
-    if (!this.deps || !this.available) return;
-    this.pending = true; this.status = 'Sending…';
-    try {
-      await this.deps.ensureSepolia();
-      await claimSubname({ walletClient: this.deps.walletClientFor('sepolia'), registrarAddress: this.deps.registrarAddress, slug: this.slug, payTo: this.deps.account });
-      this.step = 2; this.status = '';
-    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
-    finally { this.pending = false; }
-  }
-  async register() {
-    if (!this.deps) return;
-    this.pending = true; this.status = 'Sending…';
-    try {
-      await this.deps.ensureArc();
-      await registerService({ walletClient: this.deps.walletClientFor('arc'), registryAddress: this.deps.registryAddress, slug: this.slug, depositAmount: this.deps.depositAmount });
-      this.step = 3; this.status = '';
-    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
-    finally { this.pending = false; }
   }
   /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
-  get slaValidity() {
-    if (!this.sla.trim()) return { ok: false, message: 'Paste an SLA to validate it.' };
-    try { const parsed = parseSla(this.sla.trim()); return { ok: true, message: `Valid. ${parsed.clauses.length} clause(s).` }; }
-    catch (error) { return { ok: false, message: /** @type {Error} */ (error).message }; }
-  }
-  async publish() {
-    if (!this.deps || !this.slaValidity.ok || !/^https?:\/\//.test(this.url.trim())) return;
-    this.pending = true; this.status = 'Publishing URL…';
+  get urlValid() { return /^https?:\/\//.test(this.url.trim()); }
+  /**
+   * Run exactly one step, and only the one the cursor is on. Deliberately
+   * not a loop over the remaining steps: a wallet raises its popup only
+   * while the browser still holds transient user activation, which lasts a
+   * few seconds after a click. Chaining the steps spends that activation on
+   * the first one, so the chain switch before step 2 — arriving long after
+   * the user finished approving step 1 — was queued behind the extension
+   * badge instead of prompting, and surfaced as "switch to the required
+   * network first" with nothing ever shown. One click per step keeps every
+   * wallet interaction inside its own activation window.
+   * @param {number} index
+   */
+  async runStep(index) {
+    const deps = this.deps;
+    if (!deps || index !== this.done || this.pending) return;
+    const steps = buildExecutionSteps(deps, { slug: this.slug, url: this.url, sla: this.sla });
+    const step = steps[index];
+    this.pending = true;
+    this.execError = '';
     try {
-      await this.deps.ensureSepolia();
-      const walletClient = this.deps.walletClientFor('sepolia');
-      await publishUrl({ walletClient, slug: this.slug, value: this.url.trim() });
-      this.status = 'Publishing SLA…';
-      await publishSla({ walletClient, slug: this.slug, value: this.sla.trim() });
-      this.status = 'Done.'; this.deps.onDone();
-    } catch (error) { this.status = `Failed: ${/** @type {Error} */ (error).message}`; }
-    finally { this.pending = false; }
+      await step.ensure();
+      await step.run();
+      this.done = index + 1;
+      if (this.done === steps.length) deps.onDone();
+    } catch (error) {
+      this.execError = formatTxError(error);
+    } finally {
+      this.pending = false;
+    }
   }
   renderStep() {
-    if (this.step === 1) return html`<wa-input id="wizard-slug" label="Slug" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug}></wa-input>
-      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}<wa-button type="button" id="wizard-claim" ?disabled=${!this.available || this.pending} ?loading=${this.pending} @click=${this.claim}>Claim on Sepolia</wa-button>`;
-    if (this.step === 2) return html`<p class="aside">Registering "${this.slug}" for ${/** @type {NonNullable<typeof this.deps>} */ (this.deps).formatNativeUsdc(/** @type {NonNullable<typeof this.deps>} */ (this.deps).depositAmount)}.</p><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.register}>Register on Arc</wa-button>`;
-    const validity = this.slaValidity;
-    return html`<wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>
-      <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
-      <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p><wa-button type="button" id="wizard-publish" ?disabled=${this.pending || !validity.ok || !/^https?:\/\//.test(this.url.trim())} ?loading=${this.pending} @click=${this.publish}>Publish &amp; finish</wa-button>`;
+    if (this.step === 1) return html`
+      <wa-input id="wizard-slug" label="Slug" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug}></wa-input>
+      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}
+      <div class="wizard-nav"><wa-button type="button" id="wizard-next-1" ?disabled=${!this.available} @click=${() => this.goStep(2)}>Next</wa-button></div>`;
+    if (this.step === 2) return html`
+      <wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>
+      <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-next-2" ?disabled=${!this.urlValid} @click=${() => this.goStep(3)}>Next</wa-button></div>`;
+    if (this.step === 3) {
+      const validity = describeSlaValidity(this.sla);
+      return html`
+        <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
+        <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p>
+        <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-next-3" ?disabled=${!validity.ok} @click=${() => this.goStep(4)}>Next</wa-button></div>`;
+    }
+    return this.renderReview();
+  }
+  /**
+   * One transaction as a ruled listing row: index, action, the chain it lands
+   * on, and — only on the step the cursor is on — the control that signs it.
+   * A written step is marked with the same dot-and-word `state` the ledger
+   * uses, so it reads without hue.
+   * @param {{key: string, label: string, chain: string}} step
+   * @param {number} index
+   */
+  renderRunRow(step, index) {
+    const written = index < this.done;
+    const current = index === this.done;
+    return html`
+      <li class=${written ? 'done' : current ? 'current' : 'later'}>
+        <span class="run-index">${String(index + 1).padStart(2, '0')}</span>
+        <span class="run-label">${step.label}</span>
+        <span class="run-chain">${step.chain}</span>
+        <span class="run-action">
+          ${written ? html`<span class="state active"><i class="dot"></i>Written</span>` : nothing}
+          ${current ? html`<wa-button type="button" size="s" appearance="accent" id=${`wizard-run-${step.key}`} ?disabled=${this.pending} ?loading=${this.pending} @click=${() => this.runStep(index)}>${this.execError ? 'Try again' : 'Sign'}</wa-button>` : nothing}
+        </span>
+        ${current && this.execError ? html`<p class="check bad" id="wizard-step-error"><i class="dot"></i>${this.execError}</p>` : nothing}
+      </li>`;
+  }
+  renderReview() {
+    const deps = /** @type {NonNullable<typeof this.deps>} */ (this.deps);
+    const steps = buildExecutionSteps(deps, { slug: this.slug, url: this.url, sla: this.sla });
+    const finished = this.done === steps.length;
+    return html`
+      <div class="wizard-docket">
+      <section class="block">
+        <h3>Service record</h3>
+        <table class="kv">
+          <tr><th>Subname</th><td><code>${this.slug}.verdikt.eth</code></td></tr>
+          <tr><th>Endpoint</th><td><code>${this.url.trim()}</code></td></tr>
+          <tr><th>SLA</th><td>${describeSlaRecord(this.sla)}</td></tr>
+          <tr><th>Bond</th><td><code>${deps.formatNativeUsdc(deps.depositAmount)}</code></td></tr>
+        </table>
+        ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" size="s" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button></div>` : nothing}
+      </section>
+      <section class="block">
+        <h3>Transactions <small>${steps.length}, across two chains, in this order</small></h3>
+        <ol class="wizard-run">${steps.map((step, i) => this.renderRunRow(step, i))}</ol>
+        ${finished ? html`<wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service</wa-button>` : nothing}
+      </section>
+      </div>`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;
     if (!this.deps) return nothing;
-    return html`<ol class="wizard-steps"><li class=${this.step >= 1 ? 'done' : ''}>1. Claim the subname</li><li class=${this.step >= 2 ? 'done' : ''}>2. Register on Arc</li><li class=${this.step >= 3 ? 'done' : ''}>3. Publish SLA &amp; URL</li></ol>${this.renderStep()}${this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;
+    return html`<ol class="wizard-steps">
+        <li class=${this.step >= 1 ? 'done' : ''}>1. Name</li>
+        <li class=${this.step >= 2 ? 'done' : ''}>2. Endpoint</li>
+        <li class=${this.step >= 3 ? 'done' : ''}>3. SLA</li>
+        <li class=${this.step >= 4 ? 'done' : ''}>4. Review</li>
+      </ol>${this.renderStep()}`;
   }
 }
 
