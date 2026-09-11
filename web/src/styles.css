@@ -28,6 +28,18 @@
   --good-track: #cfe6d7;
   --fair-track: #efe1b8;
   --poor-track: #f1cfc8;
+  /* System identity — a second colour family, beside the signal one. `good`,
+     `fair`, `poor` and `down` name a chain *value*; these name *whose system*
+     a thing is, which is a fact about the architecture rather than about any
+     one call. They live only in the request-path figure, where the whole point
+     is that four parties' systems each own one part of the loop. Nothing that
+     carries a number is ever coloured with them.
+     `verdikt` is the cyan stop of the brand mark's gradient, darkened to hold
+     on paper; `arc` is its violet stop. */
+  --net-sepolia: #985606;
+  --net-arc: #6d28a8;
+  --net-cre: #1e3a8a;
+  --net-verdikt: #0e7490;
   --display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
   --sans: "IBM Plex Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -68,6 +80,13 @@
   --good-track: #1f3a2c;
   --fair-track: #3d3218;
   --poor-track: #45231d;
+  /* Composed for the dark ground, not inverted: each hue keeps its identity
+     but trades depth for lightness, since a #1e3a8a navy on near-black is a
+     shape you cannot see. */
+  --net-sepolia: #e09a4b;
+  --net-arc: #bb92f0;
+  --net-cre: #8da5f8;
+  --net-verdikt: #3cc6dd;
 }
 
 * { box-sizing: border-box; }
@@ -427,8 +446,33 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
   font: 600 clamp(31px, 4.6vw, 60px)/1.02 var(--display);
   letter-spacing: -0.035em; color: var(--ink);
 }
-.entry-lead span { display: block; }
+/* Shrink-wrapped to its own text, not stretched to the measure: a clip-path
+   reveal reads its inset as a percentage of this box, so the box has to end
+   where the glyphs end. `fit-content` still falls back to the full available
+   width (today's behaviour) on a line too long to fit, so nothing changes for
+   a viewport that would have wrapped anyway. */
+.entry-lead span { display: block; width: fit-content; }
 .entry-lead span:last-child { color: var(--ink-2); }
+
+/* The page's other authored moment, at the top of the page rather than the
+   bottom of the first scroll: each line of the headline reveals once, on
+   load, left edge first — set onto the ledger rather than faded onto it, the
+   same drawn-not-dissolved grammar the request-path figure's connectors use.
+   Because the reveal is a plain clip-path on a fit-content box, it is exact
+   at any font size or viewport without measuring anything in script: the
+   clip boundary is always relative to the line's own rendered width. Text is
+   fully visible with no animation applied at all outside this query, so a
+   disabled stylesheet or an unsupporting browser never hides it. */
+@media (prefers-reduced-motion: no-preference) {
+  .entry-lead span {
+    clip-path: inset(0 100% 0 0);
+    animation: hero-line 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .entry-lead span:nth-child(1) { animation-delay: 0ms; }
+  .entry-lead span:nth-child(2) { animation-delay: 200ms; }
+  .entry-lead span:nth-child(3) { animation-delay: 400ms; }
+}
+@keyframes hero-line { to { clip-path: inset(0 0 0 0); } }
 .tagline.lead { font-size: 19px; max-width: 56ch; }
 .landing-cta { margin: 26px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
 .landing-cta wa-button { margin-top: 0; }
@@ -465,23 +509,51 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 .diagram { display: block; margin: 26px 0 18px; }
 .diagram .dg { display: block; width: 100%; height: auto; overflow: visible; }
 .diagram .dg-tall { display: none; }
-.dg-box { fill: none; stroke: var(--rule); stroke-width: 1; }
-.dg-div { stroke: var(--rule); stroke-width: 1; }
-.dg-bound { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; }
-.dg-band { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.11em; fill: var(--muted); }
+/* Four zones, one hue each. A zone class only sets `--zone`; the base classes
+   below read it and fall back to ink when a thing belongs to nobody — which
+   is how the paying agent and the provider's endpoint stay neutral. They are
+   the two parties transacting, not systems, and that distinction is the
+   figure's argument, so it is drawn rather than captioned. */
+.dg-sepolia { --zone: var(--net-sepolia); }
+.dg-arc { --zone: var(--net-arc); }
+.dg-cre { --zone: var(--net-cre); }
+.dg-verdikt { --zone: var(--net-verdikt); }
+
+.dg-box { fill: none; stroke: var(--zone, var(--rule)); stroke-width: 1; }
+.dg-div { stroke: var(--zone, var(--rule)); stroke-width: 1; }
+.dg-bound { fill: none; stroke: var(--zone, var(--muted)); stroke-width: 1; stroke-dasharray: 2 4; }
+.dg-band { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.11em; fill: var(--zone, var(--muted)); }
 .dg-band.end { text-anchor: end; }
-.dg-cap { font-family: var(--mono); font-size: 11.5px; fill: var(--ink-2); }
+.dg-cap { font-family: var(--mono); font-size: 11.5px; fill: var(--zone, var(--ink-2)); }
 .dg-title { font-family: var(--sans); font-size: 13px; font-weight: 500; fill: var(--ink); }
 .dg-key { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
-.dg-key.sm { font-size: 11px; fill: var(--ink-2); }
+.dg-key.sm { font-size: 11px; fill: var(--zone, var(--ink-2)); }
 .dg-sub { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
 .dg-note { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-2); }
 .dg-note.mid { text-anchor: middle; }
 .dg-note.end { text-anchor: end; }
-.dg-flow { fill: none; stroke: var(--ink-2); stroke-width: 1.25; }
-.dg-read { fill: none; stroke: var(--muted); stroke-width: 1.15; stroke-dasharray: 4 3; }
-.dg-tip { fill: var(--ink-2); }
-.dg-tip.quiet { fill: var(--muted); }
+/* A connector takes the colour of the system it reaches, so the black lines
+   left over are exactly the request-and-payment path. */
+.dg-flow { fill: none; stroke: var(--zone, var(--ink-2)); stroke-width: 1.25; }
+.dg-read { fill: none; stroke: var(--zone, var(--muted)); stroke-width: 1.15; stroke-dasharray: 4 3; }
+/* `context-stroke` hands the arrowhead its own line's colour, which is the
+   only way one marker can serve five. The flat fill before it is the fallback
+   where that keyword is not understood. */
+.dg-tip { fill: var(--ink-2); fill: context-stroke; }
+.dg-tip.quiet { fill: var(--muted); fill: context-stroke; }
+/* The three outcomes keep the signal palette they carry everywhere else — the
+   verdict strip, the ledger table, the margin — so the figure names them in
+   the same voice the data does. */
+/* The sprite is a definition store, not a drawing. */
+.dg-marks { position: absolute; width: 0; height: 0; overflow: hidden; }
+/* A partner mark is drawn in the flat colour of the zone it names, so five
+   logos with five different personalities read as one drawing rather than a
+   row of badges. The x402 cross sits on the provider block, which belongs to
+   no zone, so it falls back to ink like the block's own frame. */
+.dg-logo { fill: var(--zone, var(--ink-2)); }
+.dg-pass { fill: var(--good); }
+.dg-fail { fill: var(--poor); }
+.dg-dn { fill: var(--down); }
 /* The portrait figure is drawn on a 380-unit frame and rendered on a phone at
    roughly nine tenths of that, so its type is set larger in figure units to
    land at the same size on glass as the landscape one does. Its labels were
@@ -495,12 +567,16 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    the figure comes into view. Nothing is hidden to make it work — the figure
    renders finished, and `.drawing` only arrives at the instant the animation
    starts, so no JavaScript or reduced motion means the completed drawing. */
+/* Trace duration, the per-line --d delays (in the markup) and the reads'
+   fade-in are all the original timing at 0.3x speed (i.e. ÷0.3), scaled
+   together so the sequence still reads as one continuous draw rather than a
+   quick flash followed by a long wait. */
 @media (prefers-reduced-motion: no-preference) {
   .diagram.drawing .dg-flow {
     stroke-dasharray: 1; stroke-dashoffset: 1;
-    animation: dg-trace 760ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
+    animation: dg-trace 2533ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
   }
-  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 520ms ease-out 760ms both; }
+  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 1733ms ease-out 2533ms both; }
 }
 @keyframes dg-trace { to { stroke-dashoffset: 0; } }
 @keyframes dg-surface { to { opacity: 1; } }

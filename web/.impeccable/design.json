@@ -9,134 +9,400 @@
         "displayName": "Paper",
         "canonical": "oklch(96.7% 0.008 91.5)",
         "dark": "#141310",
-        "tonalRamp": ["oklch(15% 0.008 91.5)", "oklch(25% 0.008 91.5)", "oklch(36% 0.008 91.5)", "oklch(47% 0.008 91.5)", "oklch(58% 0.008 91.5)", "oklch(69% 0.008 91.5)", "oklch(82% 0.008 91.5)", "oklch(95% 0.008 91.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.008 91.5)",
+          "oklch(25% 0.008 91.5)",
+          "oklch(36% 0.008 91.5)",
+          "oklch(47% 0.008 91.5)",
+          "oklch(58% 0.008 91.5)",
+          "oklch(69% 0.008 91.5)",
+          "oklch(82% 0.008 91.5)",
+          "oklch(95% 0.008 91.5)"
+        ]
       },
       "paper-2": {
         "role": "neutral",
         "displayName": "Paper Two",
         "canonical": "oklch(93.7% 0.011 89.7)",
         "dark": "#1d1b17",
-        "tonalRamp": ["oklch(15% 0.011 89.7)", "oklch(25% 0.011 89.7)", "oklch(36% 0.011 89.7)", "oklch(47% 0.011 89.7)", "oklch(58% 0.011 89.7)", "oklch(69% 0.011 89.7)", "oklch(82% 0.011 89.7)", "oklch(95% 0.011 89.7)"]
+        "tonalRamp": [
+          "oklch(15% 0.011 89.7)",
+          "oklch(25% 0.011 89.7)",
+          "oklch(36% 0.011 89.7)",
+          "oklch(47% 0.011 89.7)",
+          "oklch(58% 0.011 89.7)",
+          "oklch(69% 0.011 89.7)",
+          "oklch(82% 0.011 89.7)",
+          "oklch(95% 0.011 89.7)"
+        ]
       },
       "rule": {
         "role": "neutral",
         "displayName": "Hairline",
         "canonical": "oklch(86.8% 0.017 88.0)",
         "dark": "#2f2c26",
-        "tonalRamp": ["oklch(15% 0.017 88.0)", "oklch(25% 0.017 88.0)", "oklch(36% 0.017 88.0)", "oklch(47% 0.017 88.0)", "oklch(58% 0.017 88.0)", "oklch(69% 0.017 88.0)", "oklch(82% 0.017 88.0)", "oklch(95% 0.017 88.0)"]
+        "tonalRamp": [
+          "oklch(15% 0.017 88.0)",
+          "oklch(25% 0.017 88.0)",
+          "oklch(36% 0.017 88.0)",
+          "oklch(47% 0.017 88.0)",
+          "oklch(58% 0.017 88.0)",
+          "oklch(69% 0.017 88.0)",
+          "oklch(82% 0.017 88.0)",
+          "oklch(95% 0.017 88.0)"
+        ]
       },
       "rule-strong": {
         "role": "primary",
         "displayName": "Strong Rule",
         "canonical": "oklch(20.5% 0.008 84.6)",
         "dark": "#ece7dc",
-        "tonalRamp": ["oklch(15% 0.008 84.6)", "oklch(25% 0.008 84.6)", "oklch(36% 0.008 84.6)", "oklch(47% 0.008 84.6)", "oklch(58% 0.008 84.6)", "oklch(69% 0.008 84.6)", "oklch(82% 0.008 84.6)", "oklch(95% 0.008 84.6)"]
+        "tonalRamp": [
+          "oklch(15% 0.008 84.6)",
+          "oklch(25% 0.008 84.6)",
+          "oklch(36% 0.008 84.6)",
+          "oklch(47% 0.008 84.6)",
+          "oklch(58% 0.008 84.6)",
+          "oklch(69% 0.008 84.6)",
+          "oklch(82% 0.008 84.6)",
+          "oklch(95% 0.008 84.6)"
+        ]
       },
       "ink": {
         "role": "primary",
         "displayName": "Ink",
         "canonical": "oklch(20.5% 0.008 84.6)",
         "dark": "#ece7dc",
-        "tonalRamp": ["oklch(15% 0.008 84.6)", "oklch(25% 0.008 84.6)", "oklch(36% 0.008 84.6)", "oklch(47% 0.008 84.6)", "oklch(58% 0.008 84.6)", "oklch(69% 0.008 84.6)", "oklch(82% 0.008 84.6)", "oklch(95% 0.008 84.6)"]
+        "tonalRamp": [
+          "oklch(15% 0.008 84.6)",
+          "oklch(25% 0.008 84.6)",
+          "oklch(36% 0.008 84.6)",
+          "oklch(47% 0.008 84.6)",
+          "oklch(58% 0.008 84.6)",
+          "oklch(69% 0.008 84.6)",
+          "oklch(82% 0.008 84.6)",
+          "oklch(95% 0.008 84.6)"
+        ]
       },
       "ink-2": {
         "role": "primary",
         "displayName": "Ink Two",
         "canonical": "oklch(40.0% 0.013 81.8)",
         "dark": "#c5bfb2",
-        "tonalRamp": ["oklch(15% 0.013 81.8)", "oklch(25% 0.013 81.8)", "oklch(36% 0.013 81.8)", "oklch(47% 0.013 81.8)", "oklch(58% 0.013 81.8)", "oklch(69% 0.013 81.8)", "oklch(82% 0.013 81.8)", "oklch(95% 0.013 81.8)"]
+        "tonalRamp": [
+          "oklch(15% 0.013 81.8)",
+          "oklch(25% 0.013 81.8)",
+          "oklch(36% 0.013 81.8)",
+          "oklch(47% 0.013 81.8)",
+          "oklch(58% 0.013 81.8)",
+          "oklch(69% 0.013 81.8)",
+          "oklch(82% 0.013 81.8)",
+          "oklch(95% 0.013 81.8)"
+        ]
       },
       "muted": {
         "role": "neutral",
         "displayName": "Muted Ink",
         "canonical": "oklch(50.8% 0.019 88.1)",
         "dark": "#8f897d",
-        "tonalRamp": ["oklch(15% 0.019 88.1)", "oklch(25% 0.019 88.1)", "oklch(36% 0.019 88.1)", "oklch(47% 0.019 88.1)", "oklch(58% 0.019 88.1)", "oklch(69% 0.019 88.1)", "oklch(82% 0.019 88.1)", "oklch(95% 0.019 88.1)"]
+        "tonalRamp": [
+          "oklch(15% 0.019 88.1)",
+          "oklch(25% 0.019 88.1)",
+          "oklch(36% 0.019 88.1)",
+          "oklch(47% 0.019 88.1)",
+          "oklch(58% 0.019 88.1)",
+          "oklch(69% 0.019 88.1)",
+          "oklch(82% 0.019 88.1)",
+          "oklch(95% 0.019 88.1)"
+        ]
       },
       "link": {
         "role": "secondary",
         "displayName": "Ledger Blue",
         "canonical": "oklch(45.4% 0.179 263.9)",
         "dark": "#8fb0ff",
-        "tonalRamp": ["oklch(15% 0.179 263.9)", "oklch(25% 0.179 263.9)", "oklch(36% 0.179 263.9)", "oklch(47% 0.179 263.9)", "oklch(58% 0.179 263.9)", "oklch(69% 0.179 263.9)", "oklch(82% 0.179 263.9)", "oklch(95% 0.179 263.9)"]
+        "tonalRamp": [
+          "oklch(15% 0.179 263.9)",
+          "oklch(25% 0.179 263.9)",
+          "oklch(36% 0.179 263.9)",
+          "oklch(47% 0.179 263.9)",
+          "oklch(58% 0.179 263.9)",
+          "oklch(69% 0.179 263.9)",
+          "oklch(82% 0.179 263.9)",
+          "oklch(95% 0.179 263.9)"
+        ]
       },
       "good": {
         "role": "tertiary",
         "displayName": "Conforming Green",
         "canonical": "oklch(51.9% 0.121 153.4)",
         "dark": "#4cc38a",
-        "tonalRamp": ["oklch(15% 0.121 153.4)", "oklch(25% 0.121 153.4)", "oklch(36% 0.121 153.4)", "oklch(47% 0.121 153.4)", "oklch(58% 0.121 153.4)", "oklch(69% 0.121 153.4)", "oklch(82% 0.121 153.4)", "oklch(95% 0.121 153.4)"]
+        "tonalRamp": [
+          "oklch(15% 0.121 153.4)",
+          "oklch(25% 0.121 153.4)",
+          "oklch(36% 0.121 153.4)",
+          "oklch(47% 0.121 153.4)",
+          "oklch(58% 0.121 153.4)",
+          "oklch(69% 0.121 153.4)",
+          "oklch(82% 0.121 153.4)",
+          "oklch(95% 0.121 153.4)"
+        ]
       },
       "fair": {
         "role": "tertiary",
         "displayName": "Caution Amber",
         "canonical": "oklch(56.2% 0.117 78.3)",
         "dark": "#e0b040",
-        "tonalRamp": ["oklch(15% 0.117 78.3)", "oklch(25% 0.117 78.3)", "oklch(36% 0.117 78.3)", "oklch(47% 0.117 78.3)", "oklch(58% 0.117 78.3)", "oklch(69% 0.117 78.3)", "oklch(82% 0.117 78.3)", "oklch(95% 0.117 78.3)"]
+        "tonalRamp": [
+          "oklch(15% 0.117 78.3)",
+          "oklch(25% 0.117 78.3)",
+          "oklch(36% 0.117 78.3)",
+          "oklch(47% 0.117 78.3)",
+          "oklch(58% 0.117 78.3)",
+          "oklch(69% 0.117 78.3)",
+          "oklch(82% 0.117 78.3)",
+          "oklch(95% 0.117 78.3)"
+        ]
       },
       "poor": {
         "role": "tertiary",
         "displayName": "Failing Red",
         "canonical": "oklch(52.1% 0.174 31.5)",
         "dark": "#f0705a",
-        "tonalRamp": ["oklch(15% 0.174 31.5)", "oklch(25% 0.174 31.5)", "oklch(36% 0.174 31.5)", "oklch(47% 0.174 31.5)", "oklch(58% 0.174 31.5)", "oklch(69% 0.174 31.5)", "oklch(82% 0.174 31.5)", "oklch(95% 0.174 31.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.174 31.5)",
+          "oklch(25% 0.174 31.5)",
+          "oklch(36% 0.174 31.5)",
+          "oklch(47% 0.174 31.5)",
+          "oklch(58% 0.174 31.5)",
+          "oklch(69% 0.174 31.5)",
+          "oklch(82% 0.174 31.5)",
+          "oklch(95% 0.174 31.5)"
+        ]
       },
       "down": {
         "role": "tertiary",
         "displayName": "Absent Slate",
         "canonical": "oklch(47.8% 0.050 264.5)",
         "dark": "#93a3c4",
-        "tonalRamp": ["oklch(15% 0.050 264.5)", "oklch(25% 0.050 264.5)", "oklch(36% 0.050 264.5)", "oklch(47% 0.050 264.5)", "oklch(58% 0.050 264.5)", "oklch(69% 0.050 264.5)", "oklch(82% 0.050 264.5)", "oklch(95% 0.050 264.5)"]
+        "tonalRamp": [
+          "oklch(15% 0.050 264.5)",
+          "oklch(25% 0.050 264.5)",
+          "oklch(36% 0.050 264.5)",
+          "oklch(47% 0.050 264.5)",
+          "oklch(58% 0.050 264.5)",
+          "oklch(69% 0.050 264.5)",
+          "oklch(82% 0.050 264.5)",
+          "oklch(95% 0.050 264.5)"
+        ]
       },
       "good-track": {
         "role": "tertiary",
         "displayName": "Conforming Track",
         "canonical": "oklch(90.4% 0.032 157.1)",
         "dark": "#1f3a2c",
-        "tonalRamp": ["oklch(15% 0.032 157.1)", "oklch(25% 0.032 157.1)", "oklch(36% 0.032 157.1)", "oklch(47% 0.032 157.1)", "oklch(58% 0.032 157.1)", "oklch(69% 0.032 157.1)", "oklch(82% 0.032 157.1)", "oklch(95% 0.032 157.1)"]
+        "tonalRamp": [
+          "oklch(15% 0.032 157.1)",
+          "oklch(25% 0.032 157.1)",
+          "oklch(36% 0.032 157.1)",
+          "oklch(47% 0.032 157.1)",
+          "oklch(58% 0.032 157.1)",
+          "oklch(69% 0.032 157.1)",
+          "oklch(82% 0.032 157.1)",
+          "oklch(95% 0.032 157.1)"
+        ]
       },
       "fair-track": {
         "role": "tertiary",
         "displayName": "Caution Track",
         "canonical": "oklch(91.1% 0.056 91.4)",
         "dark": "#3d3218",
-        "tonalRamp": ["oklch(15% 0.056 91.4)", "oklch(25% 0.056 91.4)", "oklch(36% 0.056 91.4)", "oklch(47% 0.056 91.4)", "oklch(58% 0.056 91.4)", "oklch(69% 0.056 91.4)", "oklch(82% 0.056 91.4)", "oklch(95% 0.056 91.4)"]
+        "tonalRamp": [
+          "oklch(15% 0.056 91.4)",
+          "oklch(25% 0.056 91.4)",
+          "oklch(36% 0.056 91.4)",
+          "oklch(47% 0.056 91.4)",
+          "oklch(58% 0.056 91.4)",
+          "oklch(69% 0.056 91.4)",
+          "oklch(82% 0.056 91.4)",
+          "oklch(95% 0.056 91.4)"
+        ]
       },
       "poor-track": {
         "role": "tertiary",
         "displayName": "Failing Track",
         "canonical": "oklch(88.1% 0.040 31.6)",
         "dark": "#45231d",
-        "tonalRamp": ["oklch(15% 0.040 31.6)", "oklch(25% 0.040 31.6)", "oklch(36% 0.040 31.6)", "oklch(47% 0.040 31.6)", "oklch(58% 0.040 31.6)", "oklch(69% 0.040 31.6)", "oklch(82% 0.040 31.6)", "oklch(95% 0.040 31.6)"]
+        "tonalRamp": [
+          "oklch(15% 0.040 31.6)",
+          "oklch(25% 0.040 31.6)",
+          "oklch(36% 0.040 31.6)",
+          "oklch(47% 0.040 31.6)",
+          "oklch(58% 0.040 31.6)",
+          "oklch(69% 0.040 31.6)",
+          "oklch(82% 0.040 31.6)",
+          "oklch(95% 0.040 31.6)"
+        ]
+      },
+      "net-sepolia": {
+        "role": "tertiary",
+        "displayName": "Sepolia Amber",
+        "canonical": "oklch(51.9% 0.118 61.3)",
+        "dark": "#e09a4b",
+        "tonalRamp": [
+          "oklch(15% 0.118 61.3)",
+          "oklch(25% 0.118 61.3)",
+          "oklch(36% 0.118 61.3)",
+          "oklch(47% 0.118 61.3)",
+          "oklch(58% 0.118 61.3)",
+          "oklch(69% 0.118 61.3)",
+          "oklch(82% 0.118 61.3)",
+          "oklch(95% 0.118 61.3)"
+        ]
+      },
+      "net-arc": {
+        "role": "tertiary",
+        "displayName": "Arc Violet",
+        "canonical": "oklch(44.7% 0.192 304.0)",
+        "dark": "#bb92f0",
+        "tonalRamp": [
+          "oklch(15% 0.192 304.0)",
+          "oklch(25% 0.192 304.0)",
+          "oklch(36% 0.192 304.0)",
+          "oklch(47% 0.192 304.0)",
+          "oklch(58% 0.192 304.0)",
+          "oklch(69% 0.192 304.0)",
+          "oklch(82% 0.192 304.0)",
+          "oklch(95% 0.192 304.0)"
+        ]
+      },
+      "net-cre": {
+        "role": "tertiary",
+        "displayName": "CRE Navy",
+        "canonical": "oklch(37.9% 0.138 265.5)",
+        "dark": "#8da5f8",
+        "tonalRamp": [
+          "oklch(15% 0.138 265.5)",
+          "oklch(25% 0.138 265.5)",
+          "oklch(36% 0.138 265.5)",
+          "oklch(47% 0.138 265.5)",
+          "oklch(58% 0.138 265.5)",
+          "oklch(69% 0.138 265.5)",
+          "oklch(82% 0.138 265.5)",
+          "oklch(95% 0.138 265.5)"
+        ]
+      },
+      "net-verdikt": {
+        "role": "tertiary",
+        "displayName": "Verdikt Cyan",
+        "canonical": "oklch(52.0% 0.094 223.1)",
+        "dark": "#3cc6dd",
+        "tonalRamp": [
+          "oklch(15% 0.094 223.1)",
+          "oklch(25% 0.094 223.1)",
+          "oklch(36% 0.094 223.1)",
+          "oklch(47% 0.094 223.1)",
+          "oklch(58% 0.094 223.1)",
+          "oklch(69% 0.094 223.1)",
+          "oklch(82% 0.094 223.1)",
+          "oklch(95% 0.094 223.1)"
+        ]
       }
     },
     "typographyMeta": {
-      "lead": { "displayName": "Lead", "purpose": "The landing sheet's opening statement only; set as block lines, last line drops to ink-2." },
-      "display": { "displayName": "Display", "purpose": "Page-head h1, service detail h2, and a platform figure's value at weight 500." },
-      "headline": { "displayName": "Headline", "purpose": "Landing entry headings (34ch, balanced wrap) and the nav wordmark." },
-      "title": { "displayName": "Title", "purpose": "Section heading inside a detail block, closed by a 1px hairline." },
-      "body": { "displayName": "Body", "purpose": "All prose. Measure capped in ch by role: 64 / 70 / 78 / 90." },
-      "label": { "displayName": "Label", "purpose": "Figure and field labels, table heads, footer, status text; usually muted." },
-      "record": { "displayName": "Record", "purpose": "Anything that came off a chain — addresses, hashes, blocks, amounts, record keys, the entry index. Never prose." },
-      "record-caption": { "displayName": "Record Caption", "purpose": "Uppercase mono heading of an outer-margin annotation block. Margin only; not a kicker above a heading in the measure." }
+      "lead": {
+        "displayName": "Lead",
+        "purpose": "The landing sheet's opening statement only; set as block lines, last line drops to ink-2."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Page-head h1, service detail h2, and a platform figure's value at weight 500."
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Landing entry headings (34ch, balanced wrap) and the nav wordmark."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Section heading inside a detail block, closed by a 1px hairline."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "All prose. Measure capped in ch by role: 64 / 70 / 78 / 90."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Figure and field labels, table heads, footer, status text; usually muted."
+      },
+      "record": {
+        "displayName": "Record",
+        "purpose": "Anything that came off a chain \u2014 addresses, hashes, blocks, amounts, record keys, the entry index. Never prose."
+      },
+      "record-caption": {
+        "displayName": "Record Caption",
+        "purpose": "Uppercase mono heading of an outer-margin annotation block. Margin only; not a kicker above a heading in the measure."
+      }
     },
     "shadows": [
-      { "name": "none", "value": "none", "purpose": "The system ships no elevation. Depth is a hairline rule plus the paper-2 tonal step." },
-      { "name": "hollow-outcome", "value": "inset 0 0 0 1.5px var(--down)", "purpose": "Draws the DOWN verdict mark as a hollow rectangle so outcome survives a red/green deficiency. An outline stroke, not a lift." }
+      {
+        "name": "none",
+        "value": "none",
+        "purpose": "The system ships no elevation. Depth is a hairline rule plus the paper-2 tonal step."
+      },
+      {
+        "name": "hollow-outcome",
+        "value": "inset 0 0 0 1.5px var(--down)",
+        "purpose": "Draws the DOWN verdict mark as a hollow rectangle so outcome survives a red/green deficiency. An outline stroke, not a lift."
+      }
     ],
     "motion": [
-      { "name": "trace", "value": "760ms cubic-bezier(0.16, 1, 0.3, 1)", "purpose": "The schematic's flow lines draw themselves once on scroll into view, staggered by a per-line --d delay." },
-      { "name": "surface", "value": "520ms ease-out 760ms", "purpose": "The schematic's dashed read lines fade in after the flow finishes tracing." },
-      { "name": "pulse", "value": "1.4s ease-in-out infinite", "purpose": "Skeleton bar opacity 0.5 to 1 while chain data is in flight." },
-      { "name": "state", "value": "120ms ease", "purpose": "Background, colour and border transitions on a landing CTA." },
-      { "name": "reduced-motion-default", "value": "prefers-reduced-motion: no-preference", "purpose": "Every animation is gated behind this query and the un-animated state is the finished one." }
+      {
+        "name": "trace",
+        "value": "760ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "The schematic's flow lines draw themselves once on scroll into view, staggered by a per-line --d delay."
+      },
+      {
+        "name": "surface",
+        "value": "520ms ease-out 760ms",
+        "purpose": "The schematic's dashed read lines fade in after the flow finishes tracing."
+      },
+      {
+        "name": "pulse",
+        "value": "1.4s ease-in-out infinite",
+        "purpose": "Skeleton bar opacity 0.5 to 1 while chain data is in flight."
+      },
+      {
+        "name": "state",
+        "value": "120ms ease",
+        "purpose": "Background, colour and border transitions on a landing CTA."
+      },
+      {
+        "name": "reduced-motion-default",
+        "value": "prefers-reduced-motion: no-preference",
+        "purpose": "Every animation is gated behind this query and the un-animated state is the finished one."
+      }
     ],
     "breakpoints": [
-      { "name": "container", "value": "1280px" },
-      { "name": "split", "value": "1040px" },
-      { "name": "figure-portrait", "value": "760px" },
-      { "name": "figures-halve", "value": "720px" },
-      { "name": "compact", "value": "560px" }
+      {
+        "name": "container",
+        "value": "1280px"
+      },
+      {
+        "name": "split",
+        "value": "1040px"
+      },
+      {
+        "name": "figure-portrait",
+        "value": "760px"
+      },
+      {
+        "name": "figures-halve",
+        "value": "720px"
+      },
+      {
+        "name": "compact",
+        "value": "560px"
+      }
     ]
   },
   "components": [
@@ -192,7 +458,7 @@
       "name": "Listing Row",
       "kind": "card",
       "refersTo": "listing-row",
-      "description": "The marketplace's unit: a ruled row, not a card — name and mono slug left, tabular figures right, a status word with its dot.",
+      "description": "The marketplace's unit: a ruled row, not a card \u2014 name and mono slug left, tabular figures right, a status word with its dot.",
       "html": "<div class=\"ds-listing\"><div class=\"ds-row head\"><span class=\"ds-cell name\">Service</span><span class=\"ds-cell num\">Conformance</span><span class=\"ds-cell num\">Bond</span><span class=\"ds-cell status\">Status</span></div><a class=\"ds-row\" href=\"#\"><span class=\"ds-cell name\"><strong>Weather API</strong><small>weather-api.verdikt.eth</small></span><span class=\"ds-cell num\"><span class=\"ds-score good\"><b>982</b><span class=\"ds-meter\"><span style=\"width:98.2%\"></span></span></span></span><span class=\"ds-cell num\">25.00 <small>USDC</small></span><span class=\"ds-cell status\"><span class=\"ds-state active\"><i class=\"ds-dot\"></i>Active</span></span></a></div>",
       "css": ".ds-listing { border-top: 1.5px solid var(--rule-strong, #191713); font-family: var(--sans, 'IBM Plex Sans', Helvetica, Arial, sans-serif); color: var(--ink, #191713); } .ds-row { display: grid; grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.8rem; gap: 10px; align-items: center; width: 100%; text-align: left; padding: 13px 10px 13px 14px; background: none; border: 0; border-bottom: 1px solid var(--rule, #d8d3c7); color: inherit; text-decoration: none; cursor: pointer; } .ds-row.head { cursor: default; padding: 8px 10px; font-size: 14px; color: var(--muted, #6a6559); } .ds-row:not(.head):hover { background: var(--paper-2, #edeae2); } .ds-row:focus-visible { outline: 2px solid var(--ink, #191713); outline-offset: -2px; } .ds-cell { min-width: 0; } .ds-cell.num, .ds-cell.status { text-align: right; font-variant-numeric: tabular-nums; } .ds-cell.name { display: flex; flex-direction: column; gap: 1px; } .ds-cell.name strong { font-weight: 500; font-size: 17.5px; } .ds-cell.name small { color: var(--muted, #6a6559); font-family: var(--mono, 'IBM Plex Mono', ui-monospace, monospace); font-size: 12.5px; } .ds-cell.num small { font-size: 13px; color: var(--muted, #6a6559); } .ds-score { display: inline-flex; flex-direction: column; align-items: flex-end; gap: 4px; min-width: 3.6rem; } .ds-score b { font-weight: 500; font-variant-numeric: tabular-nums; } .ds-meter { display: block; width: 100%; height: 3px; border-radius: 2px; overflow: hidden; } .ds-score.good .ds-meter { background: var(--good-track, #cfe6d7); } .ds-score.good .ds-meter span { display: block; height: 100%; background: var(--good, #1c7c46); } .ds-state { display: inline-flex; align-items: center; gap: 7px; font-size: 14.5px; } .ds-state.active { color: var(--good, #1c7c46); } .ds-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }"
     },
@@ -231,33 +497,73 @@
   ],
   "narrative": {
     "northStar": "The Running Ledger",
-    "overview": "Verdikt sets a chain the way a bound ledger sets a transaction: ruled lines, a measure, a margin for annotation, and no decoration that would make a number look more certain than it is. The whole product is one comparison — what a provider promised, beside what it delivered — so the surface is built out of rules and alignment rather than containers. Nothing on it is a card. A section, a notice, a table row and a landing entry are all the same object: content hung between two hairlines.\n\nThe density is editorial rather than dashboard. Type does the ranking, not fills: a display grotesk (Bricolage Grotesque) opens a section, prose runs in IBM Plex Sans on a 64–78ch measure, and IBM Plex Mono appears only where a value came off a chain or names a record key. Light and dark are both authored in full, because a comparison table that is half-themed is unreadable; the scheme is set on <html> before paint so native controls and the component library inherit it.\n\nColour is scarce and semantic. There is no brand accent to spend: ink on paper carries every focal action, and the four signal hues (good, fair, poor, down) exist to name an outcome, never to enliven a layout. Where an outcome matters, shape repeats what colour says, so the page survives a red/green deficiency. The one authored motion on the whole surface is the request-path schematic tracing itself once on scroll; everything else is still.",
+    "overview": "Verdikt sets a chain the way a bound ledger sets a transaction: ruled lines, a measure, a margin for annotation, and no decoration that would make a number look more certain than it is. The whole product is one comparison \u2014 what a provider promised, beside what it delivered \u2014 so the surface is built out of rules and alignment rather than containers. Nothing on it is a card. A section, a notice, a table row and a landing entry are all the same object: content hung between two hairlines.\n\nThe density is editorial rather than dashboard. Type does the ranking, not fills: a display grotesk (Bricolage Grotesque) opens a section, prose runs in IBM Plex Sans on a 64\u201378ch measure, and IBM Plex Mono appears only where a value came off a chain or names a record key. Light and dark are both authored in full, because a comparison table that is half-themed is unreadable; the scheme is set on <html> before paint so native controls and the component library inherit it.\n\nColour is scarce and semantic. There is no brand accent to spend: ink on paper carries every focal action, and the four signal hues (good, fair, poor, down) exist to name an outcome, never to enliven a layout. Where an outcome matters, shape repeats what colour says, so the page survives a red/green deficiency. The one authored motion on the whole surface is the request-path schematic tracing itself once on scroll; everything else is still.",
     "keyCharacteristics": [
       "Hairline rules instead of boxed cards; nothing is a container",
       "Two-weight rule system: 1px rule separates, 1.5px rule-strong opens",
-      "Mono reserved for chain data, record keys and measurement — never for prose",
+      "Mono reserved for chain data, record keys and measurement \u2014 never for prose",
       "Signal colour plus shape: outcomes are legible without hue",
       "Light and dark authored in full, including selection, caret, scrollbar, focus",
       "Flat by construction: no elevation, no shadow vocabulary"
     ],
     "rules": [
-      { "name": "The Two Schemes Rule", "body": "Every colour is defined in both :root and :root[data-theme=\"dark\"]. A value that only exists in one scheme is a bug — a half-themed comparison table is unreadable, and the theme is applied before first paint.", "section": "colors" },
-      { "name": "The Signal Scarcity Rule", "body": "good, fair, poor and down name an on-chain fact — an outcome, a status, a score band, a validity. They are never used to decorate, categorise or brighten. If a colour on screen cannot be traced to a chain value, it is ink, muted, or a rule.", "section": "colors" },
-      { "name": "The Shape-and-Colour Rule", "body": "Wherever an outcome is coloured it also differs in form. In the verdict strip, PASS and FAIL are filled marks and DOWN is drawn hollow (a 1.5px inset outline) — an absent answer drawn as an absence — so the record reads without hue.", "section": "colors" },
-      { "name": "The Chain-Data Rule", "body": "IBM Plex Mono is reserved for what came off a chain or names a record: addresses, hashes, block numbers, amounts, record keys, the entry index, form status. Prose is never set in mono to look technical, and a mono table still sets its own thead in sans, because a column heading is a label and not a value.", "section": "typography" },
-      { "name": "The Tabular Rule", "body": "Any figure that is compared down a column or across a margin carries font-variant-numeric: tabular-nums — scores, amounts, block numbers, the index rail. A number that shifts as it updates is a defect.", "section": "typography" },
-      { "name": "The Measure Rule", "body": "Prose is capped in ch, never in pixels, and never runs the full 1280px container. If a paragraph has no max-width, it is missing one.", "section": "typography" },
-      { "name": "The Hairline Rule", "body": "Separation is a 1px rule; the opening of a major region is a single 1.5px rule-strong. Two rules never sit within a few pixels of each other — where a page head's bottom rule already draws the line, the listing below drops its own, and a footer following the sheet drops its top rule.", "section": "layout" },
-      { "name": "The Margin Rule", "body": "Supporting evidence — provenance, a caveat, the latest verdict — belongs in the outer margin beside the claim it supports, not interleaved into the measure. Below 1040px it folds under the body with a rule above it, never into a box.", "section": "layout" },
-      { "name": "The Flat Sheet Rule", "body": "A surface is never raised. If something needs to read as distinct, give it a rule, a measure, or the paper-2 tint — in that order. Shadow is not in this system's vocabulary, and an offset or hard shadow would belong to a different world entirely.", "section": "elevation" },
-      { "name": "The No-Box Rule", "body": "A notice is a rule down the left with no fill (.aside, 2px rule, amber when it warns). A tinted, boxed callout is how a generated dashboard says \"notice\"; a marginal rule is how a ledger does. The same applies to sections: nothing on the landing sheet is a card.", "section": "shapes" }
+      {
+        "name": "The Two Schemes Rule",
+        "body": "Every colour is defined in both :root and :root[data-theme=\"dark\"]. A value that only exists in one scheme is a bug \u2014 a half-themed comparison table is unreadable, and the theme is applied before first paint.",
+        "section": "colors"
+      },
+      {
+        "name": "The Signal Scarcity Rule",
+        "body": "good, fair, poor and down name an on-chain fact \u2014 an outcome, a status, a score band, a validity. They are never used to decorate, categorise or brighten. If a colour on screen cannot be traced to a chain value, it is ink, muted, or a rule.",
+        "section": "colors"
+      },
+      {
+        "name": "The Shape-and-Colour Rule",
+        "body": "Wherever an outcome is coloured it also differs in form. In the verdict strip, PASS and FAIL are filled marks and DOWN is drawn hollow (a 1.5px inset outline) \u2014 an absent answer drawn as an absence \u2014 so the record reads without hue.",
+        "section": "colors"
+      },
+      {
+        "name": "The Chain-Data Rule",
+        "body": "IBM Plex Mono is reserved for what came off a chain or names a record: addresses, hashes, block numbers, amounts, record keys, the entry index, form status. Prose is never set in mono to look technical, and a mono table still sets its own thead in sans, because a column heading is a label and not a value.",
+        "section": "typography"
+      },
+      {
+        "name": "The Tabular Rule",
+        "body": "Any figure that is compared down a column or across a margin carries font-variant-numeric: tabular-nums \u2014 scores, amounts, block numbers, the index rail. A number that shifts as it updates is a defect.",
+        "section": "typography"
+      },
+      {
+        "name": "The Measure Rule",
+        "body": "Prose is capped in ch, never in pixels, and never runs the full 1280px container. If a paragraph has no max-width, it is missing one.",
+        "section": "typography"
+      },
+      {
+        "name": "The Hairline Rule",
+        "body": "Separation is a 1px rule; the opening of a major region is a single 1.5px rule-strong. Two rules never sit within a few pixels of each other \u2014 where a page head's bottom rule already draws the line, the listing below drops its own, and a footer following the sheet drops its top rule.",
+        "section": "layout"
+      },
+      {
+        "name": "The Margin Rule",
+        "body": "Supporting evidence \u2014 provenance, a caveat, the latest verdict \u2014 belongs in the outer margin beside the claim it supports, not interleaved into the measure. Below 1040px it folds under the body with a rule above it, never into a box.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Sheet Rule",
+        "body": "A surface is never raised. If something needs to read as distinct, give it a rule, a measure, or the paper-2 tint \u2014 in that order. Shadow is not in this system's vocabulary, and an offset or hard shadow would belong to a different world entirely.",
+        "section": "elevation"
+      },
+      {
+        "name": "The No-Box Rule",
+        "body": "A notice is a rule down the left with no fill (.aside, 2px rule, amber when it warns). A tinted, boxed callout is how a generated dashboard says \"notice\"; a marginal rule is how a ledger does. The same applies to sections: nothing on the landing sheet is a card.",
+        "section": "shapes"
+      }
     ],
     "dos": [
       "Do separate with a 1px rule and open a region with a single 1.5px rule-strong; drop one of two rules that would land within a few pixels.",
       "Do reserve IBM Plex Mono for chain data, record keys, labels and measurement, and set a mono table's head in sans.",
       "Do carry every outcome in shape as well as colour (filled PASS/FAIL, hollow DOWN; a dot before every status word).",
       "Do define every new colour in both :root and :root[data-theme=\"dark\"].",
-      "Do theme the browser's own surfaces — ::selection (ink on paper), caret-color, scrollbar-color (muted on paper), and a 2px ink :focus-visible ring at 2px offset.",
+      "Do theme the browser's own surfaces \u2014 ::selection (ink on paper), caret-color, scrollbar-color (muted on paper), and a 2px ink :focus-visible ring at 2px offset.",
       "Do cap prose in ch (64/70/78/90 by role) rather than letting it run the container.",
       "Do use font-variant-numeric: tabular-nums on any compared figure.",
       "Do give a score its meter track in the lighter step of its own hue, and drop the meter entirely when the score is unknown.",
@@ -268,15 +574,15 @@
     ],
     "donts": [
       "Don't box a notice. A standing note is a 2px left rule with no fill; amber only when it warns.",
-      "Don't add elevation. No drop shadow, no offset shadow, no blur, no translucency — paper-2 and a rule are the whole depth vocabulary.",
+      "Don't add elevation. No drop shadow, no offset shadow, no blur, no translucency \u2014 paper-2 and a rule are the whole depth vocabulary.",
       "Don't put a card around a section, a figure, or a landing entry.",
       "Don't set prose in mono to make it look technical, and don't set a chain value in sans.",
-      "Don't spend good / fair / poor / down on anything that is not an on-chain fact, and don't introduce a decorative brand accent — ink carries emphasis.",
+      "Don't spend good / fair / poor / down on anything that is not an on-chain fact, and don't introduce a decorative brand accent \u2014 ink carries emphasis.",
       "Don't show a number whose provenance is unstated; a chain address is named only where a chain was actually read, and demo data says so out loud.",
       "Don't rely on hue alone to distinguish an outcome.",
       "Don't hardcode a hex in a component; every colour comes from a custom property. (The wordmark's fixed white V is the single deliberate exception, because it sits on the theme-independent gradient mark.)",
       "Don't add a second authored motion to a page; this system animates once, at the schematic, plus the skeleton's pulse.",
-      "Don't introduce an uppercase eyebrow or kicker above a heading. The uppercase mono caption belongs to the outer margin, where it labels a record block — it is not licence for a kicker in the measure.",
+      "Don't introduce an uppercase eyebrow or kicker above a heading. The uppercase mono caption belongs to the outer margin, where it labels a record block \u2014 it is not licence for a kicker in the measure.",
       "Don't use an icon font or a glyph character as an icon."
     ]
   }

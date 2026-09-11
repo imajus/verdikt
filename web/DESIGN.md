@@ -17,6 +17,10 @@ colors:
   good-track: "#cfe6d7"
   fair-track: "#efe1b8"
   poor-track: "#f1cfc8"
+  net-sepolia: "#985606"
+  net-arc: "#6d28a8"
+  net-cre: "#1e3a8a"
+  net-verdikt: "#0e7490"
 typography:
   lead:
     fontFamily: "Bricolage Grotesque, Helvetica Neue, Arial, sans-serif"
@@ -259,7 +263,27 @@ first paint.
 **The Signal Scarcity Rule.** `good`, `fair`, `poor` and `down` name an
 on-chain fact — an outcome, a status, a score band, a validity. They are never
 used to decorate, categorise or brighten. If a colour on screen cannot be
-traced to a chain value, it is ink, muted, or a rule.
+traced to a chain value, it is ink, muted, a rule, or one of the four identity
+hues below.
+
+**The Two Families Rule.** There are exactly two coloured families and they
+answer different questions. The signal family (`good` / `fair` / `poor` /
+`down`) answers *what did this call do*. The identity family (`net-sepolia` /
+`net-arc` / `net-cre` / `net-verdikt`) answers *whose system is this* — a fact
+about the architecture, not about any one call. The identity hues live only in
+the request-path figure, where the whole subject is that four parties' systems
+each own one part of the loop, and they never touch a number, a score, a status
+or a table. A thing that belongs to nobody stays neutral: in the figure the
+paying agent and the provider's endpoint are drawn in `rule` grey precisely
+because they are the two parties transacting rather than systems, and that
+distinction is drawn rather than captioned. A connector takes the colour of the
+system it reaches, which leaves the request-and-payment path as the only black
+lines on the drawing.
+
+`net-verdikt` is the cyan stop of the brand mark's gradient and `net-arc` its
+violet stop, both darkened to hold on paper. Dark-mode values are composed for
+the dark ground rather than inverted — a `#1e3a8a` navy on near-black is a
+shape you cannot see.
 
 **The Shape-and-Colour Rule.** Wherever an outcome is coloured it also differs
 in form. In the verdict strip, PASS and FAIL are filled marks and DOWN is drawn
@@ -487,14 +511,72 @@ ledger's lines are referenced by index; it is not a decorative section counter.
 
 An authored SVG in two viewBoxes (landscape and portrait), the unused one
 `display: none` so it leaves the accessibility tree. Every stroke and fill is
-themed from CSS classes, never from markup attributes: 1px `rule` boxes, dashed
-`muted` boundaries, 1.25px `ink-2` flow lines, dashed 1.15px `muted` reads, and
-mono labels from 10.5px to 13px (the portrait figure sets its type larger in
-figure units to land at the same size on glass). On scroll into view the flow
-lines trace once over 760ms `cubic-bezier(0.16, 1, 0.3, 1)` with per-line
-delays, then the dashed reads fade in — the figure renders finished, and the
-animating class only arrives at the instant it starts, so no JavaScript and
-`prefers-reduced-motion: reduce` both land on the completed drawing.
+themed from CSS classes, never from markup attributes: 1px boxes, dashed
+boundaries, 1.25px flow lines, dashed 1.15px reads, and mono labels from 10.5px
+to 13px (the portrait figure sets its type larger in figure units to land at the
+same size on glass).
+
+Colour enters here and nowhere else in the system. A zone class (`dg-sepolia`,
+`dg-arc`, `dg-cre`, `dg-verdikt`) sets nothing but `--zone`; the element classes
+read `var(--zone, …)` and fall back to `rule` / `muted` / `ink-2`, so an
+unzoned box is neutral by construction rather than by omission. A zone colours a
+frame, its divider, its band label and its caption — never the record keys
+inside it, which stay `ink` because they are data. `context-stroke` on the
+marker fill lets one arrowhead per figure serve every line colour, with a flat
+`ink-2` fill declared before it as the fallback. The words PASS, FAIL and DOWN
+are `tspan`s carrying `good`, `poor` and `down`, so the figure names an outcome
+in the same voice the ledger table and the verdict strip do.
+
+**Partner marks.** Six logos sit in the top-left corner of the blocks they
+name: ENS, Chainlink (for CRE), Arc, x402, the paying agent's robot glyph, and
+Verdikt's own droplet. Each is taken from its owner's own artwork rather than
+redrawn — a logo that merely resembles the real one is worse than none — and
+every one is normalised into a shared 24-unit box, so six marks drawn at six
+original scales carry one optical weight. The agent's mark is Material
+Symbols' `smart_toy` (Apache 2.0), picked over a more detailed robot glyph
+after checking both at 13px: the detailed one collapsed into an unreadable
+blob, `smart_toy`'s antenna-and-eyes silhouette survived. They live in a
+single `<symbol>` sprite that both figures `<use>`, never duplicated. A mark is
+filled with `var(--zone)` like everything else in its block, which is what
+keeps six foreign personalities reading as one drawing instead of a row of
+badges; the x402 cross and the agent's robot both fall back to `ink-2` because
+neither the provider nor the paying agent belongs to a zone — they are the two
+parties transacting, not systems. Only the block's first line indents past its
+mark, so the line beneath keeps the full measure. These are nominative marks
+identifying which system a block is — never a partner, sponsorship or
+endorsement claim, which PRODUCT.md rules out.
+
+On scroll into view the flow lines trace once over 2533ms
+`cubic-bezier(0.16, 1, 0.3, 1)` with per-line delays (0/500/1000/1500/2000ms —
+0.3x the original speed, i.e. every duration and delay divided by 0.3 together,
+so the sequence still reads as one continuous draw rather than a quick flash
+followed by a long wait), then the dashed reads fade in over 1733ms starting at
+2533ms — the figure renders finished, and the animating class only arrives at
+the instant it starts, so no JavaScript and `prefers-reduced-motion: reduce`
+both land on the completed drawing.
+
+### Hero Headline Reveal
+
+The page's other authored moment, at the top rather than the bottom of the
+first scroll: entry 00's three-line headline sets itself onto the page once on
+load, left edge first per line, in the same drawn-not-dissolved grammar as the
+request-path figure's connectors — this page's motion signature is things
+being inscribed, never faded. Each `span` is `width: fit-content` rather than
+the block-level default of stretching to the measure, which is what makes the
+effect exact at any viewport or font size with no script: a `clip-path` reveal
+reads its inset as a percentage of the element's own box, so the box has to
+end exactly where the glyphs end for the percentage to track the visible text
+rather than empty space beside it. `inset(0 100% 0 0)` animates to
+`inset(0 0 0 0)` over 640ms `cubic-bezier(0.16, 1, 0.3, 1)` — the same easing
+curve as the request-path trace, so the two authored moments read as one
+motion language — with the three lines staggered 200ms apart so the whole
+headline settles by ~1040ms. No transform, no opacity, no blur: a plain wipe
+is the restrained reading of "freshly set," and stacking a second technique
+onto it would have been decoration, not thesis. `clip-path` is declared only
+inside `@media (prefers-reduced-motion: no-preference)`; the unconditional
+rule sets no clip-path at all, so `reduce`, a disabled stylesheet, or a
+non-supporting browser all show the finished headline immediately, never a
+hidden one.
 
 ### Loading Skeleton
 
