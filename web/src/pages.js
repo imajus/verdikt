@@ -1,11 +1,14 @@
-// Static content the dashboard shows with no chain data behind it: the
-// landing page, the legal pages, and the footer linking to them. Kept apart
-// from lit-app.js's marketplace/provider/how templates because none of these
-// need `Marketplace`/`Listing` data or a loaded route — see
+// Static content the dashboard shows with no chain data behind it: the legal
+// pages, the shared page head, and the footer linking to them. Kept apart from
+// lit-app.js's marketplace/provider/how templates because none of these need
+// `Marketplace`/`Listing` data or a loaded route — see
 // docs/superpowers/specs/2026-09-11-landing-routing-legal-design.md §3, §7.
+//
+// The landing page used to live here too. It reads chain data now, so it moved
+// to landing.js; TAGLINE stays because every page's head uses it.
 
 import { html, nothing } from 'lit';
-import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
+import { HOW_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
 
@@ -19,15 +22,6 @@ export const pageHead = (title, description, aside = nothing) => html`
     <div><h1>${title}</h1><p class="tagline">${description}</p></div>
     ${aside}
   </header>`;
-
-/** @param {(path: string) => void} go */
-export const landing = (go) => html`
-  <div class="landing-lead">
-    <p class="tagline">${TAGLINE}</p>
-    <p class="landing-cta">
-      <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
-    </p>
-  </div>`;
 
 export const terms = () => html`
   ${pageHead('Terms of Service', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
@@ -48,7 +42,12 @@ export const privacy = () => html`
   ${pageHead('Privacy Policy', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
   <section class="block">
     <h3>What we collect</h3>
-    <p>Nothing. There is no Verdikt server behind this page — it is a static site that reads Arc Testnet and Ethereum Sepolia over public RPC endpoints straight from your browser. No account, email or personal data is requested or stored by Verdikt.</p>
+    <p>Nothing, unless you fill in one of the two forms on the landing page. There is no Verdikt server behind this page — it is a static site that reads Arc Testnet and Ethereum Sepolia over public RPC endpoints straight from your browser. No account is ever created, and browsing, connecting a wallet or reading a service costs you no personal data at all.</p>
+  </section>
+  <section class="block">
+    <h3>The two forms on the landing page</h3>
+    <p>Because there is no Verdikt server, a submitted form does not reach one. The subscribe and contact forms post what you typed — an email address, and for the contact form your message — directly from your browser to a third-party form service, whose submit URL is compiled into this page and visible in its source. That service, not Verdikt, stores what you send and is where a deletion request has to go; we read it to answer you and to send the milestone notes you asked for, and we do not pass it on.</p>
+    <p>If the forms show that no endpoint is configured in this build, nothing can be submitted at all — there is no fallback that quietly stores your address somewhere else.</p>
   </section>
   <section class="block">
     <h3>What's public by nature of the chain</h3>

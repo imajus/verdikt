@@ -19,6 +19,8 @@ import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
 import './forms/sla-editor.js';
 import './forms/bond.js';
 import './forms/wizard.js';
+import './forms/subscribe.js';
+import './forms/contact.js';
 import './lit-app.js';
 
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));

@@ -17,7 +17,9 @@
   --rule-strong: #191713;
   --ink: #191713;
   --ink-2: #4b4740;
-  --muted: #7a756b;
+  /* Carries placeholders, field labels, figure labels, table heads and the
+     footer, so it is held to body-text contrast: 5.3:1 on paper. */
+  --muted: #6a6559;
   --link: #1f4bb8;
   --good: #1c7c46;
   --fair: #9a6b00;
@@ -71,6 +73,13 @@
 * { box-sizing: border-box; }
 
 html, body { background: var(--paper); min-height: 100%; }
+
+/* The surfaces the page does not draw itself. A selection highlight, a caret
+   and a scrollbar all ship in a colour belonging to no design system, and on a
+   comparison surface they are the parts a reader touches most. */
+html { scrollbar-color: var(--muted) var(--paper); }
+::selection { background: var(--ink); color: var(--paper); }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
 body {
   margin: 0;
@@ -156,8 +165,12 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 
 @media (max-width: 560px) {
   #app { padding: 20px 18px 56px; }
+  /* Two rows, not three: the wordmark and the icons share the first, the links
+     take the second. Spreading three icons edge-to-edge across the full width
+     reads as a flex rule nobody decided on. */
+  .nav { row-gap: 10px; }
   .nav-links { order: 2; width: 100%; overflow-x: auto; padding-bottom: 2px; }
-  .nav-external { order: 1; margin-left: 0; width: 100%; justify-content: space-between; }
+  .nav-external { order: 1; width: auto; margin-left: auto; justify-content: flex-end; }
 }
 
 /* Standing notes: a rule down the left, no fill. A tinted box is how every
@@ -338,11 +351,225 @@ footer.legal { display: flex; gap: 16px; margin-top: 40px; }
 footer.legal a { color: var(--muted); text-decoration: none; }
 footer.legal a:hover { color: var(--ink); }
 footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
+/* The sheet already closes on a full-width rule, so the footer's own short one
+   would read as a second, broken rule under it. */
+.ledger + footer.legal { margin-top: 20px; padding-top: 0; border-top: 0; }
 
-.landing-lead { padding: 8px 0 28px; }
-.landing-lead .tagline { font-size: 19px; }
-.landing-cta { margin: 28px 0 0; }
-.landing-cta wa-button::part(button) { font-size: 16.5px; padding-inline: 22px; }
+/* Landing: one running ledger sheet ------------------------------------------
+   Every section is an entry: its index in a mono rail on the far left, its
+   body on the measure, its annotation in the outer margin. The rules between
+   entries are the same hairlines the tables are set on, so the page reads as
+   one continuous sheet rather than a stack of bands. */
+
+.ledger { margin-top: 4px; }
+.entry {
+  display: grid;
+  grid-template-columns: 2.5rem minmax(0, 1fr) minmax(0, 16rem);
+  column-gap: 32px;
+  padding: 30px 0 34px;
+  border-top: 1px solid var(--rule);
+}
+.entry:first-child { border-top: 0; padding-top: 10px; }
+/* The sheet closes on a rule, the way the tables do. */
+.entry:last-child { border-bottom: 1px solid var(--rule); }
+.entry-index {
+  margin: 0; grid-column: 1;
+  font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums;
+  color: var(--muted); letter-spacing: 0.02em; padding-top: 4px;
+}
+.entry:first-child .entry-index { padding-top: 12px; }
+.entry-body { grid-column: 2; min-width: 0; }
+.entry-body > p { max-width: 70ch; color: var(--ink-2); }
+.entry-body > p:last-child { margin-bottom: 0; }
+.entry-body h2 {
+  font: 600 26px/1.2 var(--display); margin: 0 0 14px; letter-spacing: -0.02em;
+  color: var(--ink); max-width: 34ch; text-wrap: balance;
+}
+.entry-note {
+  grid-column: 3; min-width: 0; align-self: start;
+  padding-left: 20px; border-left: 1px solid var(--rule);
+  font-size: 13.5px; line-height: 1.5; color: var(--ink-2);
+}
+.entry:first-child .entry-note { padding-top: 8px; }
+/* One entry takes the whole sheet: the request-path figure is the page's
+   centre, and squeezed into the measure its labels set at eight pixels. Its
+   annotation then runs under the figure, which is where a plate's caption
+   belongs anyway. */
+.entry-wide .entry-body { grid-column: 2 / -1; }
+.entry-wide .entry-note {
+  grid-column: 2 / -1; align-self: stretch;
+  margin-top: 22px; padding: 14px 0 0;
+  border-left: 0; border-top: 1px solid var(--rule); max-width: none;
+}
+/* The caption's rule runs the width of the figure it captions; only its text
+   keeps a measure. */
+.entry-wide .note-line { max-width: 78ch; }
+.note-head {
+  margin: 0 0 8px; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.note-flag { color: var(--fair); letter-spacing: 0.1em; }
+.note-line { margin: 0 0 8px; }
+.note-line:last-child { margin-bottom: 0; }
+.note-line code { font-size: 12px; color: var(--ink); }
+.note-kv { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 14px; }
+.note-kv dt { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.note-kv dd { margin: 0; font-family: var(--mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.note-kv dd .outcome { font-family: var(--sans); font-size: 12.5px; }
+.note-source { margin-top: 10px; color: var(--muted); }
+.note-source code { font-size: 12px; color: var(--ink-2); }
+
+/* Entry 00. The three clauses are set as three lines on purpose: they are a
+   statement of terms, and a statement of terms does not wrap wherever the
+   measure happens to end. */
+.entry-lead {
+  margin: 0 0 18px;
+  font: 600 clamp(31px, 4.6vw, 60px)/1.02 var(--display);
+  letter-spacing: -0.035em; color: var(--ink);
+}
+.entry-lead span { display: block; }
+.entry-lead span:last-child { color: var(--ink-2); }
+.tagline.lead { font-size: 19px; max-width: 56ch; }
+.landing-cta { margin: 26px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
+.landing-cta wa-button { margin-top: 0; }
+/* The page's focal action, so it is painted in the page's own ink rather than
+   the component library's neutral slate: ink on paper for the primary, the
+   page's own strong rule for the ruled sibling, and the figure's square
+   corners on both. */
+.landing-cta wa-button::part(button) {
+  font-size: 16.5px; padding-inline: 22px; border-radius: 2px;
+  font-weight: 500; transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+/* Web Awesome reflects `appearance="accent"` onto the host itself, so the
+   primary has to be named by that attribute — `:not([appearance])` matches
+   nothing and leaves the button in the library's slate. */
+.landing-cta wa-button[appearance="accent"]::part(button) {
+  background: var(--ink); color: var(--paper); border: 1.5px solid var(--ink);
+}
+.landing-cta wa-button[appearance="accent"]:hover::part(button) { background: var(--ink-2); border-color: var(--ink-2); }
+.landing-cta wa-button[appearance="outlined"]::part(button) {
+  background: none; color: var(--ink); border: 1.5px solid var(--rule-strong);
+}
+.landing-cta wa-button[appearance="outlined"]:hover::part(button) { background: var(--paper-2); }
+.cta-aside { color: var(--muted); font-size: 15px; text-decoration: none; border-bottom: 1px solid var(--rule); }
+.cta-aside:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
+/* The figures row sits inside entry 01, whose own rule closes it. */
+.entry .figures { margin: 0; border-bottom: 0; }
+
+/* Request-path figure ---------------------------------------------------------
+   Two authored viewBoxes, one per orientation; the unused one leaves the
+   accessibility tree with its display. Every stroke and fill is themed here
+   rather than in the markup. */
+
+.diagram { display: block; margin: 26px 0 18px; }
+.diagram .dg { display: block; width: 100%; height: auto; overflow: visible; }
+.diagram .dg-tall { display: none; }
+.dg-box { fill: none; stroke: var(--rule); stroke-width: 1; }
+.dg-div { stroke: var(--rule); stroke-width: 1; }
+.dg-bound { fill: none; stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 4; }
+.dg-band { font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.11em; fill: var(--muted); }
+.dg-band.end { text-anchor: end; }
+.dg-cap { font-family: var(--mono); font-size: 11.5px; fill: var(--ink-2); }
+.dg-title { font-family: var(--sans); font-size: 13px; font-weight: 500; fill: var(--ink); }
+.dg-key { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+.dg-key.sm { font-size: 11px; fill: var(--ink-2); }
+.dg-sub { font-family: var(--mono); font-size: 10.5px; fill: var(--muted); }
+.dg-note { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-2); }
+.dg-note.mid { text-anchor: middle; }
+.dg-note.end { text-anchor: end; }
+.dg-flow { fill: none; stroke: var(--ink-2); stroke-width: 1.25; }
+.dg-read { fill: none; stroke: var(--muted); stroke-width: 1.15; stroke-dasharray: 4 3; }
+.dg-tip { fill: var(--ink-2); }
+.dg-tip.quiet { fill: var(--muted); }
+/* The portrait figure is drawn on a 380-unit frame and rendered on a phone at
+   roughly nine tenths of that, so its type is set larger in figure units to
+   land at the same size on glass as the landscape one does. Its labels were
+   written short to leave the room. */
+.dg-tall .dg-sub, .dg-tall .dg-note, .dg-tall .dg-key.sm { font-size: 12.5px; }
+.dg-tall .dg-title { font-size: 15px; }
+.dg-tall .dg-cap { font-size: 13.5px; }
+.dg-tall .dg-band { font-size: 12px; }
+
+/* The page's one authored moment: the flow traces itself once, in order, when
+   the figure comes into view. Nothing is hidden to make it work — the figure
+   renders finished, and `.drawing` only arrives at the instant the animation
+   starts, so no JavaScript or reduced motion means the completed drawing. */
+@media (prefers-reduced-motion: no-preference) {
+  .diagram.drawing .dg-flow {
+    stroke-dasharray: 1; stroke-dashoffset: 1;
+    animation: dg-trace 760ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
+  }
+  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 520ms ease-out 760ms both; }
+}
+@keyframes dg-trace { to { stroke-dashoffset: 0; } }
+@keyframes dg-surface { to { opacity: 1; } }
+
+.figure-source { margin: 16px 0 0; font-size: 14.5px; color: var(--muted); max-width: 70ch; }
+.figure-source a { color: var(--link); }
+
+/* Landing forms ---------------------------------------------------------------
+   A field on this page is a line you write on, not a box dropped onto a
+   ledger: no fill, no frame, one rule under it that thickens on focus. */
+
+.ledger-form { margin: 22px 0 0; max-width: 30rem; }
+.ledger-field + .ledger-field { margin-top: 18px; }
+.ledger-field label { margin: 0 0 4px; }
+.ledger-field input, .ledger-field textarea {
+  display: block; width: 100%; margin: 0; padding: 6px 2px;
+  background: none; color: var(--ink);
+  border: 0; border-bottom: 1.5px solid var(--rule);
+  border-radius: 0; font: 16.5px/1.5 var(--sans); caret-color: var(--ink);
+}
+/* No resize grabber: the browser's is stock chrome sitting on a hairline, and
+   the field grows itself as you type instead (grow() in contact.js). */
+.ledger-field textarea { min-height: 0; resize: none; overflow: hidden; line-height: 1.55; }
+.ledger-field input::placeholder, .ledger-field textarea::placeholder { color: var(--muted); }
+.ledger-field input:hover, .ledger-field textarea:hover { border-bottom-color: var(--muted); }
+/* A hairline field's focus has to be as loud as a box's ring would be, so the
+   rule thickens and the line it sits on tints. */
+.ledger-field input:focus, .ledger-field textarea:focus {
+  outline: 0; border-bottom: 2.5px solid var(--ink); background: var(--paper-2);
+}
+.ledger-field input[aria-invalid="true"] { border-bottom-color: var(--poor); }
+.ledger-form wa-button { margin-top: 20px; }
+.form-hint, .form-error, .form-done, .form-off {
+  margin: 12px 0 0; font-size: 14px; max-width: 44ch;
+}
+.form-hint { color: var(--muted); }
+.form-error { color: var(--poor); }
+.form-done { color: var(--good); margin-top: 22px; }
+.form-done code { color: var(--ink); }
+.form-off { color: var(--ink-2); margin-top: 20px; padding-left: 14px; border-left: 2px solid var(--rule); }
+
+@media (max-width: 1040px) {
+  .entry { grid-template-columns: 2.5rem minmax(0, 1fr); }
+  .entry-note {
+    grid-column: 2; margin-top: 22px;
+    padding-left: 0; padding-top: 14px;
+    border-left: 0; border-top: 1px solid var(--rule);
+    max-width: 70ch;
+  }
+  .entry:first-child .entry-note { padding-top: 14px; }
+  .note-kv { grid-template-columns: 5.5rem minmax(0, 1fr); }
+}
+
+@media (max-width: 760px) {
+  .diagram .dg-wide { display: none; }
+  .diagram .dg-tall { display: block; }
+  /* At this width the index rail costs the drawing a tenth of its legibility,
+     so the figure alone steps out past it and takes the whole sheet. */
+  .entry-wide .diagram { margin-left: calc(-2.5rem - 32px); width: calc(100% + 2.5rem + 32px); }
+}
+
+@media (max-width: 560px) {
+  .entry { grid-template-columns: 1.75rem minmax(0, 1fr); column-gap: 14px; padding: 24px 0 26px; }
+  .entry-body h2 { font-size: 22px; }
+  .entry-wide .diagram { margin-left: calc(-1.75rem - 14px); width: calc(100% + 1.75rem + 14px); }
+  .tagline.lead { font-size: 17.5px; }
+  .landing-cta { gap: 10px; }
+  .landing-cta wa-button { width: 100%; }
+}
 
 /* Provider view --------------------------------------------------------------- */
 

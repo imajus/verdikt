@@ -5,7 +5,8 @@ import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
-import { TAGLINE, landing, legalFooter, pageHead, privacy, terms } from './pages.js';
+import { TAGLINE, legalFooter, pageHead, privacy, terms } from './pages.js';
+import { amount, landing } from './landing.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -16,12 +17,6 @@ const githubIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fi
 const xIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.53 6.78 15.17.5h-1.34L8.94 5.87 5.02.5H0l5.92 8.15L0 15.5h1.34l5.19-5.7 4.15 5.7H16L9.53 6.78Zm-1.84 2.02-.6-.83L2.3 1.44h2.06l3.84 5.29.6.83 4.99 6.87h-2.06L7.69 8.8Z"></path></svg>`;
 const sunIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M18.01 18.01l1.77 1.77M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M18.01 5.99l1.77-1.77"/></svg>`;
 const moonIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>`;
-
-/** @param {string} value */
-const amount = (value) => {
-  const [number, unit] = value.split(' ');
-  return html`${number}${unit ? html` <small>${unit}</small>` : nothing}`;
-};
 
 /** @param {number|null} score */
 const scoreCell = (score) => html`
@@ -157,9 +152,6 @@ const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) =
 /** @param {string} width */
 const bar = (width) => html`<span class="bar" style="width:${width}"></span>`;
 
-/** @param {string} label */
-const skeletonFigure = (label) => html`<div class="figure skeleton"><span class="value">${bar('3.5rem')}</span><span class="label">${label}</span></div>`;
-
 /** @param {string} nameWidth */
 const skeletonRow = (nameWidth) => html`
   <div class="row skeleton">
@@ -171,18 +163,6 @@ const skeletonRow = (nameWidth) => html`
   </div>`;
 
 const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
-const PLATFORM_FIGURE_LABELS = ['services', 'bonded', 'verdicts', 'refunded'];
-
-// Platform-wide totals. Lives on the landing page, filled in once
-// loadMarketplace() resolves — the marketplace listing itself no longer
-// shows these (see renderMarketplace).
-/** @param {PlatformStats} stats */
-const platformFigures = (stats) => {
-  const { PASS, FAIL, DOWN } = stats.breakdown;
-  return html`<section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>`;
-};
-
-const platformFiguresSkeleton = () => html`<section class="figures">${PLATFORM_FIGURE_LABELS.map(skeletonFigure)}</section>`;
 
 // Shaped like renderMarketplace(), not a generic spinner: the same page head
 // and listing grid the real page fills in, so nothing shifts when the data
@@ -264,10 +244,9 @@ export class VerdiktApp extends LitElement {
     // These three views need no chain data, so they render even when the
     // marketplace failed to load — a dead RPC must not also strand a visitor
     // on a page with no navigation and no way to reach the legal pages.
-    if (this.route.view === 'landing') {
-      const stats = this.marketplace ? platformFigures(this.marketplace.stats) : platformFiguresSkeleton();
-      return html`${navBar}${landing(go)}${stats}${legalFooter(go)}`;
-    }
+    // The landing page reads the marketplace but does not need it: its figures
+    // and its latest-verdict margin both have a shape for "not in yet".
+    if (this.route.view === 'landing') return html`${navBar}${landing(go, this.marketplace, this.mode, this.error)}${legalFooter(go)}`;
     if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter(go)}`;
     if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter(go)}`;
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;

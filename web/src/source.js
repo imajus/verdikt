@@ -51,7 +51,7 @@ function demoSource() {
 
   /** @type {RegisteredService[]} */
   const services = [
-    { serviceId: honest, slug: 'weather', provider: '0xA11ce00000000000000000000000000000000001', status: 'ACTIVE', deposit: 10n * 10n ** 18n, registeredAtBlock: 100n },
+    { serviceId: honest, slug: 'weather', provider: '0xA11ce00000000000000000000000000000000001', status: 'ACTIVE', deposit: 9n * 10n ** 18n, registeredAtBlock: 100n },
     { serviceId: flaky, slug: 'weather-lite', provider: '0xB0b0000000000000000000000000000000000002', status: 'SUSPENDED', deposit: 0n, registeredAtBlock: 120n }
   ];
 
@@ -63,18 +63,22 @@ function demoSource() {
 
   for (let i = 0; i < 24; i += 1) {
     const down = i === 11;
+    const requestId = `0x${(i + 1).toString(16).padStart(64, '0')}`;
     verdicts.push({
       serviceId: honest,
-      requestId: `0x${(i + 1).toString(16).padStart(64, '0')}`,
+      requestId,
       outcome: down ? 'DOWN' : 'PASS',
       payer,
-      paidAmount: 2500n,
+      paidAmount: 2_500_000n,
       // The one outage failed to deliver at all, so it names the implicit
       // clause rather than one the provider wrote. A PASS names none.
       failedClause: down ? clauseHash(DELIVERY_CLAUSE) : NO_CLAUSE,
       blockNumber: 200n + BigInt(i),
       transactionHash: `0x${'a'.repeat(63)}${i.toString(16)}`
     });
+    // A DOWN credits the payer exactly as a FAIL does, and takes it out of the
+    // bond — which is why this service's deposit is 9 USDC and not 10.
+    if (down) refunds.push({ serviceId: honest, requestId, payer, amount: 10n ** 18n, blockNumber: 200n + BigInt(i) });
   }
   // Every call to the twin fails: its SLA promises a humidity field the upstream
   // does not return, and a latency no round trip can meet.
@@ -85,7 +89,7 @@ function demoSource() {
       requestId,
       outcome: 'FAIL',
       payer,
-      paidAmount: 2500n,
+      paidAmount: 2_500_000n,
       // Both the schema and the latency clause break on every call; the verdict
       // carries the first in the SLA's own declared order.
       failedClause: clauseHash('current-weather-shape'),
