@@ -84,7 +84,9 @@ Provide these through the runner environment or its external Docker
 | --- | --- | --- |
 | `RUNNER_TRIGGER_ADDRESS` | Always | Public Ethereum address derived from the proxy's `CRE_TRIGGER_PRIVATE_KEY`. |
 | `CRE_CALLBACK_TOKEN_VAR` | A trigger includes `callbackUrl` (the normal proxy flow) | Same secret value as proxy `CRE_CALLBACK_TOKEN`; mapped to workflow secret `CALLBACK_TOKEN`. |
-| `CRE_ETH_PRIVATE_KEY` | `RUNNER_CRE_BROADCAST=true` | Funded Arc Testnet burner key for `cre workflow simulate --broadcast`; never use a mainnet or application signing key. |
+| `CRE_ETH_PRIVATE_KEY` | `RUNNER_CRE_BROADCAST=true`, or the hourly score job | Funded burner key for `cre workflow simulate --broadcast`; never use a mainnet or application signing key. **Needs gas on both chains**: `verify` broadcasts to Arc, `aggregate` broadcasts to Sepolia. |
+| `ARC_RPC_URL` | The hourly score job | Arc RPC for the post-run read-back. Arc's public default rate-limits `eth_getLogs` well below a full registry scan. |
+| `SEPOLIA_RPC_URL` | The hourly score job | Sepolia RPC for the post-run read-back. |
 
 All other settings have defaults. See [`.env.example`](.env.example) for
 `RUNNER_PORT`, timeouts, request-size limit, workflow location/target/name,
@@ -92,6 +94,55 @@ broadcast, readiness delay, and optional workflow-ID enforcement.
 
 The CRE login session is required but is mounted state at `/root/.cre`, not an
 environment variable.
+
+## Hourly score publishing
+
+The `aggregate` workflow publishes the trailing-7-day `conformance` and
+`availability` records to `<slug>.verdikt.eth` (`Specification.md` §1). Until
+the workflow is enrolled on real CRE infrastructure its cron never fires on its
+own, so the schedule has to come from outside — and this container is the only
+place that holds the CRE CLI, the `cre login` session and a broadcast key.
+
+`cre workflow simulate` refuses `--listen` for a cron trigger ("not supported
+by cron", per the CLI's own help), so `aggregate` is a fire-once-and-exit run
+rather than a second daemon. That is what lets it share this container with the
+long-lived `verify --listen` process: the two workflows compile into their own
+directories, and only `verify` binds the HTTP trigger port.
+
+[`bin/publish-scores.sh`](bin/publish-scores.sh) is that single run, plus a
+read-back of what landed. The read-back is not belt-and-braces: the
+KeystoneForwarder swallows a receiver revert and mines anyway, so a successful
+`cre` run is not evidence that anything was written (`CLAUDE.md`, "Two silent
+failures"). It exits non-zero when a live listing carries no scores, so the job
+turns red instead of logging a reassuring wall of text.
+
+### Dokploy job
+
+Dokploy runs a scheduled job as `docker exec <container> <command>` against an
+already-running container, so nothing schedules inside the image. Add a
+**Schedule Job** on the runner application:
+
+| Field | Value |
+| --- | --- |
+| Type | Application (this runner's container) |
+| Schedule | `0 * * * *` — hourly, matching §1 |
+| Command | `/app/runner/bin/publish-scores.sh` |
+
+The container must be running when the job fires, and `docker exec` inherits
+the environment the container was created with — so `CRE_ETH_PRIVATE_KEY`,
+`ARC_RPC_URL` and `SEPOLIA_RPC_URL` come from the runner's own env file, not
+from the job definition.
+
+Run it once by hand before scheduling it. A first run proves three things that
+nothing else does: that the `cre login` session inside the container is still
+valid (simulate refuses outright when it is not), that the burner key has
+Sepolia gas, and that a second `cre` process alongside the `--listen` one
+causes no contention.
+
+`RUNNER_CRE_BROADCAST` does not gate this job — that flag belongs to the
+`verify` supervisor. `publish-scores.sh` always passes `--broadcast` and
+refuses to run without `CRE_ETH_PRIVATE_KEY`, because a run without it reads
+Arc, prints a plausible summary and writes nothing.
 
 ## Security and operational limits
 

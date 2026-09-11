@@ -30,7 +30,16 @@ RUN pnpm install --frozen-lockfile
 # --- the bun island (cre/workflows) ---------------------------------------
 # README.md: bun-only, kept out of pnpm-workspace.yaml, workspace packages
 # linked with file: + a bun `overrides` entry.
+#
+# Both workflows, not just `verify`: the container serves the proxy's triggers
+# from a long-lived `verify --listen`, and Dokploy exec's `bin/publish-scores.sh`
+# into the same container on a schedule to run `aggregate` once per hour. An
+# image carrying only `verify` compiles nothing for that job and it fails on
+# every tick.
 WORKDIR /app/cre/workflows/verify
+RUN bun install
+
+WORKDIR /app/cre/workflows/aggregate
 RUN bun install
 
 WORKDIR /app
