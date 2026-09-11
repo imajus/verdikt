@@ -94,17 +94,33 @@ describe('the wizard element', () => {
     }
   });
 
-  it('runs the four steps in order and reports done', async () => {
-    const claim = vi.fn(async () => '0xhash');
-    const publish = vi.fn(async () => '0xhash');
+  /** @param {any} el */
+  const ready = (el) => { el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}'; el.step = 4; };
+
+  it('advances one step per click, finishing after the fourth', async () => {
     const el = mount();
-    el.deps = deps({ walletClientFor: () => ({ writeContract: claim, sendTransaction: publish }) });
-    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
-    el.step = 4;
-    await el.execute();
+    el.deps = deps();
+    ready(el);
+    for (let i = 0; i < 4; i++) await el.runStep(i);
     expect(el.done).toBe(4);
     expect(el.status).toBe('Done.');
     expect(el.deps.onDone).toHaveBeenCalledOnce();
+  });
+
+  // Each wallet interaction must sit in its own user-activation window, so
+  // nothing may run a step the cursor is not on — a click on a later button
+  // (were one ever enabled) must not chain ahead.
+  it('runs only the step the cursor is on', async () => {
+    const claim = vi.fn(async () => '0xhash');
+    const el = mount();
+    el.deps = deps({ walletClientFor: () => ({ writeContract: claim, sendTransaction: vi.fn(async () => '0xhash') }) });
+    ready(el);
+    await el.runStep(2);
+    expect(el.done).toBe(0);
+    expect(claim).not.toHaveBeenCalled();
+    await el.runStep(0);
+    expect(el.done).toBe(1);
+    expect(claim).toHaveBeenCalledOnce();
   });
 
   it('records each forward step in browser history', () => {
@@ -154,28 +170,26 @@ describe('the wizard element', () => {
     expect(el.step).toBe(1);
   });
 
-  // Retry resumes from the step that failed, so which step that was has to
-  // survive on screen — it is no longer carried by a per-step list.
-  it('keeps naming the failed step alongside the failure', async () => {
+  it('reports a failure against the step it happened on', async () => {
     const register = vi.fn(async () => { throw new Error('user rejected'); });
     const el = mount();
     el.deps = deps({ walletClientFor: (/** @type {string} */ chain) => (chain === 'arc' ? { writeContract: register } : { writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
-    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
-    el.step = 4;
-    await el.execute();
-    expect(el.status).toContain('2/4');
-    expect(el.status).toContain('Register on Arc');
+    ready(el);
+    await el.runStep(0);
+    await el.runStep(1);
+    expect(el.done).toBe(1);
+    expect(el.execError).toContain('user rejected');
     const html = stringify(el.render());
-    expect(html).toContain('2/4');
     expect(html).toContain('user rejected');
+    // The failed step stays the active button, so retrying is clicking it again.
+    expect(html).toContain('wizard-run-register');
   });
 
   it('offers a link to the new service once registration finishes', async () => {
     const el = mount();
-    el.deps = deps({ walletClientFor: () => ({ writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
-    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
-    el.step = 4;
-    await el.execute();
+    el.deps = deps();
+    ready(el);
+    for (let i = 0; i < 4; i++) await el.runStep(i);
     const html = stringify(el.render());
     expect(html).toContain('href="/services/weather"');
     expect(html).toContain('View your service');
@@ -184,8 +198,7 @@ describe('the wizard element', () => {
   it('does not offer the service link before registration finishes', () => {
     const el = mount();
     el.deps = deps();
-    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
-    el.step = 4;
+    ready(el);
     const html = stringify(el.render());
     expect(html).not.toContain('View your service');
   });
@@ -196,13 +209,15 @@ describe('the wizard element', () => {
     const register = vi.fn(async () => { registerCalls++; if (registerCalls === 1) throw new Error('user rejected'); return '0xhash'; });
     const el = mount();
     el.deps = deps({ walletClientFor: (/** @type {string} */ chain) => (chain === 'arc' ? { writeContract: register } : { writeContract: claim, sendTransaction: vi.fn(async () => '0xhash') }) });
-    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
-    el.step = 4;
-    await el.execute();
+    ready(el);
+    await el.runStep(0);
+    await el.runStep(1);
     expect(el.done).toBe(1);
     expect(el.execError).toContain('user rejected');
     expect(claim).toHaveBeenCalledTimes(1);
-    await el.execute();
+    await el.runStep(1);
+    await el.runStep(2);
+    await el.runStep(3);
     expect(el.done).toBe(4);
     expect(claim).toHaveBeenCalledTimes(1);
   });

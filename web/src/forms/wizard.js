@@ -124,30 +124,39 @@ export class VerdiktWizard extends LitElement {
   /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
   get urlValid() { return /^https?:\/\//.test(this.url.trim()); }
-  async execute() {
+  /**
+   * Run exactly one step, and only the one the cursor is on. Deliberately
+   * not a loop over the remaining steps: a wallet raises its popup only
+   * while the browser still holds transient user activation, which lasts a
+   * few seconds after a click. Chaining the steps spends that activation on
+   * the first one, so the chain switch before step 2 — arriving long after
+   * the user finished approving step 1 — was queued behind the extension
+   * badge instead of prompting, and surfaced as "switch to the required
+   * network first" with nothing ever shown. One click per step keeps every
+   * wallet interaction inside its own activation window.
+   * @param {number} index
+   */
+  async runStep(index) {
     const deps = this.deps;
-    if (!deps) return;
+    if (!deps || index !== this.done || this.pending) return;
     const steps = buildExecutionSteps(deps, { slug: this.slug, url: this.url, sla: this.sla });
+    const step = steps[index];
     this.pending = true;
     this.execError = '';
-    for (let i = this.done; i < steps.length; i++) {
-      this.status = `${i + 1}/${steps.length} ${steps[i].label}…`;
-      try {
-        await steps[i].ensure();
-        await steps[i].run();
-        this.done = i + 1;
-      } catch (error) {
-        this.pending = false;
-        this.execError = /** @type {Error} */ (error).message;
-        // Keep naming the step that failed: Retry resumes from it, and no
-        // per-step list carries that fact any more.
-        this.status = `${i + 1}/${steps.length} ${steps[i].label}`;
-        return;
+    this.status = '';
+    try {
+      await step.ensure();
+      await step.run();
+      this.done = index + 1;
+      if (this.done === steps.length) {
+        this.status = 'Done.';
+        deps.onDone();
       }
+    } catch (error) {
+      this.execError = /** @type {Error} */ (error).message;
+    } finally {
+      this.pending = false;
     }
-    this.pending = false;
-    this.status = 'Done.';
-    deps.onDone();
   }
   renderStep() {
     if (this.step === 1) return html`
@@ -176,12 +185,18 @@ export class VerdiktWizard extends LitElement {
         <div><dt>SLA</dt><dd>${describeSlaValidity(this.sla).message}</dd></div>
         <div><dt>Bond</dt><dd>${deps.formatNativeUsdc(deps.depositAmount)}</dd></div>
       </dl>
-      ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Register service</wa-button></div>` : nothing}
-      ${this.execError
-        ? html`<p class="form-status" id="wizard-status">${this.status} — failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>`
-        : this.done === steps.length
-          ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service →</wa-button>`
-          : this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;
+      ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button></div>` : nothing}
+      <ol class="wizard-run">
+        ${steps.map((step, i) => html`
+          <li class=${i < this.done ? 'done' : i === this.done ? 'current' : 'later'}>
+            <div class="run-row">
+              <wa-button type="button" id=${`wizard-run-${step.key}`} ?disabled=${i !== this.done || this.pending} ?loading=${i === this.done && this.pending} appearance=${i === this.done ? 'accent' : 'outlined'} @click=${() => this.runStep(i)}>${i < this.done ? '✓ ' : ''}${step.label}</wa-button>
+              <span class="chain">${step.chain}</span>
+            </div>
+            ${i === this.done && this.execError ? html`<p class="check bad" id="wizard-step-error"><i class="dot"></i>${this.execError}</p>` : nothing}
+          </li>`)}
+      </ol>
+      ${this.done === steps.length ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service →</wa-button>` : nothing}`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;

@@ -748,6 +748,18 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 .wizard-steps li.done { color: var(--good); font-weight: 500; }
 .wizard-nav { display: flex; gap: 12px; margin-top: 18px; }
 .wizard-nav wa-button { margin-top: 0; }
+/* One button per transaction, stacked in the order they must run. Each is
+   its own click because a wallet only raises its popup while the browser
+   still holds user activation — see runStep() in forms/wizard.js. */
+.wizard-run { list-style: none; padding: 0; margin: 20px 0 0; }
+.wizard-run .run-row { display: flex; align-items: center; gap: 12px; }
+.wizard-run wa-button { margin-top: 0; }
+.wizard-run .chain { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+.wizard-run li.done .chain { color: var(--good); }
+.wizard-run li:not(:last-child)::after {
+  content: '↓'; display: block; color: var(--muted); line-height: 1; margin: 8px 0 8px 16px;
+}
+.wizard-run li .check { margin: 8px 0 0; }
 .wizard-review { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; margin: 4px 0 20px; font-size: 15px; }
 .wizard-review dt { color: var(--muted); }
 .wizard-review dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
