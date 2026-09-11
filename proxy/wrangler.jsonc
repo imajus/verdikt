@@ -36,5 +36,12 @@
     // Workers Free plan can run.
     { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] }
   ],
-  "routes": [{ "pattern": "*.verdikt.bond/*", "zone_name": "verdikt.bond" }]
+  "routes": [{ "pattern": "*.verdikt.bond/*", "zone_name": "verdikt.bond" }],
+  // Explicit, not left to wrangler's default: unset here means a plain
+  // `wrangler deploy` silently disables the workers.dev subdomain — and
+  // CRE_CALLBACK_URL above points straight at it. Disabled, that hostname
+  // answers everything with Cloudflare's error 1042, and the CRE workflow's
+  // callback POST silently never lands (confirmed live: one deploy without
+  // this field undid a working setup and broke the callback again).
+  "workers_dev": true
 }
