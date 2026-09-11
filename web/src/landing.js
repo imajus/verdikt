@@ -174,15 +174,20 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p class="note-line">The observed value stays off the chain. It is a slice of a response the agent paid for, so it comes back to that agent on its own response as <code>x-verdikt-expected</code> and <code>x-verdikt-actual</code>, and to nobody else.</p>`, true)}
 
     ${entry('04', html`
-      <h2>What lands next</h2>
-      <p>The loop already runs end to end. What comes next is what makes it usable by someone who is not us: a paid call carried the whole way, the verification workflow running in production rather than in simulation, and a walkthrough you can watch. One short message as each lands.</p>
-      <verdikt-subscribe></verdikt-subscribe>
-      <p>Or write instead. A hole in the mechanism is the most welcome thing in the inbox.</p>
-      <verdikt-contact></verdikt-contact>
-      <p class="landing-social">
-        <a class="cta-aside" href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Star the repository</a>
-        <a class="cta-aside" href=${X_URL} target="_blank" rel="noopener noreferrer">Follow on X</a>
-      </p>`, html`
-      <p class="note-head">Already shipped</p>
-      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written by the real workflow, refunds credited and withdrawn, and scores published hourly to ENS.</p>`)}
+      <div class="entry-split">
+        <div class="split-col">
+          <h2>Tell us what you are building</h2>
+          <p>Say what you are pointing at this and what you need from it. A hole you have found in the mechanism is the most welcome message of the lot, and it reaches a person rather than a queue.</p>
+          <verdikt-contact></verdikt-contact>
+        </div>
+        <div class="split-col">
+          <h2>Be informed about our progress</h2>
+          <p>The loop already runs end to end. Next comes what makes it usable by someone who is not us: a paid call carried the whole way, the workflow in production rather than in simulation, and a walkthrough you can watch. The newsletter is one short message as each of those lands, and nothing else.</p>
+          <verdikt-subscribe></verdikt-subscribe>
+          <p class="landing-social">
+            <a class="cta-aside" href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Star the repository</a>
+            <a class="cta-aside" href=${X_URL} target="_blank" rel="noopener noreferrer">Follow on X</a>
+          </p>
+        </div>
+      </div>`, nothing, true)}
   </div>`;

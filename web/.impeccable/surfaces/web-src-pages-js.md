@@ -25,24 +25,29 @@ The Privacy page gains a line because an email now leaves the page.
 The architecture section is a drawn request-path schematic with short labels;
 `/how` keeps the prose and the section links to it. No prose duplication.
 
-The sheet runs five entries, 00–04. Subscribe and contact share entry 04: they
-ask for the same thing, and split across two entries a demo build showed two
-"nothing is wired into this build" notices in a row. The copy budget is the
-rule that keeps the page scannable — an entry states its point once and lets
-the drawing, the form, or `/how` carry the rest. Anything the schematic already
-labels does not get a paragraph above it, and anything a form's own label or
-placeholder says does not get restated in the prose that introduces it.
+The sheet runs five entries, 00–04, and three margin notes — on 01, 02 and 03.
+The copy budget is the rule that keeps the page scannable: an entry states its
+point once and lets the drawing, the form, or `/how` carry the rest. Anything
+the schematic already labels does not get a paragraph above it, and anything a
+form's own label or placeholder says does not get restated in the prose that
+introduces it.
 
-Entry 04 is the page's forward look, and the user's call is that it reads as
-momentum rather than as a confession: it names what lands next — a paid call
-carried the whole way, the workflow in production rather than simulation, the
-walkthrough — as the work in front, and closes on three ranked invitations
-(subscribe, then write, then a muted `star` / `follow` link row). The facts are
-unchanged and still stated plainly, so `/how` and the margin keep carrying the
-limits; what changed is that the entry asks the visitor to come along. Its
-margin holds the countervailing "Already shipped", which is what keeps the
-forward claim from reading as vapour. Neither may acquire traction the project
-does not have — PRODUCT.md's *Absent, and must not be invented* still binds.
+Entry 04 closes the sheet and carries both asks, side by side above 1040px and
+stacked below it (`.entry-split`). Left, **Tell us what you are building** and
+the contact form; right, **Be informed about our progress** — the forward look,
+the newsletter, and under it the muted `star` / `follow` row as the quietest
+action rank. It is the one entry with no margin note, which is what frees the
+outer column for the second half; the gutter between the halves is a 1px rule,
+the same vertical divider the platform figures row is set with, so they read as
+ruled columns rather than two loose blocks. The two form hints are worded
+identically on purpose — side by side, one rule stated twice reads as a system
+and two near-paraphrases read as sloppiness.
+
+The forward look names what lands next — a paid call carried the whole way, the
+workflow in production rather than simulation, the walkthrough — as work in
+front rather than as a confession (the user's call). The facts are unchanged and
+still stated plainly, and it may never acquire traction the project does not
+have: PRODUCT.md's *Absent, and must not be invented* still binds.
 
 Unresolved: the two form endpoint URLs are not yet supplied.
 

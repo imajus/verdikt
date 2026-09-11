@@ -38,13 +38,13 @@ export class VerdiktSubscribe extends LitElement {
   }
   render() {
     if (this.done) {
-      return html`<p class="form-done" role="status">Noted — <code>${this.email}</code> gets one message per milestone, and nothing else.</p>`;
+      return html`<p class="form-done" role="status">Subscribed — <code>${this.email}</code> gets one message per milestone, and nothing else.</p>`;
     }
     if (!this.endpoint) {
       // Says what the visitor gets, not which VITE_ value is missing. The
       // entry's own link row sits below both forms and reaches the repository,
       // so this names it without spending a second link on it.
-      return html`<p class="form-off">The mailing list is not open yet. Until it is, the repository is where each milestone lands first.</p>`;
+      return html`<p class="form-off">The newsletter is not open for subscriptions yet. Until it is, the repository is where each milestone lands first.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>
@@ -62,10 +62,10 @@ export class VerdiktSubscribe extends LitElement {
             .value=${this.email}
             @input=${this.edit} />
         </div>
-        <wa-button type="submit" ?disabled=${this.pending} ?loading=${this.pending}>Send it to me</wa-button>
+        <wa-button type="submit" ?disabled=${this.pending} ?loading=${this.pending}>Subscribe</wa-button>
         ${this.error
           ? html`<p class="form-error" id="subscribe-error" role="alert">${this.error}</p>`
-          : html`<p class="form-hint" id="subscribe-hint">Your address goes to the form service named in the <a href="/privacy">privacy policy</a> and nowhere else.</p>`}
+          : html`<p class="form-hint" id="subscribe-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
       </form>`;
   }
 }

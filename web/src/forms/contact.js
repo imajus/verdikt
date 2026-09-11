@@ -99,7 +99,7 @@ export class VerdiktContact extends LitElement {
         <wa-button type="submit" ?disabled=${this.pending} ?loading=${this.pending}>Send</wa-button>
         ${this.error
           ? html`<p class="form-error" id="contact-error" role="alert">${this.error}</p>`
-          : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>. Nothing is stored on this page.</p>`}
+          : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
       </form>`;
   }
 }

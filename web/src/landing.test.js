@@ -75,8 +75,8 @@ describe('landing page', () => {
       'class="figures"',
       'The payment is verifiable',
       'The request path',
-      'verdikt-subscribe',
-      'verdikt-contact'
+      'verdikt-contact',
+      'verdikt-subscribe'
     ].map((needle) => html.indexOf(needle));
     expect(order.every((at) => at > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -149,7 +149,16 @@ describe('landing page', () => {
   it('puts the latest verdict beside the figures, not beside the hero', () => {
     const html = stringify(landing(() => {}, marketplace([listing('quotes', [verdict({ blockNumber: 220n })])]), 'live'));
     expect(html.indexOf('Latest verdict')).toBeGreaterThan(html.indexOf('class="figures"'));
-    expect(html.match(/class="entry-note"/g)?.length).toBe(4);
+    expect(html.match(/class="entry-note"/g)?.length).toBe(3);
+  });
+
+  // The split entry's two halves ask for different things and must not collapse
+  // into one column of two forms with no boundary between them.
+  it('splits the closing entry into a column that writes and a column that subscribes', () => {
+    const html = stringify(landing(() => {}));
+    expect(html).toContain('entry-split');
+    expect(html.match(/class="split-col"/g)?.length).toBe(2);
+    expect(html.indexOf('Tell us what you are building')).toBeLessThan(html.indexOf('Be informed about our progress'));
   });
 
   it('offers the provider console only where a chain is configured to register on', () => {
