@@ -248,15 +248,18 @@ export class VerdiktApp extends LitElement {
     return html`${back}${detailTemplate(listing)}`;
   }
   render() {
-    if (this.error) return html`<p class="note warn">Could not load the marketplace: ${this.error}</p>`;
     /** @type {(path: string) => void} */
     const go = (path) => this.go(path);
     const account = getConnectedAccount()?.address ?? null;
     const navBar = nav(this.route.view, this.mode, this.theme, account, go, () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme));
+    // These three views need no chain data, so they render even when the
+    // marketplace failed to load — a dead RPC must not also strand a visitor
+    // on a page with no navigation and no way to reach the legal pages.
     if (this.route.view === 'landing') return html`${navBar}${landing(go)}${legalFooter(go)}`;
     if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter(go)}`;
     if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter(go)}`;
-    if (!this.marketplace) return html`${navBar}${skeleton(go)}`;
+    if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
+    if (!this.marketplace) return html`${navBar}${skeleton(go)}${legalFooter(go)}`;
     const { services, stats } = this.marketplace;
     const body = this.route.view === 'how'
       ? how(go)
