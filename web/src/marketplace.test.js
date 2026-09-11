@@ -542,6 +542,51 @@ describe('the provider console’s "add a service" link', () => {
 });
 
 // The rendering half of the pair main.js's providerAuthorization mounts
+// against (Task 7): a section without a mount behind it is a dead control, a
+// mount with no section around it is invisible. These four cases are the
+// same four resolveProviderConsole's replacement in lit-app.js distinguishes,
+// now asked of a single service rather than a whole console.
+describe('who gets a service page’s write controls', () => {
+  const build = async () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
+  /** @param {any} account @param {any} session */
+  const as = (account, session) => { wallet.account = account; wallet.session = session; };
+  const signedIn = { address: PROVIDER, expiresAt: Date.now() + 60_000 };
+  const controls = ['sla-editor-mount', 'bond-controls-mount'];
+  /** @param {string} html */
+  const present = (html) => controls.filter((id) => html.includes(id));
+
+  afterEach(() => as(null, null));
+
+  it('gives them to the owner, connected on a supported chain and signed in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, signedIn);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
+    expect(present(html)).toEqual(controls);
+  });
+  it('withholds them from the owner until they sign in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, null);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
+    expect(present(html)).toEqual([]);
+    expect(html).toContain('Enable provider actions');
+  });
+  it('withholds them on an unsupported chain, and says which way out', async () => {
+    as({ address: PROVIDER, chainId: 1 }, signedIn);
+    const html = renderApp(await build(), 'live', 'service', 'weather');
+    expect(present(html)).toEqual([]);
+    expect(html).toContain('Switch network');
+  });
+  it('withholds them from a signed-in wallet viewing somebody else’s service', async () => {
+    const other = '0xB0b0000000000000000000000000000000000002';
+    as({ address: other, chainId: ARC.chainId }, { address: other, expiresAt: Date.now() + 60_000 });
+    const html = renderApp(await build(), 'live', 'service', 'weather');
+    expect(present(html)).toEqual([]);
+    expect(html).not.toContain('Enable provider actions');
+  });
+  it('shows no write section at all to an unconnected visitor', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
+    expect(present(html)).toEqual([]);
+  });
+});
 // against: a section without a mount behind it is a dead control, a mount
 // with no section around it is an invisible one. These four cases are the
 // same four that function distinguishes.
