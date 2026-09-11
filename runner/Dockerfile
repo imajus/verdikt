@@ -17,7 +17,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
     && curl -sSfL https://cre.chain.link/install.sh | bash \
     && curl -fsSL https://bun.sh/install | bash \
     && apt-get purge -y curl unzip gnupg && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
-ENV PATH="/root/.bun/bin:/root/.local/bin:${PATH}"
+# cre.chain.link/install.sh puts the binary at $HOME/.cre/bin (CRE_INSTALL,
+# unset here, defaults to $HOME/.cre) — not /root/.local/bin, which was never
+# where it landed. Without this, `spawn('cre', …)` in the simulator can never
+# find it, no matter how the runner is otherwise configured.
+ENV PATH="/root/.bun/bin:/root/.local/bin:/root/.cre/bin:${PATH}"
 
 # --- pnpm workspace (the runner package + its workspace deps) ------------
 COPY . .

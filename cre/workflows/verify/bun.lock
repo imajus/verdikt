@@ -6,7 +6,7 @@
       "name": "@verdikt/cre-verify",
       "dependencies": {
         "@chainlink/cre-sdk": "1.19.1",
-        "@verdikt/cre": "file:../..",
+        "@verdikt/cre": "file:../../lib",
         "@verdikt/fixtures": "file:../../../fixtures",
         "@verdikt/sdk": "file:../../../packages/sdk",
         "@verdikt/sla": "file:../../../packages/sla",
@@ -78,7 +78,7 @@
 
     "@typescript/vfs": ["@typescript/vfs@1.6.4", "", { "dependencies": { "debug": "^4.4.3" }, "peerDependencies": { "typescript": "*" } }, "sha512-PJFXFS4ZJKiJ9Qiuix6Dz/OwEIqHD7Dme1UwZhTK11vR+5dqW2ACbdndWQexBzCx+CPuMe5WBYQWCsFyGlQLlQ=="],
 
-    "@verdikt/cre": ["@verdikt/cre@file:../..", { "dependencies": { "@verdikt/fixtures": "workspace:*", "@verdikt/sdk": "workspace:*", "@verdikt/sla": "workspace:*" } }],
+    "@verdikt/cre": ["@verdikt/cre@file:../../lib", { "dependencies": { "@verdikt/sla": "file:../../packages/sla" } }],
 
     "@verdikt/fixtures": ["@verdikt/fixtures@file:../../../fixtures", {}],
 
@@ -119,10 +119,6 @@
     "@scure/bip32/@noble/hashes": ["@noble/hashes@1.8.0", "", {}, "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="],
 
     "@scure/bip39/@noble/hashes": ["@noble/hashes@1.8.0", "", {}, "sha512-jCs9ldd7NwzpgXDIf6P3+NrHh9/sD6CQdxHyjQI+h/6rDNo88ypBxxz45UDuZHz9r3tNz7N/VInSVoVdtXEI4A=="],
-
-    "@verdikt/cre/@verdikt/fixtures": ["@verdikt/fixtures@file:../../../fixtures", {}],
-
-    "@verdikt/cre/@verdikt/sdk": ["@verdikt/sdk@file:../../../packages/sdk", {}],
 
     "@verdikt/cre/@verdikt/sla": ["@verdikt/sla@file:../../../packages/sla", {}],
 

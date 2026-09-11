@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "@chainlink/cre-sdk": "1.19.1",
-    "@verdikt/cre": "file:../..",
+    "@verdikt/cre": "file:../../lib",
     "@verdikt/fixtures": "file:../../../fixtures",
     "@verdikt/sdk": "file:../../../packages/sdk",
     "@verdikt/sla": "file:../../../packages/sla",

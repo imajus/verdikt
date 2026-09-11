@@ -1,0 +1,16 @@
+{
+  "name": "@verdikt/cre",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "comment": "verify/ and aggregate/ file:-link this directory rather than cre/ itself (its parent): cre/ contains cre/workflows/verify, which is where the link gets installed, and bun's file: copy has no self-containment guard — file:../.. recurses into its own just-written output until the OS path-length limit stops it. lib/ has no such descendant, so the link terminates.",
+  "dependencies": {
+    "@verdikt/sla": "file:../../packages/sla"
+  },
+  "main": "judge.js",
+  "exports": {
+    "./config": "./config.js",
+    "./judge": "./judge.js",
+    "./reputation": "./reputation.js"
+  }
+}
