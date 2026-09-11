@@ -227,6 +227,11 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 /* Listing --------------------------------------------------------------------- */
 
 .listing { border-top: 1.5px solid var(--rule-strong); }
+/* The marketplace listing follows the masthead directly (no figures section
+   between them any more), whose own border-bottom already draws this rule —
+   without this, the two rules sit a few pixels apart and read as one doubled
+   line. */
+.listing.flush { border-top: 0; }
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.4rem 5.8rem;

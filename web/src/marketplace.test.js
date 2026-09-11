@@ -303,6 +303,16 @@ describe('rendering', () => {
     expect(html).not.toContain('class="figures"');
   });
 
+  it('no longer shows a platform-stats skeleton while the marketplace is loading', async () => {
+    const html = renderApp(null, 'demo', 'marketplace', null);
+    expect(html).not.toContain('class="figures"');
+  });
+
+  it('removes the doubled rule above the listing left by the removed figures section', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).toContain('class="listing flush"');
+  });
+
   it('shows platform stats on the landing page once the marketplace has loaded', async () => {
     const html = renderApp(await build(), 'demo', 'landing', null);
     expect(html).toContain('class="figures"');

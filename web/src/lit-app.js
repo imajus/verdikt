@@ -186,13 +186,13 @@ const platformFiguresSkeleton = () => html`<section class="figures">${PLATFORM_F
 // Shaped like renderMarketplace(), not a generic spinner: the same masthead
 // and listing grid the real page fills in, so nothing shifts when the data
 // arrives. Redacted rather than shimmered, to match the ledger's own
-// vocabulary of hairline rules and monospace rather than boxed cards.
+// vocabulary of hairline rules and monospace rather than boxed cards. No
+// figures row — the marketplace itself doesn't show one any more.
 /** @param {(path: string) => void} go */
 const skeleton = (go) => html`
   <div aria-hidden="true">
     <header class="masthead"><div>${brand(go)}<p class="tagline">${TAGLINE}</p></div></header>
-    ${platformFiguresSkeleton()}
-    <section class="listing">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>
+    <section class="listing flush">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>
   </div>
   <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
 
@@ -247,7 +247,7 @@ export class VerdiktApp extends LitElement {
   renderMarketplace(stats, services, go) {
     return html`<header class="masthead"><div>${brand(go)}<p class="tagline">${TAGLINE}</p></div><p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p></header>
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
-      <section class="listing">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
+      <section class="listing flush">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
       <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${services.length ? html` · <a href=${providerUrl(services[0].provider)} @click=${navigateOnClick(go, providerUrl(services[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */
