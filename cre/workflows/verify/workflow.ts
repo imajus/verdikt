@@ -239,9 +239,14 @@ const finish = (
   result: Record<string, unknown>
 ): string => {
   const payload = JSON.stringify({ requestId: request.requestId, ...result });
+  // TEMPORARY (remove alongside the catch-block logging below): callbackUrl
+  // and a response status are not sensitive — they're the proxy's own public
+  // URL and an HTTP status code, never the observed payload — so logging them
+  // is safe even to keep in mind for a real TEE, unlike the catch below.
+  runtime.log(`finish(): callbackUrl=${request.callbackUrl ?? '(none)'}`);
   if (request.callbackUrl) {
     try {
-      new HTTPClient()
+      const response = new HTTPClient()
         .sendRequest(runtime, {
           url: request.callbackUrl,
           method: 'POST',
@@ -254,6 +259,7 @@ const finish = (
           }
         })
         .result();
+      runtime.log(`finish(): callback POST returned status ${response.statusCode}`);
     } catch (error) {
       // TEMPORARY (remove before any real TEE deployment — production CRE
       // enrollment is not live yet, and `cre workflow simulate` explicitly
