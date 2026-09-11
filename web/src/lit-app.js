@@ -149,6 +149,38 @@ const nav = (view, mode, theme, account, navigate, connect, disconnect, changeTh
   return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
+const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
+
+/** @param {string} width */
+const bar = (width) => html`<span class="bar" style="width:${width}"></span>`;
+
+/** @param {string} label */
+const skeletonFigure = (label) => html`<div class="figure skeleton"><span class="value">${bar('3.5rem')}</span><span class="label">${label}</span></div>`;
+
+/** @param {string} nameWidth */
+const skeletonRow = (nameWidth) => html`
+  <div class="row skeleton">
+    <span class="cell name">${bar(nameWidth)}</span>
+    <span class="cell num">${bar('2.2rem')}</span>
+    <span class="cell num">${bar('2.2rem')}</span>
+    <span class="cell num">${bar('2.6rem')}</span>
+    <span class="cell status">${bar('3rem')}</span>
+  </div>`;
+
+const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
+
+// Shaped like renderMarketplace(), not a generic spinner: the same masthead,
+// figures and listing grid the real page fills in, so nothing shifts when the
+// data arrives. Redacted rather than shimmered, to match the ledger's own
+// vocabulary of hairline rules and monospace rather than boxed cards.
+const skeleton = () => html`
+  <div aria-hidden="true">
+    <header class="masthead"><div>${brand()}<p class="tagline">${TAGLINE}</p></div></header>
+    <section class="figures">${['services', 'bonded', 'verdicts', 'refunded'].map(skeletonFigure)}</section>
+    <div class="layout"><section class="listing">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section><section class="detail"><p class="empty">Reading Arc and the naming layer…</p></section></div>
+  </div>
+  <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
+
 const how = () => html`
   <header class="masthead"><div>${brand()}<p class="tagline">How the verification loop works, end to end.</p></div></header>
   <section class="block"><h3>Two chains, each for one reason</h3><p><strong>Arc</strong> holds the registry, the escrow, the verdicts and the refunds — and the x402 payment itself. USDC is Arc's native gas token, so value moves as <code>msg.value</code>, not an ERC-20 transfer: no <code>approve</code>/<code>transferFrom</code>, no token address. Payment, bond and refund are the same asset on the same chain, which removes any cross-chain correlation between payment and refund.</p><p><strong>Ethereum Sepolia</strong> holds ENS. The SLA lives only as the <code>sla</code> text record on <code>&lt;slug&gt;.verdikt.eth</code>. A per-key access list scopes the provider to <code>sla</code> and <code>url</code>, and the CRE signer to <code>conformance</code> and <code>availability</code>.</p></section>
@@ -201,7 +233,7 @@ export class VerdiktApp extends LitElement {
   renderMarketplace(stats, services) {
     const selected = services.find((listing) => listing.slug === this.route.service) ?? services[0] ?? null;
     const { PASS, FAIL, DOWN } = stats.breakdown;
-    return html`<header class="masthead"><div>${brand()}<p class="tagline">x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.</p></div><p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p></header>
+    return html`<header class="masthead"><div>${brand()}<p class="tagline">${TAGLINE}</p></div><p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p></header>
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
       <section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>
       <div class="layout"><section class="listing">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, listing.slug === selected?.slug, (slug) => this.select(slug))) : html`<p class="empty">No services registered yet.</p>`}</section><section class="detail">${detailTemplate(selected)}</section></div>
@@ -209,11 +241,12 @@ export class VerdiktApp extends LitElement {
   }
   render() {
     if (this.error) return html`<p class="note warn">Could not load the marketplace: ${this.error}</p>`;
-    if (!this.marketplace) return html`<p class="empty">Reading Arc and the naming layer…</p>`;
     const account = getConnectedAccount()?.address ?? null;
+    const navBar = nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme));
+    if (!this.marketplace) return html`${navBar}${skeleton()}`;
     const { services, stats } = this.marketplace;
     const body = this.route.view === 'how' ? how() : (() => { const { effectiveProvider, owned } = resolveProviderConsole(services, this.route.view, this.route.provider, account); return effectiveProvider ? this.renderProvider(owned, effectiveProvider) : this.renderMarketplace(stats, services); })();
-    return html`${nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme))}${body}`;
+    return html`${navBar}${body}`;
   }
 }
 

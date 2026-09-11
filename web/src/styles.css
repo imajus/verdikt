@@ -171,6 +171,18 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .aside.warn { border-left-color: var(--fair); }
 .empty { color: var(--muted); padding: 24px 0; font-style: italic; }
 
+/* Loading skeleton: shapes redacted rather than shimmered, so it reads as
+   the same ledger with the numbers not in yet, not a generic spinner. */
+.bar { display: inline-block; width: 100%; height: 0.85em; border-radius: 2px; background: var(--rule); vertical-align: middle; }
+.figure.skeleton .value .bar { height: 22px; }
+.row.skeleton { cursor: default; }
+.row.skeleton:hover { background: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .bar { animation: bar-pulse 1.4s ease-in-out infinite; }
+}
+@keyframes bar-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
 /* Figures: the platform in four numbers. One ruled row, no tiles. ----------- */
 
 .figures {

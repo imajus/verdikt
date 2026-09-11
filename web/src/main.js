@@ -27,6 +27,9 @@ root.append(app);
 app.theme = savedTheme();
 const env = import.meta.env ?? {};
 const { mode, deps } = createSource(env);
+// Set before main() resolves, not just in draw(), so the nav's wallet button
+// is present in the loading skeleton rather than appearing once data lands.
+app.mode = mode;
 
 const ARC_CHAIN_CONFIG = { chainId: ARC.chainId, name: 'Arc Testnet', rpcUrl: /** @type {string} */ (env.VITE_ARC_RPC_URL || 'https://rpc.testnet.arc.network'), nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
 const SEPOLIA_CHAIN_CONFIG = { chainId: SEPOLIA.chainId, name: 'Ethereum Sepolia', rpcUrl: /** @type {string} */ (env.VITE_SEPOLIA_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com') };
