@@ -35,6 +35,11 @@ set -euo pipefail
 WORKFLOW_DIR="${RUNNER_WORKFLOW_DIR:-/app/cre/workflows}"
 TARGET="${RUNNER_CRE_TARGET:-staging-settings}"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Absolute, never `./limits.json`. The CLI resolves this path against its own
+# working directory, not the shell's, and a relative one failed with `open
+# ./limits.json: no such file or directory` from a shell already sitting in the
+# directory that holds it.
+LIMITS_FILE="${WORKFLOW_DIR}/limits.json"
 
 # Refuse rather than run without it. Without --broadcast the workflow still
 # compiles, still reads Arc and still prints a plausible per-service summary
@@ -42,6 +47,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # not it did its work is worse than one that fails.
 if [ -z "${CRE_ETH_PRIVATE_KEY:-}" ]; then
   echo "publish-scores: CRE_ETH_PRIVATE_KEY is unset — the run would read Arc and write nothing" >&2
+  exit 1
+fi
+
+# Fail here rather than after a two-minute compile. Missing means the image
+# predates the limits file, and the run would die on CallLimit anyway.
+if [ ! -f "$LIMITS_FILE" ]; then
+  echo "publish-scores: no limits file at ${LIMITS_FILE} — rebuild the image from a commit that has it" >&2
   exit 1
 fi
 
@@ -61,7 +73,7 @@ cre workflow simulate aggregate \
   --target "$TARGET" \
   --non-interactive \
   --trigger-index 0 \
-  --limits ./limits.json \
+  --limits "$LIMITS_FILE" \
   --broadcast
 
 echo "publish-scores: $(date -u +%FT%TZ) simulate finished — reading the records back"
