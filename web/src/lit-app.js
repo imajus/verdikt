@@ -170,16 +170,28 @@ const skeletonRow = (nameWidth) => html`
   </div>`;
 
 const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
+const PLATFORM_FIGURE_LABELS = ['services', 'bonded', 'verdicts', 'refunded'];
 
-// Shaped like renderMarketplace(), not a generic spinner: the same masthead,
-// figures and listing grid the real page fills in, so nothing shifts when the
-// data arrives. Redacted rather than shimmered, to match the ledger's own
+// Platform-wide totals. Lives on the landing page, filled in once
+// loadMarketplace() resolves — the marketplace listing itself no longer
+// shows these (see renderMarketplace).
+/** @param {PlatformStats} stats */
+const platformFigures = (stats) => {
+  const { PASS, FAIL, DOWN } = stats.breakdown;
+  return html`<section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>`;
+};
+
+const platformFiguresSkeleton = () => html`<section class="figures">${PLATFORM_FIGURE_LABELS.map(skeletonFigure)}</section>`;
+
+// Shaped like renderMarketplace(), not a generic spinner: the same masthead
+// and listing grid the real page fills in, so nothing shifts when the data
+// arrives. Redacted rather than shimmered, to match the ledger's own
 // vocabulary of hairline rules and monospace rather than boxed cards.
 /** @param {(path: string) => void} go */
 const skeleton = (go) => html`
   <div aria-hidden="true">
     <header class="masthead"><div>${brand(go)}<p class="tagline">${TAGLINE}</p></div></header>
-    <section class="figures">${['services', 'bonded', 'verdicts', 'refunded'].map(skeletonFigure)}</section>
+    ${platformFiguresSkeleton()}
     <section class="listing">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>
   </div>
   <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
@@ -233,10 +245,8 @@ export class VerdiktApp extends LitElement {
   }
   /** @param {PlatformStats} stats @param {Listing[]} services @param {(path: string) => void} go */
   renderMarketplace(stats, services, go) {
-    const { PASS, FAIL, DOWN } = stats.breakdown;
     return html`<header class="masthead"><div>${brand(go)}<p class="tagline">${TAGLINE}</p></div><p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p></header>
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
-      <section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>
       <section class="listing">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
       <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${services.length ? html` · <a href=${providerUrl(services[0].provider)} @click=${navigateOnClick(go, providerUrl(services[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
@@ -255,7 +265,10 @@ export class VerdiktApp extends LitElement {
     // These three views need no chain data, so they render even when the
     // marketplace failed to load — a dead RPC must not also strand a visitor
     // on a page with no navigation and no way to reach the legal pages.
-    if (this.route.view === 'landing') return html`${navBar}${landing(go)}${legalFooter(go)}`;
+    if (this.route.view === 'landing') {
+      const stats = this.marketplace ? platformFigures(this.marketplace.stats) : platformFiguresSkeleton();
+      return html`${navBar}${landing(go)}${stats}${legalFooter(go)}`;
+    }
     if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter(go)}`;
     if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter(go)}`;
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;

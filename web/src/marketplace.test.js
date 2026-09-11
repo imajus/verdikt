@@ -298,6 +298,17 @@ describe('rendering', () => {
     expect(html).toContain('demo data');
   });
 
+  it('no longer shows platform stats on the marketplace listing itself', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).not.toContain('class="figures"');
+  });
+
+  it('shows platform stats on the landing page once the marketplace has loaded', async () => {
+    const html = renderApp(await build(), 'demo', 'landing', null);
+    expect(html).toContain('class="figures"');
+    expect(html).toContain('>services<');
+  });
+
   it('renders a standalone service page without a DOM', async () => {
     const html = renderApp(await build(), 'demo', 'service', 'weather');
     expect(html).toContain('responds-within-5s');
