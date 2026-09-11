@@ -4,26 +4,33 @@
 // need `Marketplace`/`Listing` data or a loaded route — see
 // docs/superpowers/specs/2026-09-11-landing-routing-legal-design.md §3, §7.
 
-import { html } from 'lit';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
+import { html, nothing } from 'lit';
+import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
 
+// The generic title+description bar shown at the top of every page except
+// the landing page — see docs/superpowers/specs/2026-09-11-navbar-page-head-design.md.
+// The brand/logo lives in the nav instead (nav() in lit-app.js), so this
+// carries no logo of its own.
+/** @param {string} title @param {unknown} description @param {unknown} [aside] */
+export const pageHead = (title, description, aside = nothing) => html`
+  <header class="page-head">
+    <div><h1>${title}</h1><p class="tagline">${description}</p></div>
+    ${aside}
+  </header>`;
+
 /** @param {(path: string) => void} go */
 export const landing = (go) => html`
-  <header class="masthead">
-    <div>
-      <h1><a class="brand" href=${LANDING_PATH} aria-label="Verdikt home" @click=${navigateOnClick(go, LANDING_PATH)}><img class="brand-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>Verdikt</span></a></h1>
-      <p class="tagline">${TAGLINE}</p>
-    </div>
-  </header>
-  <p class="landing-cta">
-    <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
-  </p>`;
+  <div class="landing-lead">
+    <p class="tagline">${TAGLINE}</p>
+    <p class="landing-cta">
+      <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
+    </p>
+  </div>`;
 
 export const terms = () => html`
-  <h2 class="page-title">Terms of Service</h2>
-  <p class="aside">Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.</p>
+  ${pageHead('Terms of Service', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
   <section class="block">
     <h3>What Verdikt is</h3>
     <p>Verdikt is a demo marketplace of x402-gated API services. It has no backend and no accounts: this page reads Arc Testnet and Ethereum Sepolia directly from your browser, and every write — registering a service, publishing an SLA, connecting a wallet — is a transaction you sign yourself. Verdikt never holds a key of yours and never takes custody of funds.</p>
@@ -38,8 +45,7 @@ export const terms = () => html`
   </section>`;
 
 export const privacy = () => html`
-  <h2 class="page-title">Privacy Policy</h2>
-  <p class="aside">Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.</p>
+  ${pageHead('Privacy Policy', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
   <section class="block">
     <h3>What we collect</h3>
     <p>Nothing. There is no Verdikt server behind this page — it is a static site that reads Arc Testnet and Ethereum Sepolia over public RPC endpoints straight from your browser. No account, email or personal data is requested or stored by Verdikt.</p>
