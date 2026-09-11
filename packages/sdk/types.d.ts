@@ -96,6 +96,8 @@ interface ArcOptions {
   deployBlock?: bigint;
   /** Chunk size for `eth_getLogs`; most public RPCs cap the range. */
   maxBlockRange?: bigint;
+  /** How many `eth_getLogs` chunks to have in flight at once. */
+  scanConcurrency?: number;
 }
 
 interface LogRange {

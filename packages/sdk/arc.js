@@ -61,6 +61,17 @@ export const registryAbi = parseAbi([
 const DEFAULT_MAX_BLOCK_RANGE = 10_000n;
 
 /**
+ * How many chunk requests `scan` has in flight at once. Arc's sub-second
+ * finality means the range between a fixed `deployBlock` and the current head
+ * only grows, so a registry deployed even a few days ago already needs dozens
+ * of chunks; fetching them one at a time serialised the dashboard's first
+ * paint behind that many RPC round trips. Bounded rather than unbounded so a
+ * wide range doesn't fire hundreds of concurrent requests at once and trip a
+ * provider's rate limit.
+ */
+const DEFAULT_SCAN_CONCURRENCY = 8;
+
+/**
  * viem types `getLogs` results by the event it was handed, which JSDoc cannot
  * carry through the generic `scan` helper below. One cast here beats one at
  * every read site.
@@ -89,6 +100,7 @@ export function createRegistryReader(options = {}) {
   const deployBlock =
     options.deployBlock ?? BigInt(env('VERDIKT_REGISTRY_DEPLOY_BLOCK') ?? ARC.deployBlock ?? '0');
   const maxBlockRange = options.maxBlockRange ?? DEFAULT_MAX_BLOCK_RANGE;
+  const scanConcurrency = options.scanConcurrency ?? DEFAULT_SCAN_CONCURRENCY;
   const client = createPublicClient({ chain: arcTestnet, transport: http(rpcUrl, { batch: true }) });
 
   /**
@@ -99,20 +111,34 @@ export function createRegistryReader(options = {}) {
     const latest = range.toBlock ?? (await client.getBlockNumber());
     const start = range.fromBlock ?? deployBlock;
     const abiEvent = registryAbi.find((item) => item.type === 'event' && item.name === eventName);
-    /** @type {import('viem').Log[]} */
-    const logs = [];
+    /** @type {{ from: bigint, to: bigint }[]} */
+    const chunks = [];
     for (let from = start; from <= latest; from += maxBlockRange) {
       const to = from + maxBlockRange - 1n > latest ? latest : from + maxBlockRange - 1n;
-      const page = await client.getLogs({
-        address,
-        event: /** @type {never} */ (abiEvent),
-        args: /** @type {never} */ (range.args),
-        fromBlock: from,
-        toBlock: to
-      });
-      logs.push(...page);
+      chunks.push({ from, to });
     }
-    return logs;
+    // Bounded-concurrency batches rather than one request per chunk in
+    // series — see DEFAULT_SCAN_CONCURRENCY. Pages are written into their
+    // chunk's own slot so the final flatten stays block-ascending regardless
+    // of which request in a batch resolves first.
+    /** @type {import('viem').Log[][]} */
+    const pages = new Array(chunks.length);
+    for (let i = 0; i < chunks.length; i += scanConcurrency) {
+      const batch = chunks.slice(i, i + scanConcurrency);
+      const results = await Promise.all(
+        batch.map(({ from, to }) =>
+          client.getLogs({
+            address,
+            event: /** @type {never} */ (abiEvent),
+            args: /** @type {never} */ (range.args),
+            fromBlock: from,
+            toBlock: to
+          })
+        )
+      );
+      results.forEach((page, offset) => { pages[i + offset] = page; });
+    }
+    return pages.flat();
   };
 
   return {
