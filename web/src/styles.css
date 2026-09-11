@@ -748,18 +748,36 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 .wizard-steps li.done { color: var(--good); font-weight: 500; }
 .wizard-nav { display: flex; gap: 12px; margin-top: 18px; }
 .wizard-nav wa-button { margin-top: 0; }
-/* One button per transaction, stacked in the order they must run. Each is
-   its own click because a wallet only raises its popup while the browser
-   still holds user activation — see runStep() in forms/wizard.js. */
-.wizard-run { list-style: none; padding: 0; margin: 20px 0 0; }
-.wizard-run .run-row { display: flex; align-items: center; gap: 12px; }
-.wizard-run wa-button { margin-top: 0; }
-.wizard-run .chain { font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
-.wizard-run li.done .chain { color: var(--good); }
-.wizard-run li:not(:last-child)::after {
-  content: '↓'; display: block; color: var(--muted); line-height: 1; margin: 8px 0 8px 16px;
+/* The transaction docket: one ruled row per transaction, in the order they
+   must run. Built from the listing row's vocabulary rather than a stack of
+   buttons — the sequence is the information, so it is indexed and ruled.
+   Only the row the cursor is on carries a control, because a wallet raises
+   its popup only while the browser still holds user activation (runStep() in
+   forms/wizard.js). */
+.wizard-run { list-style: none; padding: 0; margin: 0; border-top: 1px solid var(--rule); }
+.wizard-run li {
+  /* Every track is fixed but the label's, so the four independent row grids
+     still line their chain and action columns up with each other — an `auto`
+     action column collapses on the rows that carry no control. */
+  display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 6rem 7rem;
+  align-items: center; gap: 4px 14px;
+  padding: 11px 2px; border-bottom: 1px solid var(--rule);
 }
-.wizard-run li .check { margin: 8px 0 0; }
-.wizard-review { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; margin: 4px 0 20px; font-size: 15px; }
-.wizard-review dt { color: var(--muted); }
-.wizard-review dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.wizard-run .run-index { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wizard-run .run-label { font-size: 15.5px; }
+.wizard-run .run-chain {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted);
+}
+.wizard-run .run-action { justify-self: end; display: flex; align-items: center; }
+/* Only a row that carries a control reserves its height; a pending row that
+   did so left the rhythm slack where it should be tight. */
+.wizard-run li.current .run-action, .wizard-run li.done .run-action { min-height: 30px; }
+.wizard-run .run-action wa-button { margin-top: 0; }
+.wizard-run li.later .run-label, .wizard-run li.later .run-index, .wizard-run li.later .run-chain { color: var(--muted); }
+.wizard-run li.current .run-label { font-weight: 500; }
+.wizard-run li .check { grid-column: 2 / -1; margin: 0; }
+@media (max-width: 560px) {
+  .wizard-run li { grid-template-columns: 2rem minmax(0, 1fr); }
+  .wizard-run .run-chain, .wizard-run .run-action { grid-column: 2; justify-self: start; }
+}

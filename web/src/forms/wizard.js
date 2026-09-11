@@ -8,6 +8,7 @@
 // from the top — a claimed subname is never re-claimed.
 import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
+import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
 import { navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-editor.js';
@@ -19,6 +20,23 @@ const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 const SLUG_CHECK_DEBOUNCE_MS = 400;
 
 /**
+ * The SLA as a record value rather than a validator verdict: what the service
+ * is about to promise, not whether the draft parses. Step 3's Next gate
+ * already refuses an unparseable draft, so the fallback is only there because
+ * render() must never throw.
+ * @param {string} source
+ */
+function describeSlaRecord(source) {
+  try {
+    const { clauses } = parseSla(source.trim());
+    const types = [...new Set(clauses.map((clause) => clause.type))].join(', ');
+    return `${clauses.length} clause${clauses.length === 1 ? '' : 's'} · ${types}`;
+  } catch {
+    return 'unreadable';
+  }
+}
+
+/**
  * The four transactions registration requires, in the order the module
  * comment above mandates. A pure builder so it's testable without mounting
  * the element: `run()` closures capture `deps` and the draft, nothing else.
@@ -28,22 +46,22 @@ const SLUG_CHECK_DEBOUNCE_MS = 400;
 export function buildExecutionSteps(deps, { slug, url, sla }) {
   return [
     {
-      key: 'claim', label: `Claim ${slug}.verdikt.eth`, chain: /** @type {const} */ ('Sepolia'),
+      key: 'claim', label: 'Claim the subname', chain: /** @type {const} */ ('Sepolia'),
       ensure: deps.ensureSepolia,
       run: () => claimSubname({ walletClient: deps.walletClientFor('sepolia'), registrarAddress: deps.registrarAddress, slug, payTo: deps.account })
     },
     {
-      key: 'register', label: `Register on Arc · ${deps.formatNativeUsdc(deps.depositAmount)}`, chain: /** @type {const} */ ('Arc'),
+      key: 'register', label: `Register and bond · ${deps.formatNativeUsdc(deps.depositAmount)}`, chain: /** @type {const} */ ('Arc'),
       ensure: deps.ensureArc,
       run: () => registerService({ walletClient: deps.walletClientFor('arc'), registryAddress: deps.registryAddress, slug, depositAmount: deps.depositAmount })
     },
     {
-      key: 'url', label: 'Publish endpoint URL', chain: /** @type {const} */ ('Sepolia'),
+      key: 'url', label: 'Publish the endpoint URL', chain: /** @type {const} */ ('Sepolia'),
       ensure: deps.ensureSepolia,
       run: () => publishUrl({ walletClient: deps.walletClientFor('sepolia'), slug, value: url.trim() })
     },
     {
-      key: 'sla', label: 'Publish SLA', chain: /** @type {const} */ ('Sepolia'),
+      key: 'sla', label: 'Publish the SLA', chain: /** @type {const} */ ('Sepolia'),
       ensure: deps.ensureSepolia,
       run: () => publishSla({ walletClient: deps.walletClientFor('sepolia'), slug, value: sla.trim() })
     }
@@ -175,28 +193,49 @@ export class VerdiktWizard extends LitElement {
     }
     return this.renderReview();
   }
+  /**
+   * One transaction as a ruled listing row: index, action, the chain it lands
+   * on, and — only on the step the cursor is on — the control that signs it.
+   * A written step is marked with the same dot-and-word `state` the ledger
+   * uses, so it reads without hue.
+   * @param {{key: string, label: string, chain: string}} step
+   * @param {number} index
+   */
+  renderRunRow(step, index) {
+    const written = index < this.done;
+    const current = index === this.done;
+    return html`
+      <li class=${written ? 'done' : current ? 'current' : 'later'}>
+        <span class="run-index">${String(index + 1).padStart(2, '0')}</span>
+        <span class="run-label">${step.label}</span>
+        <span class="run-chain">${step.chain}</span>
+        <span class="run-action">
+          ${written ? html`<span class="state active"><i class="dot"></i>Written</span>` : nothing}
+          ${current ? html`<wa-button type="button" size="s" appearance="accent" id=${`wizard-run-${step.key}`} ?disabled=${this.pending} ?loading=${this.pending} @click=${() => this.runStep(index)}>${this.execError ? 'Try again' : 'Sign'}</wa-button>` : nothing}
+        </span>
+        ${current && this.execError ? html`<p class="check bad" id="wizard-step-error"><i class="dot"></i>${this.execError}</p>` : nothing}
+      </li>`;
+  }
   renderReview() {
     const deps = /** @type {NonNullable<typeof this.deps>} */ (this.deps);
     const steps = buildExecutionSteps(deps, { slug: this.slug, url: this.url, sla: this.sla });
+    const finished = this.done === steps.length;
     return html`
-      <dl class="wizard-review">
-        <div><dt>Slug</dt><dd>${this.slug}.verdikt.eth</dd></div>
-        <div><dt>Endpoint</dt><dd>${this.url.trim()}</dd></div>
-        <div><dt>SLA</dt><dd>${describeSlaValidity(this.sla).message}</dd></div>
-        <div><dt>Bond</dt><dd>${deps.formatNativeUsdc(deps.depositAmount)}</dd></div>
-      </dl>
-      ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button></div>` : nothing}
-      <ol class="wizard-run">
-        ${steps.map((step, i) => html`
-          <li class=${i < this.done ? 'done' : i === this.done ? 'current' : 'later'}>
-            <div class="run-row">
-              <wa-button type="button" id=${`wizard-run-${step.key}`} ?disabled=${i !== this.done || this.pending} ?loading=${i === this.done && this.pending} appearance=${i === this.done ? 'accent' : 'outlined'} @click=${() => this.runStep(i)}>${i < this.done ? '✓ ' : ''}${step.label}</wa-button>
-              <span class="chain">${step.chain}</span>
-            </div>
-            ${i === this.done && this.execError ? html`<p class="check bad" id="wizard-step-error"><i class="dot"></i>${this.execError}</p>` : nothing}
-          </li>`)}
-      </ol>
-      ${this.done === steps.length ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service →</wa-button>` : nothing}`;
+      <section class="block">
+        <h3>Service record</h3>
+        <table class="kv">
+          <tr><th>Subname</th><td><code>${this.slug}.verdikt.eth</code></td></tr>
+          <tr><th>Endpoint</th><td><code>${this.url.trim()}</code></td></tr>
+          <tr><th>SLA</th><td>${describeSlaRecord(this.sla)}</td></tr>
+          <tr><th>Bond</th><td><code>${deps.formatNativeUsdc(deps.depositAmount)}</code></td></tr>
+        </table>
+        ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" size="s" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button></div>` : nothing}
+      </section>
+      <section class="block">
+        <h3>Transactions <small>${steps.length}, across two chains, in this order</small></h3>
+        <ol class="wizard-run">${steps.map((step, i) => this.renderRunRow(step, i))}</ol>
+        ${finished ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service</wa-button>` : nothing}
+      </section>`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;
