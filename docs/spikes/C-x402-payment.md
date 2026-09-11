@@ -214,3 +214,20 @@ The settlement check from §4 lands in the same place, before
 `onReport(metadata, report)` rather than a direct `setVerdict` call does not
 disturb any of this: the payload is the same five fields, only the transport
 differs.
+
+## 9. Addendum, 2026-09-11 — `GatewayWalletBatched` is no longer unpublished
+
+[#41](https://github.com/imajus/verdikt/issues/41) captured a real
+`PAYMENT-SIGNATURE` header from a live `GatewayWalletBatched` call
+(`portfolio.verdikt.bond`, Alchemy) and found it decodes to exactly the
+`TransferWithAuthorization` struct §3 describes, under the domain §3 already
+predicted: `name`/`version` from the challenge's own `extra`,
+`verifyingContract` the Gateway contract (`0x77777777dcc4d5a8b6e418fd04d8997ef11000ee`
+here) rather than the token. Recovering the payer from that one sample
+matched the signed `from` exactly.
+
+`packages/sdk/payment.js` still refuses this scheme — that decision predates
+this capture and is not reopened by it alone. One matching sample is not
+proof the domain shape is a stable contract rather than a coincidence, and
+implementing verification is scoped as a follow-up at
+[Tasks.md §0.4](../Tasks.md#04-spike-c--x-payment-decoding), not decided here.

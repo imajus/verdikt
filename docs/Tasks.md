@@ -225,6 +225,49 @@ test — done, and not a fixture test. A pasted fixture can assert a binding but
 cannot demonstrate one, so `payment.test.js` signs each header with a real key
 and then tampers with it.
 
+> **Update, 2026-09-11 ([#41](https://github.com/imajus/verdikt/issues/41)).**
+> [#40](https://github.com/imajus/verdikt/issues/40) fixed the proxy failing to
+> detect a v2 `PAYMENT-SIGNATURE` header, which means a `GatewayWalletBatched`
+> payment now correctly reaches `decodePayment` — which correctly refuses it,
+> but as a 500 *after the payment has already settled with the provider*.
+> Before #40 the same call at least delivered the paid-for response,
+> unverified; now the agent pays and gets nothing. Confirmed live against
+> `portfolio.verdikt.bond` (Alchemy): a real `GatewayWalletBatched` call
+> deducted $0.001 from the paying Gateway balance and came back a 500 with no
+> data.
+>
+> The "payload shape is not published" premise for the refusal is now half
+> wrong. A captured `PAYMENT-SIGNATURE` header from that live call decodes to
+> the same ERC-3009 `TransferWithAuthorization` struct `eip3009` already
+> verifies, signed under a domain whose `verifyingContract` is Circle's
+> Gateway contract (`0x77777777dcc4d5a8b6e418fd04d8997ef11000ee`) rather than
+> the token — with `name`/`version` exactly as `accepts[].extra` already
+> supplies, matching the shape `payment.test.js`'s `GatewayWalletBatched`
+> fixture already anticipated (`extra.verifyingContract`). Recovering the
+> payer from that one sample against that domain matched the signed `from`
+> exactly — one independent sample, not yet a second one to rule out
+> coincidence.
+>
+> **Not implemented here.** #41 tracks the decision and scopes the follow-up:
+>
+> 1. Capture a second, independent `GatewayWalletBatched` sample and confirm
+>    the same domain shape recovers the payer before treating it as a stable
+>    contract rather than a coincidence.
+> 2. Branch `decodePayment` on `option.extra?.name === 'GatewayWalletBatched'`
+>    and build the EIP-712 domain from `extra.verifyingContract` instead of
+>    `option.asset` — the same recovery routine `verifyEip3009` already runs
+>    otherwise applies unchanged.
+> 3. Decide the interim behaviour for the window before that ships: today's
+>    refusal turns a settled, unverifiable payment into a 500 with nothing
+>    delivered, worse than the pre-#40 unverified passthrough. Whether that
+>    trade favours reverting to passthrough-without-a-verdict for this one
+>    scheme, or accepting the current refusal until the fix lands, is the
+>    operator's call, not a technical default — #41 does not make it.
+> 4. Once implemented, Spike C §4 still applies unchanged: a signed
+>    authorization is an intent to pay, not proof Gateway moved it, so the
+>    workflow must confirm settlement before writing any verdict on this path
+>    too.
+
 > **Fallback.** If payer/amount aren't verifiable from the header alone,
 > take them from the settlement receipt instead and have the enclave
 > confirm settlement before writing a verdict.

@@ -12,8 +12,12 @@
 //     signature verification included, and tested against signatures this repo
 //     produces with a real key.
 //   - `scheme: "exact"` with `extra.name: "GatewayWalletBatched"` — Circle's
-//     own batched-gateway scheme. Its payload shape is not published, and
-//     inventing one would prove nothing. That path is still UNSUPPORTED and
+//     own batched-gateway scheme. A live capture (2026-09-11,
+//     https://github.com/imajus/verdikt/issues/41) decodes it to the same
+//     ERC-3009 struct `eip3009` verifies, under a domain whose
+//     `verifyingContract` is Circle's Gateway contract rather than the token —
+//     so it is no longer unpublished, just not yet confirmed against a second
+//     independent sample or implemented. That path is still UNSUPPORTED and
 //     says so.
 //
 // So Spike C is half answered, and the half that is answered is the half that
@@ -177,10 +181,11 @@ export async function decodePayment(header, options = {}) {
   const named = option ? (method ?? option?.extra?.name ?? 'unknown') : 'unknown (no accepts supplied)';
   throw new Error(
     `decodePayment: cannot verify a "${envelope.scheme}" payment using "${named}" (Spike C, Tasks.md 0.4). ` +
-      'Only the eip3009 asset transfer method is implemented, because its payload is an open standard and ' +
-      "GatewayWalletBatched's is not published. Refusing rather than trusting an unverified payer: this value " +
-      `decides who a refund is credited to. Set ${STUB_OPT_IN}=true to develop against the fixture, and never ` +
-      'anywhere a real bond is at stake.'
+      'Only the eip3009 asset transfer method is implemented. GatewayWalletBatched decodes to the same struct ' +
+      'under a different EIP-712 domain (tracked in https://github.com/imajus/verdikt/issues/41) but is not yet ' +
+      'verified here. Refusing rather than trusting an unverified payer: this value decides who a refund is ' +
+      `credited to. Set ${STUB_OPT_IN}=true to develop against the fixture, and never anywhere a real bond is at ` +
+      'stake.'
   );
 }
 

@@ -21,9 +21,9 @@ The loop runs end to end on public testnets. `docs/walkthrough.md` is the tour, 
 - **Sepolia** — `verdikt.eth` with two subnames carrying real `sla`, `url` and `address` records, plus `conformance`/`availability` published by the hourly workflow through `VerdiktScoreWriter` at `0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA`.
 - Both CRE workflows run under `cre workflow simulate --broadcast`.
 
-All three spikes have run. **A** (ENSv2) — `docs/spikes/A-ens-sepolia.md`. **B** (CRE) — `docs/spikes/cre.md`, findings CRE-1…CRE-10, several of which reshaped the contracts. **C** (`X-PAYMENT`) — the `exact`/`eip3009` scheme is implemented and a signature it produced settled on Base Sepolia; Circle's `GatewayWalletBatched` is unpublished and still refuses rather than guessing.
+All three spikes have run. **A** (ENSv2) — `docs/spikes/A-ens-sepolia.md`. **B** (CRE) — `docs/spikes/cre.md`, findings CRE-1…CRE-10, several of which reshaped the contracts. **C** (`X-PAYMENT`) — the `exact`/`eip3009` scheme is implemented and a signature it produced settled on Base Sepolia; Circle's `GatewayWalletBatched` still refuses rather than verifying, though a live capture ([#41](https://github.com/imajus/verdikt/issues/41)) now shows its payload decodes to the same ERC-3009 struct under a different EIP-712 domain — no longer unpublished, just not yet implemented.
 
-Three things are deliberately unfinished, each argued at its own task in `docs/Tasks.md`: a paid call end to end (the demo paywall advertises `eip3009`, then answers 402 to a payment the USDC contract itself accepts), production CRE enrollment (`cre whoami` → *Deploy Access: Not enabled*), and the recorded video.
+Three things are deliberately unfinished, each argued at its own task in `docs/Tasks.md`: a paid call end to end (the demo paywall advertises `eip3009`, then answers 402 to a payment the USDC contract itself accepts), production CRE enrollment (`cre whoami` → *Deploy Access: Not enabled*), and the recorded video. A fourth, [#41](https://github.com/imajus/verdikt/issues/41), is costing real money rather than just being unfinished: a `GatewayWalletBatched` payment now settles with the provider and then hits `decodePayment`'s refusal as a 500 with nothing delivered — worse than the unverified passthrough it replaced.
 
 ## Commands
 
