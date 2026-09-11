@@ -16,16 +16,12 @@ https://<runner-host>/workflows/execute
 
 ## Setup
 
-1. Set `authorizedKeys` in `cre/workflows/verify/config.staging.json` to the
-   proxy signing public key. This is the workflow trigger allow-list; the
-   runner also verifies the trigger JWT using `RUNNER_TRIGGER_ADDRESS`.
-
-2. Configure the callback credential. The verify workflow reads its
+1. Configure the callback credential. The verify workflow reads its
    TEE-only `CALLBACK_TOKEN` secret from `CRE_CALLBACK_TOKEN_VAR`; it must
    equal the proxy's `CRE_CALLBACK_TOKEN` or callbacks receive 401. Never put
    this value in `config.staging.json`.
 
-3. Authenticate the CRE CLI once on the host that runs the service:
+2. Authenticate the CRE CLI once on the host that runs the service:
 
    ```bash
    cd cre/workflows
@@ -34,6 +30,22 @@ https://<runner-host>/workflows/execute
    ```
 
    The session must persist at `/root/.cre` inside the runner container.
+
+### Trigger authorization
+
+Two separate checks gate a trigger, and only one of them does anything here:
+
+- **The runner's own JWT check**, against `RUNNER_TRIGGER_ADDRESS` (below) —
+  this is what actually authorizes a trigger reaching this service.
+- **`authorizedKeys` in `cre/workflows/verify/config.staging.json`** — the
+  workflow's own allow-list, enforced only for a workflow *deployed* to real
+  CRE infrastructure. `cre workflow simulate` — everything this runner ever
+  drives — explicitly does not require it (["Authorization is not required
+  during simulation but must be set for
+  production"](https://docs.chain.link/cre/guides/workflow/using-triggers/http-trigger/testing-in-simulation)),
+  so leaving it `[]` is correct, not an oversight, for as long as this runner
+  is simulation-only. Populate it only once a workflow is actually enrolled
+  on real CRE infrastructure (not yet true here — see `CLAUDE.md`).
 
 ### Run locally
 
