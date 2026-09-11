@@ -20,20 +20,35 @@ with deliberate garbage.
 The consequence is that the agent has no protection against *its own* mistake.
 It pays, receives a 4xx, and has no recourse — by design.
 
-This is not hypothetical. On 2026-09-11, while verifying the
-`GatewayWalletBatched` fix ([#43](https://github.com/imajus/verdikt/pull/43)), a
-call to `portfolio.verdikt.bond` sent:
+### A cautionary note on the incident that prompted this
 
-```json
-{"addresses": ["0xe1107cc4594a8685e27b70dfcd333593c5ef0872"]}
-```
+This note was written after a paid call to `portfolio.verdikt.bond` returned
+`404 Required argument [HttpRequest request] not specified` and burned $0.001
+for nothing, which looked exactly like an agent sending a malformed body — the
+published schema for that endpoint declares `addresses` as an array of objects,
+and the call had sent an array of strings.
 
-Alchemy answered `404 Required argument [HttpRequest request] not specified`.
-$0.001 USDC settled on Base, nothing was delivered, no verdict was written and
-no refund was due. Every layer behaved exactly as specified. The published
-schema for that endpoint declares `addresses` as an array of **objects**
-(`{address, networks}`), not of strings — a single `type` check against it would
-have rejected the request before the payment was ever signed.
+**That diagnosis was wrong.** Re-running with a correctly-shaped body produced a
+byte-identical error. The real cause was Verdikt's own:
+the verified path never forwarded the request body to the provider at all
+([#45](https://github.com/imajus/verdikt/pull/45)), so every POST service saw an
+empty request regardless of what the agent sent.
+
+It is kept here because it is the most useful thing in this document:
+
+- **A pre-flight validator would have passed that request and it would still
+  have failed.** Schema validation protects against the agent's own malformed
+  input and against nothing else — not against a relay defect, and not against a
+  provider rejecting a well-formed request for its own reasons. Shipping it
+  risks implying a guarantee it does not provide.
+- **"Provider returned 4xx" is not self-evidently the agent's fault.** The 4xx
+  invariant reads a 4xx as "the caller sent garbage," which is the right default
+  and was wrong in this case. A 4xx that Verdikt itself caused is
+  indistinguishable, from the chain's point of view, from one the agent earned.
+
+The structural gap is still real — an agent that genuinely sends a malformed
+body pays and has no recourse, by design — but this particular incident is not
+an example of it, and should not be cited as one.
 
 ## Why this fits Verdikt specifically
 
@@ -43,8 +58,8 @@ have rejected the request before the payment was ever signed.
 - **The validator already exists.** `packages/sla/jsonschema.js` is a
   hand-rolled, dependency-free JSON Schema subset, written that way because it
   bundles into the CRE workflow. Its `SUPPORTED_KEYWORDS` already cover `type`,
-  `properties`, `required`, `enum` and `items` — enough to have caught the case
-  above. This is not a new engine, it is a second caller.
+  `properties`, `required`, `enum` and `items` — enough for the shape errors
+  that make up the common case. This is not a new engine, it is a second caller.
 - **The SLA already describes a schema, in the other direction.** The `schema`
   clause type in `packages/sla/schema.json` validates the *response* body. A
   request schema is its mirror image: same validator, opposite direction.
