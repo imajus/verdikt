@@ -142,6 +142,10 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 }
 .source.live { color: var(--good); }
 .source.demo { color: var(--fair); }
+/* The provider console's count sits beside its one action, so the pair stays
+   together on the head's right edge rather than the count drifting alone. */
+.head-actions { display: flex; align-items: center; gap: 16px; flex: none; }
+.head-actions wa-button { margin-top: 0; }
 
 @media (max-width: 560px) {
   .page-head { align-items: flex-start; }
