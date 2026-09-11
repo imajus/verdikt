@@ -2,7 +2,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // Exercise the application coordinator with inert view elements. Wallet and
 // SIWE adapters have their own provider/signature tests; here we verify that
-// their events revoke and restore the actual form dependencies.
+// their events revoke and restore the actual form dependencies, now split
+// across the wizard on /register and the SLA/bond controls on /services/<slug>.
 const state = vi.hoisted(() => ({
   account: /** @type {any} */ (null), session: /** @type {any} */ (null),
   changed: /** @type {any} */ (null), signIn: vi.fn(), ensureChain: vi.fn(),
@@ -22,7 +23,16 @@ vi.mock('./wallet.js', () => ({
 }));
 vi.mock('./session.js', () => ({ getSession: () => state.session, signIn: state.signIn }));
 vi.mock('./source.js', () => ({ createSource: () => ({ mode: 'live', deps: { registry: { client: { readContract: async () => 1n } } } }) }));
-vi.mock('./marketplace.js', () => ({ byReputation: () => 0, loadMarketplace: async () => ({ services: [{ provider: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', slug: 'weather' }], stats: {} }) }));
+vi.mock('./marketplace.js', () => ({
+  byReputation: () => 0,
+  loadMarketplace: async () => ({
+    services: [
+      { provider: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', slug: 'weather' },
+      { provider: '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', slug: 'quotes' }
+    ],
+    stats: {}
+  })
+}));
 vi.mock('./theme.js', () => ({ savedTheme: () => 'light', saveTheme: vi.fn() }));
 vi.mock('./lit-app.js', () => ({}));
 vi.mock('./forms/sla-editor.js', () => ({}));
@@ -52,6 +62,16 @@ function change(address = OWNER, chainId = 11155111, identityChanged = true) {
   if (identityChanged) state.session = null;
   state.changed(address || null, identityChanged);
 }
+// The stubbed history.pushState is a no-op, unlike the real browser API it
+// replaces — it never moves location forward on its own. Move it explicitly
+// before dispatching, the same way the real app's next syncRoute() would see
+// it after a real pushState.
+/** @param {string} path */
+async function go(path) {
+  vi.stubGlobal('location', new URL(`https://verdikt.example${path}`));
+  events.get('navigate')?.({ detail: path });
+  await settle();
+}
 
 beforeEach(async () => {
   vi.resetModules(); vi.clearAllMocks();
@@ -79,41 +99,73 @@ beforeEach(async () => {
 });
 afterEach(() => vi.unstubAllGlobals());
 
-it('mounts provider actions only for the signed-in owner', () => {
-  expect(controls['bond-controls-mount'].deps).not.toBeNull();
-  expect(controls['sla-editor-mount'].deps).not.toBeNull();
+it('mounts the wizard, not the sla/bond controls, on /register for the signed-in owner', async () => {
+  await go('/register');
   expect(controls['wizard-mount'].deps.account).toBe(OWNER);
+  expect(controls['sla-editor-mount'].deps).toBeNull();
+  expect(controls['bond-controls-mount'].deps).toBeNull();
+});
+it('mounts the sla/bond controls, not the wizard, on the owner’s own service page', async () => {
+  await go('/services/weather');
+  expect(controls['sla-editor-mount'].deps).not.toBeNull();
+  expect(controls['bond-controls-mount'].deps).not.toBeNull();
+  expect(controls['wizard-mount'].deps).toBeNull();
+});
+it('mounts nothing on a service owned by someone else', async () => {
+  await go('/services/quotes');
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
+it('mounts nothing on a service that does not exist', async () => {
+  await go('/services/nonexistent');
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
+it('mounts nothing on the provider console, a valid address or none', async () => {
+  await go(`/provider/${OWNER}`);
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+  await go('/provider');
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('starts wallet restoration on load without requesting connection or sign-in', () => {
   expect(state.restoreWallet).toHaveBeenCalledOnce();
   expect(state.connectWallet).not.toHaveBeenCalled();
   expect(state.signIn).not.toHaveBeenCalled();
 });
-it('immediately removes stale controls when a different account views an explicit provider URL', async () => {
+it('immediately removes stale controls when a different account views the owner-only service page', async () => {
+  await go('/services/weather');
   change(OTHER);
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
+it('resets the wizard’s step when a different account activates /register', async () => {
+  await go('/register');
+  change(OTHER);
   expect(controls['wizard-mount'].step).toBe(1);
 });
 it('revokes all provider controls on disconnect', async () => {
+  await go('/services/weather');
   await events.get('wallet-disconnect')?.(); await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('suspends controls on an external chain change without losing drafts', async () => {
+  await go('/services/weather');
   change(OWNER, 1, false); await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   expect(controls['sla-editor-mount'].draft).toBe('draft');
 });
 it('reuses authentication after switching to Arc and restores its dependencies', async () => {
+  await go('/services/weather');
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
   await ensureArc();
   expect(state.ensureChain).toHaveBeenCalledWith(5042002, expect.objectContaining({ chainId: 5042002 }));
   expect(state.signIn).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
+  // A same-identity chain switch nulls deps but never calls .clear() — the
+  // wizard's own step (irrelevant to this page) is left exactly as it was.
   expect(controls['wizard-mount'].step).toBe(2);
 });
 it('does not restore controls when re-authentication is rejected', async () => {
+  await go('/services/weather');
   state.signIn.mockRejectedValueOnce(new Error('user rejected'));
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
   state.session = null;
@@ -121,6 +173,7 @@ it('does not restore controls when re-authentication is rejected', async () => {
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('connects on an unsupported network without requesting a signature or network switch', async () => {
+  await go('/services/weather');
   change(OWNER, 1, false); await settle();
   await events.get('wallet-connect')?.(); await settle();
   expect(state.ensureChain).not.toHaveBeenCalled();
@@ -128,6 +181,7 @@ it('connects on an unsupported network without requesting a signature or network
   expect(controls['bond-controls-mount'].deps).toBeNull();
 });
 it('recovers from an unsupported network on explicit provider activation without re-signing', async () => {
+  await go('/services/weather');
   change(OWNER, 1, false); await settle();
   await events.get('provider-sign-in')?.(); await settle();
   expect(state.ensureChain).toHaveBeenCalledWith(11155111, expect.objectContaining({ chainId: 11155111 }));
@@ -135,6 +189,7 @@ it('recovers from an unsupported network on explicit provider activation without
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
 });
 it('requires an explicit provider sign-in after connecting without a saved session', async () => {
+  await go('/services/weather');
   change(); await settle();
   await events.get('wallet-connect')?.(); await settle();
   expect(state.signIn).not.toHaveBeenCalled();
@@ -144,6 +199,7 @@ it('requires an explicit provider sign-in after connecting without a saved sessi
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
 });
 it('reports a rejected provider sign-in without reconnecting or enabling actions', async () => {
+  await go('/services/weather');
   change(); await settle();
   state.signIn.mockRejectedValueOnce(new Error('user rejected'));
   await events.get('provider-sign-in')?.(); await settle();
@@ -160,7 +216,6 @@ it('navigates to the provider console after an explicit wallet connect', async (
   expect(pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
 });
 it('does not push a redundant history entry when reconnecting the same provider wallet', async () => {
-  // Update location to reflect the canonical path that syncRoute would have rewritten to
   vi.stubGlobal('location', new URL(`https://verdikt.example/provider/${OWNER}`));
   pushState.mockClear();
   await events.get('wallet-connect')?.(); await settle();
@@ -176,15 +231,6 @@ it('leaves scroll restoration to the browser for back and forward history', asyn
   windowEvents.get('popstate')?.();
   await settle();
   expect(scrollTo).not.toHaveBeenCalled();
-});
-// /provider selects no provider, so there is nothing for the controls to act
-// on — not even for the wallet that would own the console one path segment
-// later. The connected account never stands in for a missing address.
-it('mounts nothing on the address-less provider path, signed in or not', async () => {
-  vi.stubGlobal('location', new URL('https://verdikt.example/provider'));
-  events.get('navigate')?.({ detail: '/provider' });
-  await settle();
-  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('does not navigate to the provider console on a silent wallet restoration', async () => {
   change(OTHER);
