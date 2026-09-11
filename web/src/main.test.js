@@ -102,6 +102,9 @@ afterEach(() => vi.unstubAllGlobals());
 it('mounts the wizard, not the sla/bond controls, on /register for the signed-in owner', async () => {
   await go('/register');
   expect(controls['wizard-mount'].deps.account).toBe(OWNER);
+  // The wizard's own post-registration "view your service" link needs an
+  // SPA-navigating go(), not a full reload — see main.js's shared go().
+  expect(controls['wizard-mount'].deps.go).toBeTypeOf('function');
   expect(controls['sla-editor-mount'].deps).toBeNull();
   expect(controls['bond-controls-mount'].deps).toBeNull();
 });

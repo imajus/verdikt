@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { render as renderToIterable } from '@lit-labs/ssr';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { VerdiktWizard, buildExecutionSteps } from './wizard.js';
+
+/** @param {unknown} template */
+const stringify = (template) => Array.from(renderToIterable(template)).join('');
 
 vi.mock('@verdikt/sdk', async (importOriginal) => ({
   ...(await importOriginal()),
@@ -13,7 +17,7 @@ const deps = (overrides = {}) => ({
   depositAmount: 50n * 10n ** 18n, sepoliaRpcUrl: 'https://sepolia.example',
   formatNativeUsdc: (/** @type {bigint} */ v) => `${v / 10n ** 18n} USDC`,
   walletClientFor: () => ({ writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }),
-  ensureSepolia: vi.fn(async () => {}), ensureArc: vi.fn(async () => {}), onDone: vi.fn(),
+  ensureSepolia: vi.fn(async () => {}), ensureArc: vi.fn(async () => {}), onDone: vi.fn(), go: vi.fn(),
   ...overrides
 });
 
@@ -100,6 +104,26 @@ describe('the wizard element', () => {
     expect(el.done).toBe(4);
     expect(el.status).toBe('Done.');
     expect(el.deps.onDone).toHaveBeenCalledOnce();
+  });
+
+  it('offers a link to the new service once registration finishes', async () => {
+    const el = mount();
+    el.deps = deps({ walletClientFor: () => ({ writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
+    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
+    el.step = 4;
+    await el.execute();
+    const html = stringify(el.render());
+    expect(html).toContain('href="/services/weather"');
+    expect(html).toContain('View your service');
+  });
+
+  it('does not offer the service link before registration finishes', () => {
+    const el = mount();
+    el.deps = deps();
+    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
+    el.step = 4;
+    const html = stringify(el.render());
+    expect(html).not.toContain('View your service');
   });
 
   it('parks the cursor on a failed step and resumes from it on retry, never re-claiming', async () => {

@@ -9,6 +9,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
+import { navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-editor.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -57,7 +58,7 @@ export class VerdiktWizard extends LitElement {
   };
   constructor() {
     super();
-    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void}|null} */ this.deps = null;
+    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void}|null} */ this.deps = null;
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
     this.checkToken = 0;
@@ -152,7 +153,11 @@ export class VerdiktWizard extends LitElement {
       </dl>
       ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.goStep(3)}>Back</wa-button><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Register service</wa-button></div>` : nothing}
       <ol class="wizard-progress">${steps.map((step, i) => html`<li class=${i < this.done ? 'done' : i === this.done && this.execError ? 'error' : ''}>${i + 1}/${steps.length} ${step.label} <small>${step.chain}</small></li>`)}</ol>
-      ${this.execError ? html`<p class="form-status" id="wizard-status">Failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>` : this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;
+      ${this.execError
+        ? html`<p class="form-status" id="wizard-status">Failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>`
+        : this.done === steps.length
+          ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service →</wa-button>`
+          : this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;

@@ -170,7 +170,8 @@ function mountProviderConsole(route) {
           walletClientFor: (chain) => walletClientFor(chain === 'arc' ? ARC_CHAIN_CONFIG : SEPOLIA_CHAIN_CONFIG),
           ensureSepolia: () => ensureSignedChain(SEPOLIA_CHAIN_CONFIG),
           ensureArc: () => ensureSignedChain(ARC_CHAIN_CONFIG),
-          onDone: () => main()
+          onDone: () => main(),
+          go
         };
       } else {
         // A build-configuration fact, not an authorization one: this renders
@@ -248,12 +249,16 @@ app.addEventListener('wallet-disconnect', async () => {
   try { await disconnectWallet(); }
   catch (error) { console.error('disconnect failed:', error); }
 });
-app.addEventListener('navigate', (event) => {
-  const path = /** @type {CustomEvent<string>} */ (event).detail;
+// Shared by the app's own 'navigate' event and anything mounted outside
+// <verdikt-app> that still needs an SPA transition rather than a full
+// reload — the wizard's post-registration "view your service" link.
+/** @param {string} path */
+function go(path) {
   const changed = path !== location.pathname + location.search;
   if (changed) history.pushState(null, '', path);
   draw({ scrollToTop: changed });
-});
+}
+app.addEventListener('navigate', (event) => go(/** @type {CustomEvent<string>} */ (event).detail));
 app.addEventListener('theme-select', (event) => {
   saveTheme(/** @type {CustomEvent<'light'|'dark'>} */ (event).detail);
   app.theme = savedTheme();
