@@ -605,6 +605,26 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    A field on this page is a line you write on, not a box dropped onto a
    ledger: no fill, no frame, one rule under it that thickens on focus. */
 
+/* The form elements render into light DOM and are inline by default, which is a
+   margin with nothing to push against. */
+verdikt-subscribe, verdikt-contact { display: block; }
+/* Entry 04 asks two different things of the reader — write to us, or hear from
+   us — so above the sheet's own single-column breakpoint they stand side by
+   side rather than one after the other. It is the only entry with no margin
+   note, which is what frees the outer column for the second half. */
+.entry-split { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* The gutter is a rule, not a gap — the same 1px vertical divider the platform
+   figures row is set with, so two halves of one entry read as ruled columns
+   rather than as two loose blocks that happen to be adjacent. */
+.split-col:first-child { padding-right: 40px; }
+.split-col + .split-col { padding-left: 40px; border-left: 1px solid var(--rule); }
+.split-col > p { max-width: 70ch; color: var(--ink-2); font-size: 18.15px; }
+.split-col > p:last-child { margin-bottom: 0; }
+/* The entry's quietest action rank: two muted links on one baseline, under the
+   form that outranks them. The row holds no text of its own — `.cta-aside` sets
+   the links' own 15px — so it is a flex track and nothing else. */
+.landing-social { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 32px; }
+
 .ledger-form { margin: 22px 0 0; max-width: 30rem; }
 .ledger-field + .ledger-field { margin-top: 18px; }
 .ledger-field label { margin: 0 0 4px; }
@@ -645,6 +665,15 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
   }
   .entry:first-child .entry-note { padding-top: 14px; }
   .note-kv { grid-template-columns: 5.5rem minmax(0, 1fr); }
+  /* The sheet is one column here, so the split entry is too. The second half
+     opens on a rule, the way a folded margin note does, rather than running
+     straight on from the first half's form. */
+  .entry-split { grid-template-columns: minmax(0, 1fr); }
+  .split-col:first-child { padding-right: 0; }
+  .split-col + .split-col {
+    margin-top: 30px; padding-left: 0; padding-top: 26px;
+    border-left: 0; border-top: 1px solid var(--rule);
+  }
 }
 
 @media (max-width: 760px) {

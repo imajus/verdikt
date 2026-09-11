@@ -1,9 +1,6 @@
 import { LitElement, html } from 'lit';
 import { CONTACT_ENDPOINT, looksLikeEmail, postForm } from './submit.js';
 
-const GITHUB_ISSUES_URL = 'https://github.com/imajus/verdikt/issues/new';
-const X_URL = 'https://x.com/denismajus';
-
 /**
  * The field starts at the height of the message most people write and grows
  * into the one some people write, so it never shows a block of dead rule
@@ -67,7 +64,10 @@ export class VerdiktContact extends LitElement {
       return html`<p class="form-done" role="status">Sent. You will get an answer at <code>${this.email}</code> — from a person, not a sequence.</p>`;
     }
     if (!this.endpoint) {
-      return html`<p class="form-off">No contact endpoint is wired into this build, so there is nothing here to submit to. <a href=${GITHUB_ISSUES_URL} target="_blank" rel="noopener noreferrer">Open an issue</a> or <a href=${X_URL} target="_blank" rel="noopener noreferrer">write on X</a> — both reach the same person.</p>`;
+      // Same register as the subscribe off-state: what the visitor gets, not
+      // which VITE_ value is missing. Both links this used to carry now sit in
+      // the entry's own link row below this form.
+      return html`<p class="form-off">This form is not open yet. An issue on the repository reaches the same person it would.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>
@@ -99,7 +99,7 @@ export class VerdiktContact extends LitElement {
         <wa-button type="submit" ?disabled=${this.pending} ?loading=${this.pending}>Send</wa-button>
         ${this.error
           ? html`<p class="form-error" id="contact-error" role="alert">${this.error}</p>`
-          : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>. Nothing is stored on this page.</p>`}
+          : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
       </form>`;
   }
 }

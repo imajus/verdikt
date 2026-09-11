@@ -75,8 +75,8 @@ describe('landing page', () => {
       'class="figures"',
       'The payment is verifiable',
       'The request path',
-      'verdikt-subscribe',
-      'verdikt-contact'
+      'verdikt-contact',
+      'verdikt-subscribe'
     ].map((needle) => html.indexOf(needle));
     expect(order.every((at) => at > -1)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -126,22 +126,39 @@ describe('landing page', () => {
   it('flags seeded data as seeded and never as a live chain', () => {
     const demo = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'demo'));
     expect(demo).toContain('seeded');
-    expect(demo).toContain('VITE_ARC_RPC_URL');
+    expect(demo).not.toContain('Arc Testnet');
     const live = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'live'));
     expect(live).toContain('Arc Testnet');
-    expect(live).not.toContain('Seeded demo data');
+    expect(live).not.toContain('seeded');
   });
 
-  // Both margins answer "was a chain read"; they must not answer it differently
-  // on the same render.
-  it('names a chain address in every margin or in none, never in one of two', () => {
+  // The margin is the page's only claim about provenance, so it must never name
+  // a chain the figures beside it did not come from.
+  it('names a chain address only where a chain was actually read', () => {
     const services = marketplace([listing('weather', [verdict({})])]);
     const demo = stringify(landing(() => {}, services, 'demo'));
     expect(demo).not.toMatch(/0x[0-9a-fA-F]{40}/);
     const live = stringify(landing(() => {}, services, 'live'));
     const addresses = live.match(/0x[0-9a-fA-F]{40}/g) ?? [];
-    expect(addresses.length).toBeGreaterThanOrEqual(2);
+    expect(addresses.length).toBeGreaterThan(0);
     expect(new Set(addresses).size).toBe(1);
+  });
+
+  // The hero states the terms; the proof of them sits beside the totals it
+  // summarises, one entry below. Entry 00 carries no margin of its own.
+  it('puts the latest verdict beside the figures, not beside the hero', () => {
+    const html = stringify(landing(() => {}, marketplace([listing('quotes', [verdict({ blockNumber: 220n })])]), 'live'));
+    expect(html.indexOf('Latest verdict')).toBeGreaterThan(html.indexOf('class="figures"'));
+    expect(html.match(/class="entry-note"/g)?.length).toBe(3);
+  });
+
+  // The split entry's two halves ask for different things and must not collapse
+  // into one column of two forms with no boundary between them.
+  it('splits the closing entry into a column that writes and a column that subscribes', () => {
+    const html = stringify(landing(() => {}));
+    expect(html).toContain('entry-split');
+    expect(html.match(/class="split-col"/g)?.length).toBe(2);
+    expect(html.indexOf('Tell us what you are building')).toBeLessThan(html.indexOf('Be informed about our progress'));
   });
 
   it('offers the provider console only where a chain is configured to register on', () => {
