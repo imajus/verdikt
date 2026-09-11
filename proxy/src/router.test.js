@@ -1,38 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
-import { SERVICE_RECORD, X402_CHALLENGE } from '@verdikt/fixtures';
+import { SERVICE_RECORD } from '@verdikt/fixtures';
 import { call } from './test-support.js';
 import { loadConfig } from './config.js';
-
-const PAY_TO = '0x2222222222222222222222222222222222222222';
-const SPOOFED = '0x9999999999999999999999999999999999999999';
 
 const config = loadConfig({ PROXY_PUBLIC_HOST: 'verdikt.bond', VERDIKT_REGISTRY_ADDRESS: '0x01' });
 
 /** @param {Partial<ServiceRecord>} [overrides] */
 const record = (overrides = {}) => ({
   ...SERVICE_RECORD,
-  address: PAY_TO,
   url: 'https://provider.example/weather',
   ...overrides
 });
-
-/** @param {{ accepts?: unknown[] }} [overrides] */
-const challenge = (overrides = {}) =>
-  JSON.stringify({
-    x402Version: 1,
-    error: 'X-PAYMENT header is required',
-    accepts: [
-      {
-        scheme: 'GatewayWalletBatched',
-        network: 'arc-testnet',
-        maxAmountRequired: '2500',
-        resource: 'https://provider.example/weather',
-        payTo: PAY_TO,
-        asset: 'USDC'
-      }
-    ],
-    ...overrides
-  });
 
 /**
  * @param {object} [options]
@@ -89,7 +67,7 @@ describe('routing', () => {
   });
 });
 
-describe('passthrough — non-challenge responses', () => {
+describe('passthrough — the unpaid leg relays unchanged', () => {
   it('relays a 200 unchanged', async () => {
     const { deps } = harness({
       upstream: new Response('{"temp":12}', { status: 200, headers: { 'content-type': 'application/json' } })
@@ -116,131 +94,20 @@ describe('passthrough — non-challenge responses', () => {
     expect(response.statusCode).toBe(502);
     expect(response.json().error).toBe('upstream_unreachable');
   });
-});
 
-describe('passthrough — the payTo check', () => {
-  it('relays a challenge whose payTo matches the published address', async () => {
-    const body = challenge();
+  // No payTo check on this leg (issue #37): the proxy's only trust anchor is
+  // the service's registered `url`, and whatever payTo that URL's own 402
+  // challenge names is exactly as legitimate as the URL itself. So a 402 is
+  // relayed exactly like any other status, regardless of what it offers.
+  it('relays a 402 challenge unchanged, whatever payTo it names', async () => {
+    const body = JSON.stringify({
+      x402Version: 1,
+      accepts: [{ scheme: 'exact', network: 'eip155:1', payTo: '0x9999999999999999999999999999999999999999' }]
+    });
     const { deps } = harness({ upstream: new Response(body, { status: 402 }) });
     const response = await getWeather(deps);
-
     expect(response.statusCode).toBe(402);
     expect(response.body).toBe(body);
-    expect(response.headers['x-verdikt-pay-to-verified']).toBe('true');
-  });
-
-  it('blocks and does not relay a spoofed payTo', async () => {
-    const spoofed = challenge({ accepts: [{ scheme: 'x', payTo: SPOOFED }] });
-    const { deps } = harness({ upstream: new Response(spoofed, { status: 402 }) });
-    const response = await getWeather(deps);
-
-    expect(response.statusCode).toBe(502);
-    expect(response.headers['x-verdikt-block']).toBe('pay_to_mismatch');
-    // What must not reach the agent is the signable challenge — a payment sent
-    // to a spoofed payTo leaves no bond to reclaim from, unlike every other
-    // check in the system. The block names the wrong address in prose because
-    // an operator needs to see what the provider actually returned; that is not
-    // something an x402 client can sign against.
-    expect(response.statusCode).not.toBe(402);
-    expect(response.json().accepts).toBeUndefined();
-    expect(response.json().expectedPayTo).toBe(PAY_TO);
-  });
-
-  it('blocks when any one option among honest ones is spoofed', async () => {
-    // The agent may pick any entry, so a single bad option is a bad challenge.
-    const mixed = challenge({ accepts: [{ payTo: PAY_TO }, { payTo: SPOOFED }] });
-    const { deps } = harness({ upstream: new Response(mixed, { status: 402 }) });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
-  });
-
-  it('compares addresses without regard to checksum case', async () => {
-    const upper = challenge({ accepts: [{ payTo: PAY_TO.toUpperCase().replace('0X', '0x') }] });
-    const { deps } = harness({ upstream: new Response(upper, { status: 402 }) });
-    expect((await getWeather(deps)).statusCode).toBe(402);
-  });
-
-  it('blocks a challenge it cannot read rather than passing it through', async () => {
-    const { deps } = harness({ upstream: new Response('<html>402</html>', { status: 402 }) });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('unparseable_challenge');
-  });
-
-  it('blocks a challenge that offers no payTo at all', async () => {
-    const { deps } = harness({ upstream: new Response(JSON.stringify({ accepts: [] }), { status: 402 }) });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('challenge_has_no_pay_to');
-  });
-
-  // Everything above uses a hand-written challenge. This one is the real thing,
-  // captured from the demo provider: x402 v2, three payment options, CAIP-2
-  // networks, and `amount` rather than the `maxAmountRequired` the shape was
-  // originally guessed to have. The payTo check reads only `payTo`, which is
-  // why that guess never mattered — but it is worth proving against the wire
-  // format rather than against my memory of it.
-  it('accepts the real provider challenge when the published address matches', async () => {
-    const real = JSON.stringify(X402_CHALLENGE);
-    const payTo = X402_CHALLENGE.accepts[0].payTo;
-    const { deps } = harness({
-      serviceRecord: { address: payTo },
-      upstream: new Response(real, { status: 402 })
-    });
-    const response = await getWeather(deps);
-    expect(response.statusCode).toBe(402);
-    expect(response.body).toBe(real);
-  });
-
-  it('blocks the real provider challenge when the published address does not', async () => {
-    const { deps } = harness({
-      serviceRecord: { address: SPOOFED },
-      upstream: new Response(JSON.stringify(X402_CHALLENGE), { status: 402 })
-    });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
-  });
-
-  it('checks every one of the real challenge’s three options, not just the first', async () => {
-    // A provider could offer an honest Arc option and a spoofed Base one.
-    const mixed = { ...X402_CHALLENGE, accepts: X402_CHALLENGE.accepts.map((a, i) => (i === 2 ? { ...a, payTo: SPOOFED } : a)) };
-    const { deps } = harness({
-      serviceRecord: { address: X402_CHALLENGE.accepts[0].payTo },
-      upstream: new Response(JSON.stringify(mixed), { status: 402 })
-    });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
-  });
-
-  it('blocks when the service has published no address to compare against', async () => {
-    const { deps } = harness({
-      serviceRecord: { address: null },
-      upstream: new Response(challenge(), { status: 402 })
-    });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('no_address_record');
-  });
-
-  // Reproduces a production incident (portfolio.verdikt.eth via Alchemy):
-  // a real multi-chain 402 offering an honest EVM option alongside a Solana
-  // one hard-blocked every call, because a Solana payTo can never equal the
-  // EVM address record it was compared against — honest or spoofed look
-  // identical under that comparison, which made the check useless rather than
-  // merely strict.
-  it('accepts a real multi-chain challenge whose Solana option cannot be compared to an EVM address', async () => {
-    const multiChain = challenge({
-      accepts: [
-        { scheme: 'exact', network: 'eip155:1', payTo: PAY_TO },
-        { scheme: 'exact', network: 'solana:mainnet', payTo: '6KsbSAzhrxKvUUoR8FwBmt6NuHmwLuGdRMzHc4KwrSy5R' }
-      ]
-    });
-    const { deps } = harness({ upstream: new Response(multiChain, { status: 402 }) });
-    const response = await getWeather(deps);
-    expect(response.statusCode).toBe(402);
-    expect(response.headers['x-verdikt-pay-to-verified']).toBe('true');
-  });
-
-  it('still blocks a spoofed EVM option sitting alongside an honest Solana one', async () => {
-    const multiChain = challenge({
-      accepts: [
-        { scheme: 'exact', network: 'eip155:1', payTo: SPOOFED },
-        { scheme: 'exact', network: 'solana:mainnet', payTo: '6KsbSAzhrxKvUUoR8FwBmt6NuHmwLuGdRMzHc4KwrSy5R' }
-      ]
-    });
-    const { deps } = harness({ upstream: new Response(multiChain, { status: 402 }) });
-    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
   });
 });
 
@@ -299,8 +166,8 @@ describe('ownership binding — a permissionless ENS claim vs. the Arc provider'
 
   it('routes normally when nobody has claimed the subname yet', async () => {
     // owner: null means "unclaimed", not "contested" — the existing
-    // no_address_record / no_endpoint checks are what should refuse this,
-    // for their own reasons, not this one.
+    // no_endpoint check is what should refuse this, for its own reasons,
+    // not this one.
     const { deps, upstreamFetch } = harness({ serviceRecord: { owner: null } });
     const response = await getWeather(deps);
     expect(response.statusCode).toBe(200);

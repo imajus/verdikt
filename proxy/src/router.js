@@ -14,7 +14,7 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
-import { checkChallenge, checkOwnership } from './challenge.js';
+import { checkOwnership } from './challenge.js';
 import { discover, toListing } from './discovery.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
@@ -186,23 +186,25 @@ export async function handleRequest(request, deps = {}) {
     return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body });
   }
 
-  return passthrough({ request, record, upstream, body, doFetch, config });
+  return passthrough({ request, upstream, body, doFetch, config });
 }
 
 /**
- * The unpaid leg: relay, then check the challenge before the agent ever sees a
- * `payTo` to sign against.
+ * The unpaid leg: relay unchanged, 402 challenge included. The proxy's trust
+ * anchor is the service's registered `url` (bound to the slug's bond via
+ * `checkOwnership`) — whatever `payTo` that URL's own 402 challenge names is
+ * exactly as legitimate as the URL itself, so there is nothing here for the
+ * proxy to verify before the agent sees it (issue #37).
  *
  * @param {{
  *   request: Request,
- *   record: ServiceRecord,
  *   upstream: URL,
  *   body: ArrayBuffer|undefined,
  *   doFetch: typeof fetch,
  *   config: ProxyConfig
  * }} args
  */
-async function passthrough({ request, record, upstream, body, doFetch, config }) {
+async function passthrough({ request, upstream, body, doFetch, config }) {
   let response;
   try {
     response = await doFetch(upstream, {
@@ -217,36 +219,7 @@ async function passthrough({ request, record, upstream, body, doFetch, config })
   }
 
   const headers = forwardResponseHeaders(response.headers);
-
-  if (response.status !== 402) {
-    // Nothing to verify on a non-challenge response: no payment is being
-    // proposed, so there is no payTo to spoof.
-    return new Response(await response.arrayBuffer(), { status: response.status, headers });
-  }
-
-  const challengeBody = await response.text();
-  const verdict = checkChallenge(challengeBody, record.address);
-  if (!verdict.ok) {
-    // The challenge is deliberately NOT relayed. Passing it on with a warning
-    // would still put a spoofed payTo in front of an agent that might sign it,
-    // and a payment to a spoofed address leaves no bond to reclaim from.
-    return json(
-      {
-        error: 'pay_to_mismatch',
-        reason: verdict.reason,
-        detail: verdict.detail,
-        service: record.name,
-        expectedPayTo: record.address
-      },
-      502,
-      { 'x-verdikt-block': verdict.reason }
-    );
-  }
-
-  return new Response(challengeBody, {
-    status: 402,
-    headers: { ...headers, 'x-verdikt-pay-to-verified': 'true' }
-  });
+  return new Response(await response.arrayBuffer(), { status: response.status, headers });
 }
 
 /**
