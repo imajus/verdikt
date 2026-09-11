@@ -1,6 +1,8 @@
 import { LitElement, html, nothing } from 'lit';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
 import { getConnectedAccount } from './wallet.js';
+import { getSession } from './session.js';
+import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { resolveProviderConsole } from './provider.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -118,8 +120,8 @@ export const detailTemplate = (listing) => {
     </section>`;
 };
 
-/** @param {'marketplace'|'provider'|'how'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(view: string) => void} navigate @param {() => void} connect @param {(theme: 'light'|'dark') => void} changeTheme */
-const nav = (view, mode, theme, account, navigate, connect, changeTheme) => {
+/** @param {'marketplace'|'provider'|'how'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(view: string) => void} navigate @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
+const nav = (view, mode, theme, account, navigate, connect, disconnect, changeTheme) => {
   /** @param {string} target @param {string} label */
   const item = (target, label) => {
     /** @param {Event} event */
@@ -128,7 +130,23 @@ const nav = (view, mode, theme, account, navigate, connect, changeTheme) => {
   };
   /** @param {'light'|'dark'} value @param {string} label */
   const themeButton = (value, label) => html`<wa-button class="theme-button ${theme === value ? 'selected' : ''}" appearance="outlined" size="xs" aria-pressed=${String(theme === value)} @click=${() => changeTheme(value)}>${label}</wa-button>`;
-  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${mode === 'live' ? account ? html`<span class="nav-account" title=${account}>${account.slice(0, 6)}…${account.slice(-4)}</span>` : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>` : nothing}</div></nav>`;
+  /** @param {CustomEvent<{ item: { value: string } }>} event */
+  const selectWalletAction = (event) => {
+    if (event.detail.item.value === 'change') connect();
+    if (event.detail.item.value === 'disconnect') disconnect();
+  };
+  const wallet = mode === 'live'
+    ? account
+      ? html`<wa-dropdown class="wallet-menu" placement="bottom-end" size="s" @wa-select=${selectWalletAction}>
+          <wa-button slot="trigger" class="nav-account" appearance="outlined" size="s" with-caret title=${account} aria-label="Wallet menu for ${account}">${account.slice(0, 6)}…${account.slice(-4)}</wa-button>
+          <div class="wallet-menu-heading"><span>Connected wallet</span><code>${account}</code></div>
+          <wa-divider></wa-divider>
+          <wa-dropdown-item value="change"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Change wallet</wa-dropdown-item>
+          <wa-dropdown-item value="disconnect" variant="danger"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 4H4v16h5m5-13 5 5-5 5M9 12h10"/></svg>Disconnect</wa-dropdown-item>
+        </wa-dropdown>`
+      : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`
+    : nothing;
+  return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
 const how = () => html`
@@ -138,9 +156,11 @@ const how = () => html`
   <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing seven-day scores remain public on Arc and ENS.</p></section>`;
 
 export class VerdiktApp extends LitElement {
-  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {} };
+  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {}, signInPending: { state: true }, signInError: { state: true } };
   constructor() {
     super();
+    this.signInPending = false;
+    /** @type {string|null} */ this.signInError = null;
     /** @type {Marketplace|null} */ this.marketplace = null;
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
@@ -154,15 +174,22 @@ export class VerdiktApp extends LitElement {
   /** @param {string} view */
   navigate(view) { this.dispatchEvent(new CustomEvent('view-select', { detail: view })); }
   connect() { this.dispatchEvent(new CustomEvent('wallet-connect')); }
+  disconnect() { this.dispatchEvent(new CustomEvent('wallet-disconnect')); }
+  signIn() { this.dispatchEvent(new CustomEvent('provider-sign-in')); }
   /** @param {'light'|'dark'} theme */
   changeTheme(theme) { this.dispatchEvent(new CustomEvent('theme-select', { detail: theme })); }
   /** @param {Listing[]} owned @param {string} provider */
   renderProvider(owned, provider) {
+    const account = getConnectedAccount();
+    const ownPage = account?.address.toLowerCase() === provider.toLowerCase();
+    const supported = account && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId);
+    const signedIn = ownPage && getSession()?.address.toLowerCase() === account?.address.toLowerCase();
     const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
     const target = owned[0] ?? null;
     return html`<header class="masthead"><div>${brand()}<p class="tagline">Provider <code>${provider}</code> · <a href="?">back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
+      ${ownPage && (!signedIn || !supported) ? html`<div class="aside"><p>${signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
       <section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<div class="layout"><section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, false, (slug) => this.select(slug)))}</section><section class="detail">${detailTemplate(target)}</section></div>`}
@@ -186,7 +213,7 @@ export class VerdiktApp extends LitElement {
     const account = getConnectedAccount()?.address ?? null;
     const { services, stats } = this.marketplace;
     const body = this.route.view === 'how' ? how() : (() => { const { effectiveProvider, owned } = resolveProviderConsole(services, this.route.view, this.route.provider, account); return effectiveProvider ? this.renderProvider(owned, effectiveProvider) : this.renderMarketplace(stats, services); })();
-    return html`${nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), (theme) => this.changeTheme(theme))}${body}`;
+    return html`${nav(this.route.view, this.mode, this.theme, account, (view) => this.navigate(view), () => this.connect(), () => this.disconnect(), (theme) => this.changeTheme(theme))}${body}`;
   }
 }
 

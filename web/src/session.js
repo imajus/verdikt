@@ -9,6 +9,7 @@ import { recoverMessageAddress } from 'viem';
 import { createSiweMessage, generateSiweNonce, parseSiweMessage, validateSiweMessage } from 'viem/siwe';
 
 const STORAGE_KEY = 'verdikt.session';
+let revision = 0;
 const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
 
 /**
@@ -18,11 +19,13 @@ const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
  *   walletClient: { signMessage: (args: { account?: unknown, message: string }) => Promise<string> },
  *   domain: string,
  *   origin: string,
+ *   isCurrent?: () => boolean,
  *   ttlMs?: number
  * }} options
- * @returns {Promise<{ address: string, expiresAt: number }>}
+ * @returns {Promise<{ address: string, chainId: number, expiresAt: number }>}
  */
-export async function signIn(chainId, { address, walletClient, domain, origin, ttlMs = DEFAULT_TTL_MS }) {
+export async function signIn(chainId, { address, walletClient, domain, origin, ttlMs = DEFAULT_TTL_MS, isCurrent = () => true }) {
+  const startedAtRevision = revision;
   const nonce = generateSiweNonce();
   const issuedAt = new Date();
   const message = createSiweMessage({
@@ -43,23 +46,26 @@ export async function signIn(chainId, { address, walletClient, domain, origin, t
   const parsed = parseSiweMessage(message);
   const valid = validateSiweMessage({ address: /** @type {`0x${string}`} */ (address), domain, message: parsed, nonce, time: issuedAt });
   if (!valid) throw new Error('the signed SIWE message failed validation');
-  const session = { address, expiresAt: issuedAt.getTime() + ttlMs };
+  if (revision !== startedAtRevision || !isCurrent()) throw new Error('wallet changed during sign-in — retry');
+  const session = { address, chainId, expiresAt: issuedAt.getTime() + ttlMs };
   localStorage.setItem(STORAGE_KEY, JSON.stringify(session));
   return session;
 }
 
-/** @returns {{ address: string, expiresAt: number } | null} */
+/** @returns {{ address: string, chainId: number, expiresAt: number } | null} */
 export function getSession() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (!raw) return null;
-  /** @type {{ address: string, expiresAt: number }} */
+  /** @type {{ address: string, chainId: number, expiresAt: number }} */
   let session;
   try {
     session = JSON.parse(raw);
   } catch {
     return null;
   }
-  if (!session.expiresAt || session.expiresAt <= Date.now()) {
+  // chainId records where the proof was signed. This browser-only identity
+  // is reusable across supported networks; writes verify their own chain.
+  if (!session || typeof session.address !== 'string' || !/^0x[0-9a-f]{40}$/i.test(session.address) || !Number.isFinite(session.expiresAt) || session.expiresAt <= Date.now()) {
     localStorage.removeItem(STORAGE_KEY);
     return null;
   }
@@ -67,5 +73,6 @@ export function getSession() {
 }
 
 export function clearSession() {
+  revision++;
   localStorage.removeItem(STORAGE_KEY);
 }

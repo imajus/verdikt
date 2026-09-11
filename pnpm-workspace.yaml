@@ -8,5 +8,6 @@ packages:
   - scripts
   - web
 allowBuilds:
+  es5-ext: false
   esbuild: true
   workerd: true

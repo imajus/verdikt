@@ -1,117 +1,129 @@
-// The only file that knows a browser wallet exists — same choke-point idiom
-// as @verdikt/sdk/ens.js. Two chains (Sepolia for ENS writes, Arc for the
-// registry) means every caller needs the same connect/switch-chain dance, and
-// this is the one place it is written.
-//
-// EIP-6963 (`eip6963:announceProvider`) is preferred where a page supports
-// multiple installed wallets; `window.ethereum` is the fallback every wallet
-// still injects. No wallet-connection library: the whole surface here is
-// "get an account, switch a chain, hear about changes" — three things viem's
-// own `custom` transport and a dozen lines already cover.
-
+// Web3-Onboard owns discovery, selection and wallet events. Transactions still
+// use viem over the selected EIP-1193 provider.
 import { createWalletClient, custom } from 'viem';
+import { arcTestnet, sepolia } from 'viem/chains';
+import { clearSession, getSession } from './session.js';
 
 /** @type {{ address: string, chainId: number } | null} */
 let connected = null;
-/** @type {unknown} */
+/** @type {import('@web3-onboard/core').WalletState | null} */
+let activeWallet = null;
+/** @type {import('@web3-onboard/core').WalletState['provider'] | null} */
 let activeProvider = null;
-/** @type {Set<(address: string|null) => void>} */
+/** @type {Promise<import('@web3-onboard/core').OnboardAPI> | null} */
+let onboardPromise = null;
+/** @type {{ unsubscribe: () => void } | undefined} */
+let subscription;
+/** @type {Set<(address: string|null, identityChanged: boolean) => void>} */
 const listeners = new Set();
+let identityRevision = 0;
 
-/** Test-only: clears module state between tests. */
+async function onboard() {
+  if (!onboardPromise) {
+    onboardPromise = (async () => {
+      const [{ default: init }, { default: injected }] = await Promise.all([
+        import('@web3-onboard/core'), import('@web3-onboard/injected-wallets')
+      ]);
+      const env = /** @type {Record<string, string|undefined>} */ (/** @type {any} */ (import.meta).env ?? {});
+      const api = init({
+        wallets: [injected()],
+        chains: [arcTestnet, sepolia].map(chain => ({
+          id: `0x${chain.id.toString(16)}`,
+          token: chain.nativeCurrency.symbol,
+          label: chain.name,
+          rpcUrl: (chain.id === arcTestnet.id ? env.VITE_ARC_RPC_URL : env.VITE_SEPOLIA_RPC_URL) || chain.rpcUrls.default.http[0],
+          blockExplorerUrl: chain.blockExplorers.default.url
+        })),
+        appMetadata: { name: 'Verdikt', description: 'Verified API marketplace' },
+        connect: { autoConnectLastWallet: true },
+        accountCenter: { desktop: { enabled: false }, mobile: { enabled: false } }
+      });
+      subscription = api.state.select('wallets').subscribe(syncWallets);
+      return api;
+    })().catch(error => { onboardPromise = null; throw error; });
+  }
+  return onboardPromise;
+}
+
+/** @param {import('@web3-onboard/core').WalletState[]} wallets */
+function syncWallets(wallets) {
+  const wallet = wallets[0];
+  const address = wallet?.accounts[0]?.address;
+  const chainId = Number(wallet?.chains[0]?.id);
+  const next = address && Number.isSafeInteger(chainId) && chainId > 0 ? { address, chainId } : null;
+  const provider = next ? wallet.provider : null;
+  if (provider === activeProvider && next?.address.toLowerCase() === connected?.address.toLowerCase() && next?.chainId === connected?.chainId) return;
+  const identityChanged = provider !== activeProvider || next?.address.toLowerCase() !== connected?.address.toLowerCase();
+  // A fresh connection may reuse this browser's unexpired proof for the same
+  // address. Explicit disconnects and changes to an active wallet revoke it.
+  const session = getSession();
+  if (identityChanged && (connected || !next || session?.address.toLowerCase() !== next.address.toLowerCase())) clearSession();
+  if (identityChanged) identityRevision++;
+  activeWallet = next ? wallet : null;
+  activeProvider = provider;
+  connected = next;
+  for (const listener of listeners) listener(connected?.address ?? null, identityChanged);
+}
+
+/** Test-only: dispose the Onboard subscription between tests. */
 export function resetWalletStateForTests() {
+  subscription?.unsubscribe();
+  subscription = undefined;
+  onboardPromise = null;
   connected = null;
+  activeWallet = null;
   activeProvider = null;
   listeners.clear();
 }
 
-/** @returns {unknown} */
-function discoverProvider() {
-  // EIP-6963 first: a page with multiple wallets gets whichever announced
-  // itself most recently, which is closer to "the one the user just clicked"
-  // than window.ethereum's single, overwritten-on-conflict slot.
-  /** @type {unknown} */
-  let found = /** @type {{ ethereum?: unknown }} */ (window).ethereum ?? null;
-  const onAnnounce = (/** @type {CustomEvent} */ event) => {
-    found = /** @type {{ provider: unknown }} */ (event.detail).provider;
-  };
-  window.addEventListener('eip6963:announceProvider', /** @type {EventListener} */ (onAnnounce));
-  window.dispatchEvent(new Event('eip6963:requestProvider'));
-  window.removeEventListener('eip6963:announceProvider', /** @type {EventListener} */ (onAnnounce));
-  return found;
-}
-
-/**
- * @param {unknown} provider
- * @param {{ method: string, params?: unknown[] }} args
- */
-const request = (provider, args) => /** @type {{ request: Function }} */ (provider).request(args);
-
-/** @returns {Promise<{ address: string, chainId: number }>} */
 export async function connectWallet() {
-  const provider = discoverProvider();
-  if (!provider) throw new Error('no wallet found — install one or connect through a browser extension');
-  const accounts = /** @type {string[]} */ (await request(provider, { method: 'eth_requestAccounts' }));
-  const chainIdHex = /** @type {string} */ (await request(provider, { method: 'eth_chainId' }));
-  activeProvider = provider;
-  connected = { address: accounts[0], chainId: Number.parseInt(chainIdHex, 16) };
-  /** @type {{ on?: Function }} */ (provider).on?.('accountsChanged', (/** @type {string[]} */ next) => {
-    if (next.length === 0) {
-      connected = null;
-    } else if (connected) {
-      connected = { ...connected, address: next[0] };
-    }
-    for (const listener of listeners) listener(next.length > 0 ? next[0] : null);
-  });
-  /** @type {{ on?: Function }} */ (provider).on?.('chainChanged', (/** @type {string} */ hex) => {
-    if (connected) connected = { ...connected, chainId: Number.parseInt(hex, 16) };
-  });
+  const api = await onboard();
+  syncWallets(await api.connectWallet());
+  if (!connected) throw new Error('no wallet selected');
   return connected;
 }
 
-/** @returns {{ address: string, chainId: number } | null} */
-export function getConnectedAccount() {
-  return connected;
+// Initializing Onboard restores its last connected wallet without opening the
+// selection modal. Its wallet subscription reconciles the saved SIWE session
+// with the extension's current account; never authenticate from storage alone.
+export async function restoreWallet() {
+  await onboard();
 }
 
-/**
- * @param {(address: string|null) => void} fn
- * @returns {() => void} unsubscribe
+export async function disconnectWallet() {
+  if (!activeWallet) return;
+  const api = await onboard();
+  await api.disconnectWallet({ label: activeWallet.label });
+  syncWallets(api.state.get().wallets);
+}
+
+export function getConnectedAccount() { return connected; }
+
+/** Includes provider, account, chain changes and disconnects.
+ * @param {(address: string|null, identityChanged: boolean) => void} fn
  */
 export function onAccountChange(fn) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
 
-/**
- * Switches the connected wallet to `chainId`, adding it first if the wallet
- * has never seen it — neither Arc Testnet nor Sepolia's public RPC is a
- * default in most wallets.
- *
- * @param {number} chainId
- * @param {{ chainId: number, name: string, rpcUrl: string, nativeCurrency?: { name: string, symbol: string, decimals: number }, blockExplorerUrl?: string }} chainConfig
+/** @param {number} chainId
+ * @param {{ chainId: number }} chainConfig
  */
 export async function ensureChain(chainId, chainConfig) {
-  if (!activeProvider) throw new Error('connect a wallet before switching chains');
-  const hex = `0x${chainId.toString(16)}`;
-  try {
-    await request(activeProvider, { method: 'wallet_switchEthereumChain', params: [{ chainId: hex }] });
-  } catch (error) {
-    // 4902: the wallet has never heard of this chain — add it, then it can switch.
-    if (/** @type {{ code?: number }} */ (error).code !== 4902) throw error;
-    await request(activeProvider, {
-      method: 'wallet_addEthereumChain',
-      params: [
-        {
-          chainId: hex,
-          chainName: chainConfig.name,
-          rpcUrls: [chainConfig.rpcUrl],
-          nativeCurrency: chainConfig.nativeCurrency ?? { name: 'Ether', symbol: 'ETH', decimals: 18 },
-          blockExplorerUrls: chainConfig.blockExplorerUrl ? [chainConfig.blockExplorerUrl] : undefined
-        }
-      ]
-    });
-  }
+  if (!activeProvider || !connected || !activeWallet) throw new Error('connect a wallet before switching chains');
+  if ((chainId !== arcTestnet.id && chainId !== sepolia.id) || chainId !== chainConfig.chainId) throw new Error('unsupported chain');
+  const provider = activeProvider;
+  const address = connected.address;
+  const revision = identityRevision;
+  const label = activeWallet.label;
+  const api = await onboard();
+  const success = await api.setChain({ chainId: `0x${chainId.toString(16)}`, wallet: label });
+  syncWallets(api.state.get().wallets);
+  if (revision !== identityRevision || provider !== activeProvider || address.toLowerCase() !== connected?.address.toLowerCase()) throw new Error('wallet changed — retry the action');
+  const actualChainId = Number(await provider.request({ method: 'eth_chainId' }));
+  if (revision !== identityRevision || provider !== activeProvider) throw new Error('wallet changed — retry the action');
+  if (!success || connected?.chainId !== chainId || actualChainId !== chainId) throw new Error('switch to the required network first');
 }
 
 /**
@@ -122,6 +134,9 @@ export async function ensureChain(chainId, chainConfig) {
  */
 export function walletClientFor(chainConfig) {
   if (!activeProvider || !connected) throw new Error('connect a wallet first');
+  if (connected.chainId !== chainConfig.chainId) throw new Error('switch to the required network first');
+  const provider = activeProvider;
+  const account = connected;
   return createWalletClient({
     account: /** @type {`0x${string}`} */ (connected.address),
     chain: {
@@ -130,6 +145,11 @@ export function walletClientFor(chainConfig) {
       nativeCurrency: chainConfig.nativeCurrency ?? { name: 'Ether', symbol: 'ETH', decimals: 18 },
       rpcUrls: { default: { http: [chainConfig.rpcUrl] } }
     },
-    transport: custom(/** @type {any} */ (activeProvider))
+    transport: custom({
+      async request(args) {
+        if (provider !== activeProvider || account !== connected) throw new Error('wallet changed — retry the action');
+        return provider.request(args);
+      }
+    })
   });
 }

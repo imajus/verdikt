@@ -17,6 +17,8 @@
     "@verdikt/cre": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "@verdikt/sla": "workspace:*",
+    "@web3-onboard/core": "^2.24.1",
+    "@web3-onboard/injected-wallets": "^2.11.3",
     "lit": "^3.3.3",
     "viem": "^2.56.3"
   },

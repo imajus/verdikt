@@ -64,3 +64,20 @@ describe('clearSession', () => {
     expect(getSession()).toBeNull();
   });
 });
+
+
+describe('sign-in invalidation', () => {
+  it('persists the chain that was signed', async () => {
+    await signIn(5042002, { address: ACCOUNT.address, walletClient: ACCOUNT, domain: 'verdikt.example', origin: 'https://verdikt.example' });
+    expect(getSession()?.chainId).toBe(5042002);
+  });
+  it('does not restore a session if a wallet event invalidates it while signing', async () => {
+    const walletClient = { signMessage: async (/** @type {{ message: string }} */ { message }) => { clearSession(); return ACCOUNT.signMessage({ message }); } };
+    await expect(signIn(11155111, { address: ACCOUNT.address, walletClient, domain: 'verdikt.example', origin: 'https://verdikt.example' })).rejects.toThrow('wallet changed');
+    expect(getSession()).toBeNull();
+  });
+  it('checks the connection again before persisting a valid signature', async () => {
+    await expect(signIn(11155111, { address: ACCOUNT.address, walletClient: ACCOUNT, domain: 'verdikt.example', origin: 'https://verdikt.example', isCurrent: () => false })).rejects.toThrow('wallet changed');
+    expect(getSession()).toBeNull();
+  });
+});
