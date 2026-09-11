@@ -136,23 +136,12 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .nav-external { display: flex; gap: 14px; align-items: center; }
 .nav-external a { color: var(--muted); display: inline-flex; }
 .nav-external a:hover { color: var(--ink); }
-.nav-account {
-  display: inline-flex; align-items: center; gap: 5px; cursor: pointer;
-  font-family: var(--mono); font-size: 12.5px; color: var(--ink-2); list-style: none;
-}
-.nav-account::-webkit-details-marker { display: none; }
-.wallet-menu { position: relative; }
-.wallet-menu-popover {
-  position: absolute; z-index: 10; top: calc(100% + 8px); right: 0; min-width: 180px;
-  padding: 8px; background: var(--paper); border: 1px solid var(--rule-strong);
-  box-shadow: 3px 3px 0 var(--paper-2); display: grid; gap: 2px;
-}
-.wallet-menu-address { padding: 4px 6px 8px; color: var(--muted); font: 11px/1.35 var(--mono); overflow-wrap: anywhere; }
-.wallet-menu-popover button {
-  width: 100%; padding: 7px 6px; border: 0; background: transparent; color: var(--ink);
-  text-align: left; font: inherit; cursor: pointer;
-}
-.wallet-menu-popover button:hover { background: var(--paper-2); }
+.nav-account::part(label) { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+.wallet-menu { flex: none; }
+.wallet-menu::part(menu) { width: 248px; max-width: calc(100vw - 36px); }
+.wallet-menu-heading { padding: 8px 12px; display: grid; gap: 5px; }
+.wallet-menu-heading > span { color: var(--muted); font-size: 12px; }
+.wallet-menu-heading code { color: var(--ink); font-size: 12px; white-space: normal; }
 .theme-control { margin-right: 2px; }
 .theme-button::part(button) { min-width: 48px; }
 .theme-button.selected::part(button) { background: var(--ink); border-color: var(--rule-strong); color: var(--paper); }
@@ -170,7 +159,6 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
   .nav { flex-wrap: wrap; }
   .nav-links { order: 2; width: 100%; overflow-x: auto; padding-bottom: 2px; }
   .nav-external { order: 1; width: 100%; justify-content: space-between; }
-  .wallet-menu-popover { right: 0; }
 }
 
 /* Standing notes: a rule down the left, no fill. A tinted box is how every

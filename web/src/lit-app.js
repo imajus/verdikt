@@ -130,9 +130,20 @@ const nav = (view, mode, theme, account, navigate, connect, disconnect, changeTh
   };
   /** @param {'light'|'dark'} value @param {string} label */
   const themeButton = (value, label) => html`<wa-button class="theme-button ${theme === value ? 'selected' : ''}" appearance="outlined" size="xs" aria-pressed=${String(theme === value)} @click=${() => changeTheme(value)}>${label}</wa-button>`;
+  /** @param {CustomEvent<{ item: { value: string } }>} event */
+  const selectWalletAction = (event) => {
+    if (event.detail.item.value === 'change') connect();
+    if (event.detail.item.value === 'disconnect') disconnect();
+  };
   const wallet = mode === 'live'
     ? account
-      ? html`<details class="wallet-menu"><summary class="nav-account" title=${account} aria-label="Wallet menu for ${account}"><span>${account.slice(0, 6)}…${account.slice(-4)}</span><span aria-hidden="true">⌄</span></summary><div class="wallet-menu-popover"><span class="wallet-menu-address">${account}</span><button type="button" @click=${connect}>Change wallet</button><button type="button" @click=${disconnect}>Disconnect</button></div></details>`
+      ? html`<wa-dropdown class="wallet-menu" placement="bottom-end" size="s" @wa-select=${selectWalletAction}>
+          <wa-button slot="trigger" class="nav-account" appearance="outlined" size="s" with-caret title=${account} aria-label="Wallet menu for ${account}">${account.slice(0, 6)}…${account.slice(-4)}</wa-button>
+          <div class="wallet-menu-heading"><span>Connected wallet</span><code>${account}</code></div>
+          <wa-divider></wa-divider>
+          <wa-dropdown-item value="change"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Change wallet</wa-dropdown-item>
+          <wa-dropdown-item value="disconnect" variant="danger"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 4H4v16h5m5-13 5 5-5 5M9 12h10"/></svg>Disconnect</wa-dropdown-item>
+        </wa-dropdown>`
       : html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`
     : nothing;
   return html`<nav class="nav"><div class="nav-links">${item('marketplace', 'Marketplace')}${mode === 'live' ? item('provider', 'Provider') : nothing}${item('how', 'How it works')}</div><div class="nav-external"><wa-button-group class="theme-control" label="Color theme">${themeButton('light', 'Light')}${themeButton('dark', 'Dark')}</wa-button-group><a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
