@@ -54,6 +54,7 @@ vi.mock('@awesome.me/webawesome/dist/components/textarea/textarea.js', () => ({}
 /** @type {Map<string, Function>} */ let windowEvents;
 /** @type {import('vitest').Mock} */ let pushState;
 /** @type {import('vitest').Mock} */ let replaceState;
+/** @type {import('vitest').Mock} */ let historyBack;
 /** @type {import('vitest').Mock} */ let scrollTo;
 async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 function authenticate() { state.session = { ...state.account, expiresAt: Date.now() + 60000 }; }
@@ -82,7 +83,7 @@ beforeEach(async () => {
   state.disconnectWallet.mockImplementation(async () => change(''));
   state.ensureChain.mockImplementation(async chainId => change(OWNER, chainId, false));
   controls = Object.fromEntries(['sla-editor-mount', 'bond-controls-mount', 'wizard-mount'].map(id => [id, {
-    deps: null, listing: null, draft: 'draft', step: 2,
+    deps: null, listing: null, draft: 'draft', step: 2, restoreStep: vi.fn(),
     clear() { this.deps = null; this.listing = null; this.draft = ''; this.step = 1; }
   }]));
   events = new Map();
@@ -92,8 +93,9 @@ beforeEach(async () => {
   vi.stubGlobal('location', new URL(`https://verdikt.example/?provider=${OWNER}`));
   pushState = vi.fn();
   replaceState = vi.fn();
+  historyBack = vi.fn();
   scrollTo = vi.fn();
-  vi.stubGlobal('history', { replaceState, pushState });
+  vi.stubGlobal('history', { replaceState, pushState, back: historyBack });
   vi.stubGlobal('window', { addEventListener: (/** @type {string} */ name, /** @type {Function} */ listener) => windowEvents.set(name, listener), scrollTo });
   await import('./main.js'); await settle();
 });
@@ -230,8 +232,38 @@ it('scrolls to the new page heading after Lit renders a forward navigation', asy
   await settle();
   expect(scrollTo).toHaveBeenCalledWith(0, 0);
 });
+// The wizard's four steps live under one URL, so without these hooks the
+// browser's Back leaves /register entirely from step 3 rather than stepping
+// back to step 2, discarding the slug, URL and SLA already typed.
+it('gives the wizard the history hooks its steps move through', async () => {
+  await go('/register');
+  expect(controls['wizard-mount'].deps.pushStep).toBeTypeOf('function');
+  expect(controls['wizard-mount'].deps.backStep).toBeTypeOf('function');
+});
+it('records a wizard step as a same-URL history entry', async () => {
+  await go('/register');
+  controls['wizard-mount'].deps.pushStep(3);
+  expect(pushState).toHaveBeenCalledWith({ wizardStep: 3 }, '', location.href);
+});
+it('walks the wizard back through history rather than re-rendering it', async () => {
+  await go('/register');
+  controls['wizard-mount'].deps.backStep();
+  expect(historyBack).toHaveBeenCalledOnce();
+});
+it('restores the wizard step recorded in a popped history entry', async () => {
+  await go('/register');
+  windowEvents.get('popstate')?.({ state: { wizardStep: 2 } });
+  await settle();
+  expect(controls['wizard-mount'].restoreStep).toHaveBeenCalledWith(2);
+});
+it('treats a history entry carrying no wizard step as step 1', async () => {
+  await go('/register');
+  windowEvents.get('popstate')?.({ state: null });
+  await settle();
+  expect(controls['wizard-mount'].restoreStep).toHaveBeenCalledWith(1);
+});
 it('leaves scroll restoration to the browser for back and forward history', async () => {
-  windowEvents.get('popstate')?.();
+  windowEvents.get('popstate')?.({ state: null });
   await settle();
   expect(scrollTo).not.toHaveBeenCalled();
 });

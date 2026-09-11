@@ -18,6 +18,7 @@ const deps = (overrides = {}) => ({
   formatNativeUsdc: (/** @type {bigint} */ v) => `${v / 10n ** 18n} USDC`,
   walletClientFor: () => ({ writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }),
   ensureSepolia: vi.fn(async () => {}), ensureArc: vi.fn(async () => {}), onDone: vi.fn(), go: vi.fn(),
+  pushStep: vi.fn(), backStep: vi.fn(),
   ...overrides
 });
 
@@ -104,6 +105,53 @@ describe('the wizard element', () => {
     expect(el.done).toBe(4);
     expect(el.status).toBe('Done.');
     expect(el.deps.onDone).toHaveBeenCalledOnce();
+  });
+
+  it('records each forward step in browser history', () => {
+    const el = mount();
+    el.deps = deps();
+    el.goStep(2);
+    expect(el.step).toBe(2);
+    expect(el.deps.pushStep).toHaveBeenCalledWith(2);
+  });
+
+  // In-page Back walks the history the forward steps built, rather than
+  // pushing a third entry — otherwise the browser's own Back would then
+  // replay the step the user just left.
+  it('walks back through history rather than pushing a new entry', () => {
+    const el = mount();
+    el.deps = deps();
+    el.step = 3;
+    el.stepBack();
+    expect(el.deps.backStep).toHaveBeenCalledOnce();
+    expect(el.deps.pushStep).not.toHaveBeenCalled();
+  });
+
+  it('restores a step recorded in history', () => {
+    const el = mount();
+    el.deps = deps();
+    el.slug = 'weather';
+    el.step = 3;
+    el.restoreStep(2);
+    expect(el.step).toBe(2);
+  });
+
+  it('refuses to restore a step once a transaction has landed', () => {
+    const el = mount();
+    el.deps = deps();
+    el.slug = 'weather'; el.step = 4; el.done = 2;
+    el.restoreStep(1);
+    expect(el.step).toBe(4);
+  });
+
+  // Navigating away from /register and back recreates the element: its
+  // history entry still says "step 3", but the draft that step described is
+  // gone, so a review of an empty form is not what to restore to.
+  it('refuses to restore a later step into an empty wizard', () => {
+    const el = mount();
+    el.deps = deps();
+    el.restoreStep(3);
+    expect(el.step).toBe(1);
   });
 
   it('offers a link to the new service once registration finishes', async () => {

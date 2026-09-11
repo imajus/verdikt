@@ -171,7 +171,12 @@ function mountProviderConsole(route) {
           ensureSepolia: () => ensureSignedChain(SEPOLIA_CHAIN_CONFIG),
           ensureArc: () => ensureSignedChain(ARC_CHAIN_CONFIG),
           onDone: () => main(),
-          go
+          go,
+          // The wizard's steps share /register's URL, so a step is a history
+          // entry at the same path — not a route. Its own restoreStep()
+          // decides whether a popped entry may be applied.
+          pushStep: (step) => history.pushState({ wizardStep: step }, '', location.href),
+          backStep: () => history.back()
         };
       } else {
         // A build-configuration fact, not an authorization one: this renders
@@ -296,7 +301,14 @@ app.addEventListener('provider-sign-in', async () => {
   }
 });
 
-window.addEventListener('popstate', () => draw());
+window.addEventListener('popstate', (event) => {
+  draw();
+  // A popped entry may carry a wizard step (pushStep above). Same-URL
+  // entries leave the mounted wizard in place, so this reaches the element
+  // holding the draft; entries from another route have no wizard to restore.
+  const wizard = /** @type {import('./forms/wizard.js').VerdiktWizard|null} */ (app.querySelector('#wizard-mount'));
+  wizard?.restoreStep(/** @type {PopStateEvent} */ (event).state?.wizardStep ?? 1);
+});
 
 main();
 if (mode === 'live') {

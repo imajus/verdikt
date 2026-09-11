@@ -58,7 +58,7 @@ export class VerdiktWizard extends LitElement {
   };
   constructor() {
     super();
-    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void}|null} */ this.deps = null;
+    /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void, pushStep:(step:number)=>void, backStep:()=>void}|null} */ this.deps = null;
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
     this.checkToken = 0;
@@ -72,8 +72,31 @@ export class VerdiktWizard extends LitElement {
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
   }
+  // The four steps share one URL, so each forward move records a same-URL
+  // history entry and in-page Back walks that history rather than pushing a
+  // third entry. Without this the browser's own Back leaves /register from
+  // step 3 instead of returning to step 2, taking the draft with it.
+  // `history` itself is main.js's to touch (router.js's header), so both
+  // directions arrive as injected dependencies.
   /** @param {number} step */
-  goStep(step) { this.step = step; }
+  goStep(step) {
+    this.step = step;
+    this.deps?.pushStep(step);
+  }
+  stepBack() { this.deps?.backStep(); }
+  /**
+   * Apply a step carried by a popped history entry. Refused in two cases:
+   * once a transaction has landed (`done > 0`), where the slug is frozen
+   * because the remaining transactions target it; and on a wizard with no
+   * draft, which is what navigating back to /register builds — the entry
+   * still says "step 3" but the draft that step reviewed is gone.
+   * @param {number} step
+   */
+  restoreStep(step) {
+    if (this.done > 0) return;
+    if (step > 1 && !this.slug) return;
+    this.step = Math.min(Math.max(Math.trunc(step), 1), 4);
+  }
   /** @param {InputEvent} event */
   editSlug(event) {
     this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
@@ -131,13 +154,13 @@ export class VerdiktWizard extends LitElement {
       <div class="wizard-nav"><wa-button type="button" id="wizard-next-1" ?disabled=${!this.available} @click=${() => this.goStep(2)}>Next</wa-button></div>`;
     if (this.step === 2) return html`
       <wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>
-      <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.goStep(1)}>Back</wa-button><wa-button type="button" id="wizard-next-2" ?disabled=${!this.urlValid} @click=${() => this.goStep(3)}>Next</wa-button></div>`;
+      <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-next-2" ?disabled=${!this.urlValid} @click=${() => this.goStep(3)}>Next</wa-button></div>`;
     if (this.step === 3) {
       const validity = describeSlaValidity(this.sla);
       return html`
         <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
         <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p>
-        <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.goStep(2)}>Back</wa-button><wa-button type="button" id="wizard-next-3" ?disabled=${!validity.ok} @click=${() => this.goStep(4)}>Next</wa-button></div>`;
+        <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-next-3" ?disabled=${!validity.ok} @click=${() => this.goStep(4)}>Next</wa-button></div>`;
     }
     return this.renderReview();
   }
@@ -151,7 +174,7 @@ export class VerdiktWizard extends LitElement {
         <div><dt>SLA</dt><dd>${describeSlaValidity(this.sla).message}</dd></div>
         <div><dt>Bond</dt><dd>${deps.formatNativeUsdc(deps.depositAmount)}</dd></div>
       </dl>
-      ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.goStep(3)}>Back</wa-button><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Register service</wa-button></div>` : nothing}
+      ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Register service</wa-button></div>` : nothing}
       <ol class="wizard-progress">${steps.map((step, i) => html`<li class=${i < this.done ? 'done' : i === this.done && this.execError ? 'error' : ''}>${i + 1}/${steps.length} ${step.label} <small>${step.chain}</small></li>`)}</ol>
       ${this.execError
         ? html`<p class="form-status" id="wizard-status">Failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>`
