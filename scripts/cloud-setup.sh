@@ -113,7 +113,16 @@ install_circle() {
     log "circle: installed" || log "circle: install failed (non-blocking)"
 }
 
-# ---------------------------------------------- 4. Workspace dependencies
+# --------------------------------------------------------- 4. Alchemy CLI
+# RPC access for both chains (Arc Testnet and Sepolia) without a browser —
+# live queries, contract reads, and app administration. Plain npm, so
+# registry access is covered by the default allowlist.
+install_alchemy() {
+  npm install -g @alchemy/cli >/dev/null 2>&1 &&
+    log "alchemy: installed" || log "alchemy: install failed (non-blocking)"
+}
+
+# ---------------------------------------------- 5. Workspace dependencies
 # pnpm itself is preinstalled, but package.json pins pnpm@12.3.4 via
 # packageManager, so corepack has to fetch that exact version. Warming the
 # store here means it lands in the snapshot and every later session starts
@@ -144,6 +153,7 @@ log "starting"
 install_foundry &
 install_cre &
 install_circle &
+install_alchemy &
 wait
 install_workspace
 
@@ -156,6 +166,7 @@ corepack pnpm --version 2>/dev/null || log "pnpm: MISSING"
 forge --version 2>/dev/null || log "forge: MISSING"
 cre version 2>/dev/null || cre --version 2>/dev/null || log "cre: MISSING"
 circle --version 2>/dev/null || log "circle: MISSING"
+alchemy --version 2>/dev/null || log "alchemy: MISSING"
 go version 2>/dev/null || true
 log "done"
 
