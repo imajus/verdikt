@@ -222,6 +222,7 @@ export class VerdiktWizard extends LitElement {
     const steps = buildExecutionSteps(deps, { slug: this.slug, url: this.url, sla: this.sla });
     const finished = this.done === steps.length;
     return html`
+      <div class="wizard-docket">
       <section class="block">
         <h3>Service record</h3>
         <table class="kv">
@@ -236,7 +237,8 @@ export class VerdiktWizard extends LitElement {
         <h3>Transactions <small>${steps.length}, across two chains, in this order</small></h3>
         <ol class="wizard-run">${steps.map((step, i) => this.renderRunRow(step, i))}</ol>
         ${finished ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service</wa-button>` : nothing}
-      </section>`;
+      </section>
+      </div>`;
   }
   render() {
     if (this.message) return html`<p class="aside">${this.message}</p>`;

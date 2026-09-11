@@ -750,6 +750,16 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 .wizard-steps li.done { color: var(--good); font-weight: 500; }
 .wizard-nav { display: flex; gap: 12px; margin-top: 18px; }
 .wizard-nav wa-button { margin-top: 0; }
+/* At the same breakpoint the rest of the app splits on, the record and the
+   transactions that write it sit side by side. The record is four short rows
+   and the docket is the work, so the record takes the narrower column and the
+   grid gap — not the sections' own margins — sets the space between them. */
+.wizard-docket { display: grid; grid-template-columns: minmax(0, 1fr); gap: 30px; margin-top: 30px; }
+.wizard-docket > .block { margin-top: 0; }
+@media (min-width: 1040px) {
+  .wizard-docket { grid-template-columns: minmax(0, 22rem) minmax(0, 1fr); gap: 48px; align-items: start; }
+}
+
 /* The transaction docket: one ruled row per transaction, in the order they
    must run. Built from the listing row's vocabulary rather than a stack of
    buttons — the sequence is the information, so it is indexed and ruled.
