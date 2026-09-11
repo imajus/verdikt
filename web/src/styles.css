@@ -232,15 +232,10 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
   grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.4rem 5.8rem;
   gap: 10px; align-items: center; width: 100%; text-align: left;
   padding: 13px 10px 13px 14px; background: none; border: 0; border-bottom: 1px solid var(--rule);
-  color: inherit; font: inherit; cursor: pointer; position: relative;
+  color: inherit; font: inherit; text-decoration: none; cursor: pointer; position: relative;
 }
 .row.head { cursor: default; padding: 8px 10px 8px 14px; font-size: 12.5px; color: var(--muted); }
 .row:not(.head):hover { background: var(--paper-2); }
-.row.selected { background: var(--paper-2); }
-.row.selected::before {
-  content: ""; position: absolute; left: 0; top: -1px; bottom: -1px; width: 3px;
-  background: var(--ink);
-}
 .cell { min-width: 0; }
 .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cell.status { text-align: right; }
@@ -271,6 +266,9 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 /* Detail --------------------------------------------------------------------- */
 
 .detail { border-top: 1.5px solid var(--rule-strong); padding-top: 18px; }
+.back { margin: 0 0 18px; }
+.back a { color: var(--link); text-decoration: none; }
+.back a:hover { text-decoration: underline; }
 .detail-head { display: flex; flex-wrap: wrap; gap: 20px 32px; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
 .detail-head h2 { font: 600 34px/1 var(--display); margin: 0 0 8px; letter-spacing: -0.025em; }
 .detail-head .sub { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--muted); }

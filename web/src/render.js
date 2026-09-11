@@ -16,15 +16,15 @@ export function renderDetail(listing) {
 /**
  * @param {Marketplace} marketplace
  * @param {'live'|'demo'} mode
- * @param {'marketplace'|'provider'|'how'} view
+ * @param {'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy'} view
  * @param {string|null} selectedSlug
- * @param {string|null} [provider]
+ * @param {string|null} [address]
  */
-export function renderApp(marketplace, mode, view, selectedSlug, provider = null) {
+export function renderApp(marketplace, mode, view, selectedSlug, address = null) {
   const app = new VerdiktApp();
   app.marketplace = marketplace;
   app.mode = mode;
-  app.route = { view, service: selectedSlug, provider };
+  app.route = { view, slug: selectedSlug, address };
   return stringify(app.render());
 }
 

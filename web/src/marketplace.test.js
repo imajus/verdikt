@@ -292,11 +292,16 @@ describe('rendering', () => {
       })
     );
 
-  it('renders the whole page without a DOM', async () => {
-    const html = renderApp(await build(), 'demo', 'marketplace', 'weather');
+  it('renders the marketplace listing without a DOM', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
     expect(html).toContain('weather.verdikt.eth');
     expect(html).toContain('demo data');
+  });
+
+  it('renders a standalone service page without a DOM', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
     expect(html).toContain('responds-within-5s');
+    expect(html).toContain('back to the marketplace');
   });
 
   it('shows what a service promised alongside what it delivered', async () => {
