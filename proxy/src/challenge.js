@@ -10,6 +10,40 @@ export const BLOCK_REASON = Object.freeze({
 });
 
 /**
+ * Decode a 402 challenge, preferring x402 v2's `payment-required` response
+ * header over the body.
+ *
+ * v1 has no such header: `accepts` lives only in the JSON body. v2 moves the
+ * challenge into the header and does not obligate a provider to repeat it in
+ * the body — Alchemy happens to (a convenience, not a guarantee), so reading
+ * the header first is what makes this work against a provider that doesn't.
+ *
+ * Used by `verified()`'s accepts-probe (router.js) to find the `accepts`
+ * array `decodePayment` needs. No payTo check reads this any more — that
+ * check was removed as security theater (issue #37): the proxy's only trust
+ * anchor is the service's registered `url`, not anything the challenge itself
+ * names.
+ *
+ * @param {string|null|undefined} paymentRequiredHeader the `payment-required` response header, if any
+ * @param {string} body raw 402 response body, used when the header is absent or itself unparseable
+ * @returns {Record<string, any> | null}
+ */
+export function decodeChallenge(paymentRequiredHeader, body) {
+  if (paymentRequiredHeader) {
+    try {
+      return JSON.parse(Buffer.from(paymentRequiredHeader, 'base64').toString('utf8'));
+    } catch {
+      // Fall through to the body.
+    }
+  }
+  try {
+    return JSON.parse(body);
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Refuses to relay when the ENS subname's owner and the Arc service's
  * registered provider disagree.
  *

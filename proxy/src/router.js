@@ -14,7 +14,7 @@
 
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
-import { checkOwnership } from './challenge.js';
+import { checkOwnership, decodeChallenge } from './challenge.js';
 import { discover, toListing } from './discovery.js';
 import { assertRelayableUrl, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
@@ -22,6 +22,25 @@ import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './
 
 /** Mirrors `VerdiktRegistry._assertValidSlug`. */
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * x402 v2 renamed `X-PAYMENT` to `PAYMENT-SIGNATURE`. A real v2 provider
+ * (Alchemy) confirmed this live: a paid call carried `payment-signature` and
+ * no `x-payment` at all, so a proxy that reads only the old name never
+ * notices the call was paid for — it falls through to `passthrough()`, and
+ * nothing is verified. `payment-signature` is checked first; `x-payment`
+ * stays as a fallback for v1 callers.
+ */
+const PAYMENT_HEADER_NAMES = ['payment-signature', 'x-payment'];
+
+/** @param {Headers} headers */
+const paymentHeaderOf = (headers) => {
+  for (const name of PAYMENT_HEADER_NAMES) {
+    const value = headers.get(name);
+    if (value) return value;
+  }
+  return null;
+};
 
 /** @param {unknown} body @param {number} [status] @param {Record<string,string>} [headers] */
 const json = (body, status = 200, headers = {}) =>
@@ -181,7 +200,7 @@ export async function handleRequest(request, deps = {}) {
   // needs the original body streamed rather than replayed whole.
   const body = request.method === 'GET' || request.method === 'HEAD' ? undefined : await request.arrayBuffer();
 
-  const paymentHeader = request.headers.get('x-payment');
+  const paymentHeader = paymentHeaderOf(request.headers);
   if (paymentHeader) {
     return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body });
   }
@@ -298,12 +317,12 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
   }
 
   // decodePayment needs the challenge's own `accepts` to know the asset, name
-  // and version behind the EIP-712 domain — the X-PAYMENT header names only
-  // scheme and network (packages/sdk/payment.js). So it is fetched fresh here,
-  // the same request the unpaid leg would have made, with the payment header
-  // stripped so this probe cannot itself settle the payment.
+  // and version behind the EIP-712 domain — the payment header itself names
+  // only scheme and network (packages/sdk/payment.js). So it is fetched fresh
+  // here, the same request the unpaid leg would have made, with every payment
+  // header name stripped so this probe cannot itself settle the payment.
   const challengeHeaders = forwardRequestHeaders(Object.fromEntries(request.headers));
-  delete challengeHeaders['x-payment'];
+  for (const name of PAYMENT_HEADER_NAMES) delete challengeHeaders[name];
   /** @type {unknown[]} */
   let accepts;
   try {
@@ -313,7 +332,9 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
       body,
       signal: AbortSignal.timeout(config.upstreamTimeoutMs)
     });
-    const challengeJson = await challengeResponse.json().catch(() => ({}));
+    const challengeJson =
+      decodeChallenge(challengeResponse.headers.get('payment-required'), await challengeResponse.text().catch(() => '')) ??
+      {};
     accepts = Array.isArray(challengeJson?.accepts) ? challengeJson.accepts : [];
   } catch (error) {
     return json(
