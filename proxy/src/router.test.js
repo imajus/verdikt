@@ -212,6 +212,36 @@ describe('passthrough — the payTo check', () => {
     });
     expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('no_address_record');
   });
+
+  // Reproduces a production incident (portfolio.verdikt.eth via Alchemy):
+  // a real multi-chain 402 offering an honest EVM option alongside a Solana
+  // one hard-blocked every call, because a Solana payTo can never equal the
+  // EVM address record it was compared against — honest or spoofed look
+  // identical under that comparison, which made the check useless rather than
+  // merely strict.
+  it('accepts a real multi-chain challenge whose Solana option cannot be compared to an EVM address', async () => {
+    const multiChain = challenge({
+      accepts: [
+        { scheme: 'exact', network: 'eip155:1', payTo: PAY_TO },
+        { scheme: 'exact', network: 'solana:mainnet', payTo: '6KsbSAzhrxKvUUoR8FwBmt6NuHmwLuGdRMzHc4KwrSy5R' }
+      ]
+    });
+    const { deps } = harness({ upstream: new Response(multiChain, { status: 402 }) });
+    const response = await getWeather(deps);
+    expect(response.statusCode).toBe(402);
+    expect(response.headers['x-verdikt-pay-to-verified']).toBe('true');
+  });
+
+  it('still blocks a spoofed EVM option sitting alongside an honest Solana one', async () => {
+    const multiChain = challenge({
+      accepts: [
+        { scheme: 'exact', network: 'eip155:1', payTo: SPOOFED },
+        { scheme: 'exact', network: 'solana:mainnet', payTo: '6KsbSAzhrxKvUUoR8FwBmt6NuHmwLuGdRMzHc4KwrSy5R' }
+      ]
+    });
+    const { deps } = harness({ upstream: new Response(multiChain, { status: 402 }) });
+    expect((await getWeather(deps)).headers['x-verdikt-block']).toBe('pay_to_mismatch');
+  });
 });
 
 describe('refusals before any upstream call', () => {

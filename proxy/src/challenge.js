@@ -7,6 +7,20 @@
 // Every other Verdikt check is post-hoc and backed by the bond; a payment sent
 // to a spoofed `payTo` never touches the bonded service at all, so there is
 // nothing to reclaim it from. On any doubt this blocks.
+//
+// The comparison is scoped to EVM-shaped `payTo` values, not every entry.
+// `packages/sdk/ens.js`'s `address` record is a plain EVM `addr()` — there is
+// no multicoin resolution — so a non-EVM `payTo` (Solana's base58 pubkeys,
+// say) can never equal it, honest or spoofed; comparing anyway would
+// hard-block every real multi-chain 402 a provider publishes. Shape, not the
+// `network` field, is what decides this: `network` can be missing, informal,
+// or (from a hostile provider) mislabeled, so trusting it would open the exact
+// hole this check exists to close. Exempting a non-EVM `payTo` costs nothing —
+// `decodePayment` (packages/sdk/payment.js) refuses any network that is not
+// `eip155:<chainId>`, so an agent can never actually settle through a rail
+// Verdikt has no address for regardless of what `payTo` says.
+
+const EVM_ADDRESS = /^0x[0-9a-f]{40}$/i;
 
 /** @type {Readonly<Record<string, ChallengeBlockReason>>} */
 export const BLOCK_REASON = Object.freeze({
@@ -59,9 +73,11 @@ export function checkChallenge(body, expectedPayTo) {
   }
 
   const expected = expectedPayTo.toLowerCase();
-  // Every option, not just the first: the agent may pick any of them, so one
-  // spoofed entry among honest ones is still a spoofed payment.
-  const wrong = payTos.filter((value) => typeof value !== 'string' || value.toLowerCase() !== expected);
+  // Every EVM-shaped option, not just the first: the agent may pick any of
+  // them, so one spoofed entry among honest ones is still a spoofed payment.
+  // A payTo that is not even EVM-shaped is skipped, not treated as wrong —
+  // see the file header.
+  const wrong = payTos.filter((value) => typeof value === 'string' && EVM_ADDRESS.test(value) && value.toLowerCase() !== expected);
   if (wrong.length > 0) {
     return {
       ok: false,
