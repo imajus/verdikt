@@ -103,6 +103,35 @@ for. The `ServiceRegistered` scan is the one that keeps growing — it is
 deliberately not windowed, so it costs one chunk per 10,000 blocks since the
 registry was deployed, about 16 more per day.
 
+**`aggregate` does not fit inside CRE's default chain-read budget, and that is
+a finding rather than a nuisance.** `cre workflow limits export` shows
+`ChainRead.CallLimit: 15` — fifteen chain reads per workflow run, enforced in
+simulation exactly as in production. This workflow spends one read per log
+chunk plus one `getService` per service, which on a registry a few days old is
+already about 100 and grows with the chain at roughly 16 more per day. Over the
+limit it fails with `[101]LimitExceeded: capability call limit exceeded for
+evm.FilterLogs`.
+
+`limits.json` is the exported defaults with that one number raised to 500, and
+`bin/publish-scores.sh` passes it as `--limits`. Deliberately not
+`--limits=none`, which switches off every other production constraint too and
+would hide the next wall instead of recording this one.
+
+The same export also carries `ChainRead.LogQueryBlockLimit: 100`. This CLI does
+not appear to enforce it against `FilterLogs` — 10,000-block queries reach the
+RPC and fail on the RPC's own limits, not CRE's — but if it ever does, a
+100-block ceiling puts a full registry scan three orders of magnitude out of
+reach. `limits.json` raises it to match the chunk width so the file states what
+the workflow actually asks for.
+
+**What this means for production enrollment.** Enrollment is listed in
+`CLAUDE.md` as blocked on access (`cre whoami` → *Deploy Access: Not enabled*).
+It is also blocked on this: an aggregate that reads a growing log history
+cannot run under the default budget on any chain producing blocks at Arc's
+rate, whatever access it is granted. Making it deployable means removing the
+full-history scan — an on-chain enumeration of slugs, an EVM log trigger that
+accumulates as verdicts land, or an indexed source — not raising a limit.
+
 **`aggregate` needs `blockTimeSeconds` set.** It is Arc's nominal block time,
 used to turn the trailing window into a `fromBlock` and to date each log (EVM
 logs carry no timestamp). It is required, not optional: the workflow rejects an

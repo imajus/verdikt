@@ -26,6 +26,8 @@ All three spikes have run. **A** (ENSv2) — `docs/spikes/A-ens-sepolia.md`. **B
 
 Three things are deliberately unfinished, each argued at its own task in `docs/Tasks.md`: a paid call end to end (the demo paywall advertises `eip3009`, then answers 402 to a payment the USDC contract itself accepts), production CRE enrollment (`cre whoami` → *Deploy Access: Not enabled*), and the recorded video.
 
+Production enrollment is blocked on more than access. CRE's `ChainRead.CallLimit` is **15 chain reads per run** and the hourly aggregate needs ~100, because it scans `ServiceRegistered` from the registry's deploy block and Arc mints two blocks a second. `cre/workflows/limits.json` raises that one limit for simulation; a deployable version needs the full-history scan gone, not a bigger number. See `cre/workflows/README.md`.
+
 ## Commands
 
 ```bash

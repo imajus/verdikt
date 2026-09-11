@@ -47,14 +47,21 @@ fi
 
 echo "publish-scores: $(date -u +%FT%TZ) simulating aggregate --target ${TARGET} --broadcast"
 
-# `cre` resolves the workflow folder relative to the project root holding
-# project.yaml, which is why this runs from WORKFLOW_DIR and passes a bare
-# name — the same shape src/simulator.js spawns `verify` with.
+# --limits raises ONE production limit and leaves the rest enforced.
+# `ChainRead.CallLimit` defaults to 15 chain reads per run; this workflow needs
+# one per log chunk plus one `getService` per service, which on a registry a few
+# days old is already ~100 and grows with the chain. `limits.json` is the
+# exported defaults with that number raised — not `--limits=none`, which would
+# switch off every other production constraint at the same time and hide the
+# next wall instead of documenting this one. See cre/workflows/README.md: the
+# fact that the aggregate cannot run inside the default budget is a real
+# finding about production enrollment, not a nuisance to silence.
 cd "$WORKFLOW_DIR"
 cre workflow simulate aggregate \
   --target "$TARGET" \
   --non-interactive \
   --trigger-index 0 \
+  --limits ./limits.json \
   --broadcast
 
 echo "publish-scores: $(date -u +%FT%TZ) simulate finished — reading the records back"
