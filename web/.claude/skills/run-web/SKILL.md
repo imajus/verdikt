@@ -89,6 +89,14 @@ configured Alchemy Arc Testnet app: real services, real block numbers, a
 endpoint and a misconfigured provider both fail in their own way — see
 Gotchas.
 
+**On today's Arc deployment, live mode lists nothing.** `weather` and
+`weather-lite` were deregistered on 2026-09-11 and the marketplace leaves
+retired services off (`isListed`, `web/src/marketplace.js`), so "No services
+registered yet" is the correct render, not a failed scan or a broken RPC. A
+real failure says so in the banner — see Gotchas. Their detail pages are
+still reachable at `/services/weather`, and UI work should use demo mode
+anyway.
+
 ### Driving the provider console and the onboarding wizard
 
 `verdikt-wizard`, `verdikt-sla-editor` and `verdikt-bond-controls` render on the
