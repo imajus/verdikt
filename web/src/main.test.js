@@ -146,6 +146,13 @@ it('navigates to the provider console after an explicit wallet connect', async (
   await events.get('wallet-connect')?.(); await settle();
   expect(history.pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
 });
+it('does not push a redundant history entry when reconnecting the same provider wallet', async () => {
+  // Update location to reflect the canonical path that syncRoute would have rewritten to
+  vi.stubGlobal('location', new URL(`https://verdikt.example/provider/${OWNER}`));
+  history.pushState.mockClear();
+  await events.get('wallet-connect')?.(); await settle();
+  expect(history.pushState).not.toHaveBeenCalled();
+});
 it('does not navigate to the provider console on a silent wallet restoration', async () => {
   change(OTHER);
   await settle();

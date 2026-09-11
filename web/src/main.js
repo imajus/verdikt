@@ -235,7 +235,8 @@ app.addEventListener('wallet-connect', async () => {
     // Connecting a wallet in this dashboard has no purpose today other than
     // provider self-management, so an explicit connect always lands there —
     // unlike the silent auto-reconnect below, which never fires this handler.
-    history.pushState(null, '', providerUrl(account.address));
+    const targetPath = providerUrl(account.address);
+    if (targetPath !== location.pathname + location.search) history.pushState(null, '', targetPath);
     draw();
   } catch (error) {
     console.error('connection failed:', /** @type {Error} */ (error).message);
