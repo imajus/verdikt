@@ -271,6 +271,7 @@ export class VerdiktApp extends LitElement {
     const auth = this.writeAuthorization(account?.address ?? null);
     const consoleUrl = account ? providerUrl(account.address) : PROVIDER_PATH;
     return html`${pageHead('List a service', 'Claim the ENS subname, register the bond and publish the SLA that calls will be judged against.')}
+      <p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>
       ${this.mode !== 'live' ? html`<p class="aside warn">Registration needs a live chain. This build is showing seeded demo data.</p>` : nothing}
       <section class="block">
         ${!account
@@ -278,8 +279,7 @@ export class VerdiktApp extends LitElement {
           : !auth.canWrite
             ? html`<p>${auth.signedIn ? 'Switch to a supported network to register a service.' : 'Sign in once to register a service. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}`
             : html`<verdikt-wizard id="wizard-mount"></verdikt-wizard>`}
-      </section>
-      <p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>`;
+      </section>`;
   }
   render() {
     /** @type {(path: string) => void} */
