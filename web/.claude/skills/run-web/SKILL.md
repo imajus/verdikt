@@ -160,7 +160,7 @@ publishes to Cloudflare).
 ## Test
 
 ```bash
-pnpm vitest run web/     # 8 files, 85 tests, ~1.2s
+pnpm vitest run web/     # 9 files, 110 tests, ~1.2s
 pnpm typecheck           # clean
 npx eslint web/src       # clean
 ```
