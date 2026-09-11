@@ -14,11 +14,13 @@
 // `eth_getLogs` provider caps that range, so the run does not degrade — it
 // fails outright, and it fails *later*, long after the change that "worked".
 //
-// Measured caps, not guessed: `https://rpc.testnet.arc.network` (what
-// `project.yaml` pins) accepts 30,000 blocks and answers `requested range too
-// large` above it; Arc via Alchemy accepts 10,000. So the shipped chunk size
-// is the smaller one — a workflow that breaks when its RPC is swapped for
-// another perfectly ordinary one is not fixed, just differently broken.
+// Measured caps, not guessed: `rpc.testnet.arc.network` accepts 30,000 blocks
+// and answers `requested range too large` above it; Arc via Alchemy accepts
+// 10,000. The shipped width is 10,000 — not because it is the safer of two
+// otherwise equal options, but because `project.yaml` pins Alchemy, and it
+// pins Alchemy because the wider endpoint rate-limits after three sequential
+// requests. Range and throughput are separate limits and this workload is
+// bounded by the second one; see project.yaml for the measurement.
 //
 // Pure, and here rather than in `workflow.ts`, for the reason the rest of
 // `cre/lib` is here: `cre workflow simulate` cannot run unattended (Spike B,

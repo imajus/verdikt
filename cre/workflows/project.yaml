@@ -3,11 +3,25 @@
 # Two EVM entries because Verdikt straddles two chains. The per-request workflow
 # writes verdicts to Arc; the hourly aggregate reads Arc's VerdictWritten events
 # and writes reputation scores to Sepolia, where ENSv2 lives (§4).
+#
+# WHY NOT THE PUBLIC ENDPOINTS. `rpc.testnet.arc.network` is the obvious choice
+# and does not survive this workload. It accepts a wider `eth_getLogs` range
+# than Alchemy — 30,000 blocks against 10,000, both measured — but rate-limits
+# after **three** sequential requests, which the aggregate blows through before
+# it has finished discovering services. Measured back to back against the live
+# registry scan: Alchemy answered 75 sequential chunked calls in 23.6s, the
+# public endpoint died on call 4 with `-32005 rate limit exceeded`. A wider
+# range is no use if you cannot ask for the second one. So the chunk width in
+# `aggregate/config.staging.json` is Alchemy's 10,000, not Arc's 30,000.
+#
+# The embedded key is the same one `proxy/wrangler.jsonc` already commits and
+# `web`'s public bundle already inlines (see CLAUDE.md) — this adds no
+# exposure. A key that must stay secret does not belong in this file.
 staging-settings:
   rpcs:
     # Arc Testnet. eip155:5042002, selector 3034092155422581607 — verified
     # against the live RPC's eth_chainId in Spike B, not from a table.
     - chain-name: "arc-testnet"
-      url: "https://rpc.testnet.arc.network"
+      url: "https://arc-testnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
     - chain-name: "ethereum-testnet-sepolia"
-      url: "https://ethereum-sepolia-rpc.publicnode.com"
+      url: "https://eth-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"

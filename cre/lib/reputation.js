@@ -19,11 +19,11 @@ import { aggregateWindow } from '@verdikt/sla';
 //
 // WHAT IT BUYS. The window is both the analysis period and the block range
 // fetched: `workflow.ts` divides it by `blockTimeSeconds` to get a
-// `fromBlock`. On Arc's ~0.53s blocks, 7 days is 1,144,155 blocks — 39
-// chunked `eth_getLogs` calls per run — against 163,451 blocks and 6 calls
-// for one day. Faster runs and a far smaller failure surface during a live
-// demo, at the cost of a ratio that reflects a day of traffic rather than a
-// week.
+// `fromBlock`. On Arc's ~0.53s blocks, 7 days is 1,144,155 blocks — 115
+// chunked `eth_getLogs` calls per run at the pinned RPC's 10,000-block width
+// — against 163,451 blocks and 17 calls for one day. Faster runs and a far
+// smaller failure surface during a live demo, at the cost of a ratio that
+// reflects a day of traffic rather than a week.
 //
 // WHAT IT DOES NOT CHANGE. The `ServiceRegistered` scan is NOT windowed and
 // must not be: it runs from the registry's deployment block because a service

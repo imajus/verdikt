@@ -7,5 +7,5 @@
   "registryDeployBlock": "60860488",
   "gasLimit": "1000000",
   "blockTimeSeconds": 0.5286,
-  "logChunkBlocks": 30000
+  "logChunkBlocks": 10000
 }

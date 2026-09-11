@@ -89,17 +89,19 @@ but delayed: `workflow execution failed: [2]Unknown: requested range too
 large`, on a run that compiled and triggered fine.
 
 `logChunkBlocks` is the width, measured against the RPC `project.yaml` pins
-rather than guessed: `rpc.testnet.arc.network`
-answers 30,000 blocks, Arc via Alchemy answers 10,000 on every tier it
-publishes. The shipped config uses 30,000 to match the pinned RPC; omit the
-field and `cre/lib/config.js` falls back to the portable 10,000. Swapping the
-Arc RPC without revisiting this is how it breaks again.
+rather than guessed. Two separate limits matter and they point opposite ways:
+`rpc.testnet.arc.network` answers a 30,000-block range but rate-limits after
+three sequential requests, while Arc via Alchemy answers 10,000 and took 75
+sequential calls in 23.6s. This workload is bounded by throughput, not range,
+so `project.yaml` pins Alchemy and the width is **10,000**. Omit the field and
+`cre/lib/config.js` falls back to the same value. Swapping the Arc RPC without
+revisiting both limits is how it breaks again.
 
-At 30,000 blocks per chunk that is 6 chunks for the TEMPORARY (demo window)
-one-day window in `cre/lib/reputation.js`, and 39 for the 7 days the spec
-asks for. The `ServiceRegistered` scan is the one that keeps growing — it
-is deliberately not windowed, so it costs one chunk per 30,000 blocks since
-the registry was deployed, about 5.5 more per day.
+At 10,000 blocks per chunk that is 17 chunks for the TEMPORARY (demo window)
+one-day window in `cre/lib/reputation.js`, and 115 for the 7 days the spec asks
+for. The `ServiceRegistered` scan is the one that keeps growing — it is
+deliberately not windowed, so it costs one chunk per 10,000 blocks since the
+registry was deployed, about 16 more per day.
 
 **`aggregate` needs `blockTimeSeconds` set.** It is Arc's nominal block time,
 used to turn the trailing window into a `fromBlock` and to date each log (EVM
