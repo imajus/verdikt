@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
-# One hourly publish of the trailing-7-day reputation scores to ENS
-# (Specification.md §1). Runs once and exits — it is not a daemon.
+# One hourly publish of the trailing-window reputation scores to ENS
+# (Specification.md §1). Runs once and exits — it is not a daemon. The window
+# itself is WINDOW_SECONDS in cre/lib/reputation.js, currently cut to one day
+# for the demo — see the TEMPORARY (demo window) note there.
 #
 # WHY THIS IS A SCRIPT AND NOT A CRON ENTRY BAKED INTO THE IMAGE
 #

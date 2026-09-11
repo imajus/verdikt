@@ -10,8 +10,33 @@
 
 import { aggregateWindow } from '@verdikt/sla';
 
-/** Trailing window, per Specification.md §1. */
-export const WINDOW_SECONDS = 7 * 24 * 60 * 60;
+// TEMPORARY (demo window) — revert to `7 * 24 * 60 * 60` after the hackathon.
+//
+// Specification.md §1 specifies a trailing **7-day** window and has not
+// changed; this constant deliberately deviates from it for the duration of
+// the demo, which is why the deviation lives here as a comment rather than as
+// a quiet edit to the spec.
+//
+// WHAT IT BUYS. The window is both the analysis period and the block range
+// fetched: `workflow.ts` divides it by `blockTimeSeconds` to get a
+// `fromBlock`. On Arc's ~0.53s blocks, 7 days is 1,144,155 blocks — 39
+// chunked `eth_getLogs` calls per run — against 163,451 blocks and 6 calls
+// for one day. Faster runs and a far smaller failure surface during a live
+// demo, at the cost of a ratio that reflects a day of traffic rather than a
+// week.
+//
+// WHAT IT DOES NOT CHANGE. The `ServiceRegistered` scan is NOT windowed and
+// must not be: it runs from the registry's deployment block because a service
+// registered before the window is still a listing, and that log is the only
+// place a serviceId maps back to its slug. Shortening it would empty the
+// marketplace.
+//
+// EVERY OTHER SITE THIS TOUCHES is marked with the same `TEMPORARY (demo
+// window)` marker — `grep -rn 'TEMPORARY (demo window)'` is the revert list.
+// The dashboard footer derives its wording from this number
+// (`web/src/lit-app.js`), so it needs no marker; the hard-coded prose in the
+// landing page, the diagram and the proxy's discovery note does.
+export const WINDOW_SECONDS = 24 * 60 * 60;
 
 /**
  * Scores for every registered service over the trailing window.

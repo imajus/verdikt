@@ -35,7 +35,8 @@ import {
   type Hex
 } from 'viem';
 
-import { assertBlockTimeSeconds } from '@verdikt/cre/config';
+import { assertBlockTimeSeconds, assertLogChunkBlocks } from '@verdikt/cre/config';
+import { blockRangeChunks } from '@verdikt/cre/log-range';
 import { reputationForWindow, WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { outcomeFromOrdinal, statusFromOrdinal } from '@verdikt/sdk/registry';
 
@@ -51,8 +52,8 @@ export type Config = {
   /** Where log scans start; the registry's deployment block. */
   registryDeployBlock: string;
   /**
-   * Arc's nominal block time in seconds. Used only to turn the 7-day window
-   * into a `fromBlock`, and to date each log — an EVM log carries no timestamp,
+   * Arc's nominal block time in seconds. Used only to turn the trailing
+   * window into a `fromBlock`, and to date each log — an EVM log carries no timestamp,
    * and a header read per block would be thousands of calls per run. The
    * approximation is acceptable precisely here: both ratios are display-only,
    * recomputed hourly, and have no refund state behind them (Specification.md
@@ -60,6 +61,13 @@ export type Config = {
    * slightly stale number for one hour and nothing else.
    */
   blockTimeSeconds: number;
+  /**
+   * Maximum blocks per `eth_getLogs` call, matched to whatever RPC
+   * `project.yaml` pins for Arc. Optional — `assertLogChunkBlocks` defaults to
+   * the width every measured Arc RPC accepts. Raising it only trades
+   * portability for fewer round trips per run.
+   */
+  logChunkBlocks?: number;
   gasLimit: string;
 };
 
@@ -125,21 +133,36 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
   const timestampOfBlock = (blockNumber: bigint) =>
     headTimestamp - Number(headNumber - blockNumber) * blockTimeSeconds;
 
+  // Every `eth_getLogs` provider caps the block range it will answer, and Arc's
+  // sub-second blocks walk both of this workflow's scans past that cap within
+  // days of a deployment: the deploy-to-head range only grows, and the window
+  // range saturates at WINDOW_SECONDS / blockTimeSeconds. So both scans are
+  // chunked. See cre/lib/log-range.js for the measured caps and why the
+  // default is the smaller of them.
+  const logChunkBlocks = assertLogChunkBlocks(config.logChunkBlocks);
+
+  /** One `filterLogs` per chunk, concatenated in ascending block order. */
+  const scanLogs = (eventName: 'ServiceRegistered' | 'VerdictWritten', from: bigint, to: bigint) =>
+    blockRangeChunks(from, to, logChunkBlocks).flatMap(
+      (chunk) =>
+        arcClient
+          .filterLogs(runtime, {
+            filterQuery: {
+              fromBlock: bigIntJson(chunk.from),
+              toBlock: bigIntJson(chunk.to),
+              addresses: [registry],
+              topics: [{ topic: [hexToBase64(topicOf(eventName))] }]
+            }
+          })
+          .result().logs
+    );
+
   // `ServiceRegistered` is scanned from the registry's deployment block, not
   // from the window start: a service registered a year ago is still a listing,
   // and it is the only place a serviceId maps back to its slug — keccak256 is
   // one-way and the registry does not store the string. The score writer needs
   // that slug to derive the subname's node, so this read is not bookkeeping.
-  const registrationLogs = arcClient
-    .filterLogs(runtime, {
-      filterQuery: {
-        fromBlock: bigIntJson(deployBlock),
-        toBlock: bigIntJson(headNumber),
-        addresses: [registry],
-        topics: [{ topic: [hexToBase64(topicOf('ServiceRegistered'))] }]
-      }
-    })
-    .result().logs;
+  const registrationLogs = scanLogs('ServiceRegistered', deployBlock, headNumber);
 
   const services = registrationLogs.map((log) => {
     const decoded = decodeEventLog({
@@ -167,16 +190,7 @@ export const onSchedule = (runtime: Runtime<Config>, _trigger: CronPayload): str
     return { serviceId, slug: decoded.args.slug, status: statusFromOrdinal(Number(state.status)) };
   });
 
-  const verdictLogs = arcClient
-    .filterLogs(runtime, {
-      filterQuery: {
-        fromBlock: bigIntJson(fromBlock),
-        toBlock: bigIntJson(headNumber),
-        addresses: [registry],
-        topics: [{ topic: [hexToBase64(topicOf('VerdictWritten'))] }]
-      }
-    })
-    .result().logs;
+  const verdictLogs = scanLogs('VerdictWritten', fromBlock, headNumber);
 
   const verdicts = verdictLogs.map((log) => {
     const decoded = decodeEventLog({

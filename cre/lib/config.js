@@ -7,7 +7,7 @@
 // the untested `.ts` plumbing (Spike B, CRE-1).
 //
 // One field is load-bearing and fails in the worst way when wrong.
-// `blockTimeSeconds` divides the 7-day window into a `fromBlock` and dates
+// `blockTimeSeconds` divides the trailing window into a `fromBlock` and dates
 // every log the run reads. Unset, it makes `Math.ceil(WINDOW / undefined)`
 // NaN, and `BigInt(NaN)` throws a `RangeError` thousands of lines from the
 // cause; merely wrong, it shifts the window with no error at all — a silent,
@@ -36,4 +36,35 @@ export function assertBlockTimeSeconds(value) {
     );
   }
   return seconds;
+}
+
+/**
+ * Validate the maximum blocks per `eth_getLogs` call.
+ *
+ * Unlike `blockTimeSeconds` this one fails loudly on its own — an oversized
+ * range is rejected by the RPC (`requested range too large`) rather than
+ * quietly answered — so the validation here is about the *other* direction:
+ * a zero or negative value would make `blockRangeChunks` loop forever, and a
+ * fractional one would drift off whole-block boundaries.
+ *
+ * Defaulted rather than required, because unlike the block time there is a
+ * safe value: 10,000 is the smaller of the two measured caps on Arc's
+ * available RPCs (see cre/lib/log-range.js), so it works everywhere and is
+ * only worth raising to trade portability for fewer round trips.
+ *
+ * @param {unknown} value — `config.logChunkBlocks`, may be absent
+ * @returns {bigint} the validated chunk width in blocks
+ */
+export function assertLogChunkBlocks(value) {
+  if (value === undefined || value === null || value === '') return 10_000n;
+  let blocks;
+  try {
+    blocks = BigInt(/** @type {string|number} */ (value));
+  } catch {
+    throw new Error(`aggregate config: logChunkBlocks must be a whole number of blocks, got ${JSON.stringify(value)}`);
+  }
+  if (blocks <= 0n) {
+    throw new Error(`aggregate config: logChunkBlocks must be positive, got ${JSON.stringify(value)}`);
+  }
+  return blocks;
 }

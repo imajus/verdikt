@@ -11,6 +11,7 @@
   "exports": {
     "./config": "./config.js",
     "./judge": "./judge.js",
+    "./log-range": "./log-range.js",
     "./reputation": "./reputation.js"
   }
 }

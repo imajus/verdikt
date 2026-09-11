@@ -181,10 +181,14 @@ const skeleton = () => html`
   <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
 
 const how = () => html`
+  <!-- TEMPORARY (demo window): the "trailing one-day scores" below tracks
+       WINDOW_SECONDS in cre/lib/reputation.js. Restore "seven-day" when that
+       constant does. The marketplace footer derives its own wording from
+       stats.windowSeconds and needs no edit. -->
   ${pageHead('How it works', 'How the verification loop works, end to end.')}
   <section class="block"><h3>Two chains, each for one reason</h3><p><strong>Arc</strong> holds the registry, the escrow, the verdicts and the refunds — and the x402 payment itself. USDC is Arc's native gas token, so value moves as <code>msg.value</code>, not an ERC-20 transfer: no <code>approve</code>/<code>transferFrom</code>, no token address. Payment, bond and refund are the same asset on the same chain, which removes any cross-chain correlation between payment and refund.</p><p><strong>Ethereum Sepolia</strong> holds ENS. The SLA lives only as the <code>sla</code> text record on <code>&lt;slug&gt;.verdikt.eth</code>. A per-key access list scopes the provider to <code>sla</code> and <code>url</code>, and the CRE signer to <code>conformance</code> and <code>availability</code>.</p></section>
   <section class="block"><h3>What happens on a paid call</h3><p>A proxy sits between the paying agent and the provider's x402 endpoint. Without a payment header, it checks that the challenge's payout address matches ENS. With payment attached, the call is replayed inside a Chainlink CRE Confidential Workflow and evaluated against the provider's published SLA without exposing the raw response outside the enclave.</p><p>The workflow writes PASS, FAIL or DOWN on Arc. A FAIL or DOWN credits the payer from the service's bond, capped at <code>min(fixed refund, what was actually paid, what remains of the bond)</code>.</p></section>
-  <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing seven-day scores remain public on Arc and ENS.</p></section>`;
+  <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing one-day scores remain public on Arc and ENS.</p></section>`;
 
 export class VerdiktApp extends LitElement {
   static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {}, signInPending: { state: true }, signInError: { state: true } };

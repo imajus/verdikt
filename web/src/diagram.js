@@ -21,9 +21,13 @@
 
 import { LitElement, html } from 'lit';
 
+// TEMPORARY (demo window): the three "1-day"/"one-day" mentions below track
+// WINDOW_SECONDS in cre/lib/reputation.js. Restore "seven-day" / "7-day" / "7
+// days" when that constant goes back. Deliberately still literal text — see
+// the note under DESC on why neither figure interpolates.
 const TITLE = 'How one paid call is judged';
 const DESC =
-  'A paying agent sends its x402 payment to the Verdikt proxy. Without a payment the proxy compares the challenge’s payout address against the address record on ENS and blocks a mismatch. With a payment, the call is replayed inside a Chainlink CRE confidential workflow, which reads the service’s SLA from ENS and evaluates the provider’s response against it without letting the response leave the enclave. The workflow writes PASS, FAIL or DOWN to the VerdiktRegistry on Arc; a FAIL or DOWN credits the payer from the provider’s bond, capped at the smaller of the fixed refund, what was paid, and what remains of the bond, and the agent calls withdraw to collect. Separately, an hourly workflow reads the verdict events off Arc and publishes trailing seven-day conformance and availability scores back to ENS.';
+  'A paying agent sends its x402 payment to the Verdikt proxy. Without a payment the proxy compares the challenge’s payout address against the address record on ENS and blocks a mismatch. With a payment, the call is replayed inside a Chainlink CRE confidential workflow, which reads the service’s SLA from ENS and evaluates the provider’s response against it without letting the response leave the enclave. The workflow writes PASS, FAIL or DOWN to the VerdiktRegistry on Arc; a FAIL or DOWN credits the payer from the provider’s bond, capped at the smaller of the fixed refund, what was paid, and what remains of the bond, and the agent calls withdraw to collect. Separately, an hourly workflow reads the verdict events off Arc and publishes trailing one-day conformance and availability scores back to ENS.';
 
 // Neither figure interpolates anything: server-side rendering parses an <svg>
 // subtree as HTML, where a `${}` between SVG children silently loses its part
@@ -114,7 +118,7 @@ const wide = () => html`
 
     <path class="dg-read dg-sepolia" marker-end="url(#dgw-tip-quiet)" d="M660,326 H872 V60 H652"></path>
     <text class="dg-note end" x="858" y="112">hourly, plain workflow</text>
-    <text class="dg-note end" x="858" y="126">trailing 7-day ratios</text>
+    <text class="dg-note end" x="858" y="126">trailing 1-day ratios</text>
   </svg>`;
 
 // Vertical: the same six stages stacked, ENS reads folded into each stage's
@@ -179,7 +183,7 @@ const tall = () => html`
     <rect class="dg-box dg-sepolia" x="44" y="624" width="304" height="60"></rect>
     <use class="dg-logo dg-sepolia" href="#lg-ens" x="56" y="638" width="15" height="15"></use>
     <text class="dg-key sm dg-sepolia" x="77" y="650">conformance · availability on ENS</text>
-    <text class="dg-sub" x="56" y="670">trailing 7 days, hourly</text>
+    <text class="dg-sub" x="56" y="670">trailing 1 day, hourly</text>
   </svg>`;
 
 // Partner marks, each taken from its owner's own artwork and normalised into a

@@ -94,7 +94,9 @@ The agent signs its own payment. Verdikt holds no wallet on the payment leg.
 
 ### Two CRE workflows, deliberately separate
 
-Per-request (confidential, TEE) touches real response bodies and triggers refunds. Hourly (plain, cron) only reads public `VerdictWritten` events to compute the trailing-7-day ratios and write them to ENS; it makes no Arc write and settles no refund. Merging them would make the aggregate depend on traffic timing and put non-confidential logic in the TEE.
+Per-request (confidential, TEE) touches real response bodies and triggers refunds. Hourly (plain, cron) only reads public `VerdictWritten` events to compute the trailing-window ratios and write them to ENS; it makes no Arc write and settles no refund. Merging them would make the aggregate depend on traffic timing and put non-confidential logic in the TEE.
+
+**The window is temporarily one day, not the seven `Specification.md` §1 specifies.** `WINDOW_SECONDS` in `cre/lib/reputation.js` was cut for the hackathon demo: it is both the analysis period and the block range fetched, and one day is 6 chunked `eth_getLogs` calls per run against 39. The spec is unchanged and the deviation is deliberate — `grep -rn 'TEMPORARY (demo window)'` is the revert list. The `ServiceRegistered` scan is *not* windowed and must not be, or the marketplace empties.
 
 ## Invariants that are easy to break
 

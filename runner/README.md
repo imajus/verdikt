@@ -97,7 +97,7 @@ environment variable.
 
 ## Hourly score publishing
 
-The `aggregate` workflow publishes the trailing-7-day `conformance` and
+The `aggregate` workflow publishes the trailing-window `conformance` and
 `availability` records to `<slug>.verdikt.eth` (`Specification.md` §1). Until
 the workflow is enrolled on real CRE infrastructure its cron never fires on its
 own, so the schedule has to come from outside — and this container is the only

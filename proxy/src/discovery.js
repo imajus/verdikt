@@ -110,8 +110,12 @@ export function discover(listings, query, publicHost) {
     count: entries.length,
     // Stated rather than implied: an agent reading `conformance: null` should
     // know why, and one filtering on it should know what was excluded.
+    // TEMPORARY (demo window) — "1-day" tracks WINDOW_SECONDS in
+    // cre/lib/reputation.js; restore "7-day" when that constant goes back.
+    // Hard-coded rather than interpolated because the proxy deliberately does
+    // not depend on the CRE packages (see this package's own comment).
     note:
-      'conformance and availability are the trailing-7-day ratios published on ' +
+      'conformance and availability are the trailing-1-day ratios published on ' +
       '<slug>.verdikt.eth, 0-1000, recomputed hourly. null means the hourly run ' +
       'has not written this listing yet; a filter treats that as not matching. ' +
       'Prices are integer minor units of the named asset.',

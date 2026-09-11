@@ -180,7 +180,9 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p>Three things here are deliberately unfinished, and each is argued in the open rather than hidden: a paid call carried end to end, production enrollment of the verification workflow, and the recorded walkthrough. Leave an address and you get one short message as each lands. No digest, no drip, nothing else.</p>
       <verdikt-subscribe></verdikt-subscribe>`, html`
       <p class="note-head">Already shipped</p>
-      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written through the real KeystoneForwarder, refunds credited and withdrawn, and trailing-7-day scores published hourly to ENS.</p>`)}
+      <!-- TEMPORARY (demo window): "trailing-1-day" tracks WINDOW_SECONDS in
+           cre/lib/reputation.js; restore "trailing-7-day" when it goes back. -->
+      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written through the real KeystoneForwarder, refunds credited and withdrawn, and trailing-1-day scores published hourly to ENS.</p>`)}
 
     ${entry('05', html`
       <h2>Tell us what you are building</h2>
