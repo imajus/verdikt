@@ -239,14 +239,9 @@ const finish = (
   result: Record<string, unknown>
 ): string => {
   const payload = JSON.stringify({ requestId: request.requestId, ...result });
-  // TEMPORARY (remove alongside the catch-block logging below): callbackUrl
-  // and a response status are not sensitive — they're the proxy's own public
-  // URL and an HTTP status code, never the observed payload — so logging them
-  // is safe even to keep in mind for a real TEE, unlike the catch below.
-  runtime.log(`finish(): callbackUrl=${request.callbackUrl ?? '(none)'}`);
   if (request.callbackUrl) {
     try {
-      const response = new HTTPClient()
+      new HTTPClient()
         .sendRequest(runtime, {
           url: request.callbackUrl,
           method: 'POST',
@@ -259,16 +254,9 @@ const finish = (
           }
         })
         .result();
-      runtime.log(`finish(): callback POST returned status ${response.statusCode}`);
-    } catch (error) {
-      // TEMPORARY (remove before any real TEE deployment — production CRE
-      // enrollment is not live yet, and `cre workflow simulate` explicitly
-      // is not a real TEE, so this is safe for now): the callback is failing
-      // silently against the runner, and the blanket swallow below makes it
-      // undiagnosable. Error message only, never `payload` or `result`.
-      runtime.log(`finish(): callback POST failed: ${error instanceof Error ? error.message : String(error)}`);
-      // Deliberately not logged in the general case: the payload is in scope
-      // here and log output leaves the enclave.
+    } catch {
+      // Deliberately not logged: the payload is in scope here and log output
+      // leaves the enclave.
     }
   }
   return payload;
