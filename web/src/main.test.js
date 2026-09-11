@@ -39,6 +39,8 @@ vi.mock('@awesome.me/webawesome/dist/components/textarea/textarea.js', () => ({}
 /** @type {any} */ let app;
 /** @type {Record<string, any>} */ let controls;
 /** @type {Map<string, Function>} */ let events;
+/** @type {import('vitest').Mock} */ let pushState;
+/** @type {import('vitest').Mock} */ let replaceState;
 async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 function authenticate() { state.session = { ...state.account, expiresAt: Date.now() + 60000 }; }
 function change(address = OWNER, chainId = 11155111, identityChanged = true) {
@@ -63,7 +65,9 @@ beforeEach(async () => {
   app = { querySelector: (/** @type {string} */ selector) => controls[selector.slice(1)], updateComplete: Promise.resolve(), addEventListener: (/** @type {string} */ name, /** @type {Function} */ fn) => events.set(name, fn) };
   vi.stubGlobal('document', { getElementById: () => ({ append: vi.fn() }), createElement: () => app });
   vi.stubGlobal('location', new URL(`https://verdikt.example/?provider=${OWNER}`));
-  vi.stubGlobal('history', { replaceState: vi.fn(), pushState: vi.fn() });
+  pushState = vi.fn();
+  replaceState = vi.fn();
+  vi.stubGlobal('history', { replaceState, pushState });
   vi.stubGlobal('window', { addEventListener: vi.fn() });
   await import('./main.js'); await settle();
 });
@@ -142,19 +146,22 @@ it('reports a rejected provider sign-in without reconnecting or enabling actions
   expect(state.connectWallet).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).toBeNull();
 });
+it('rewrites a legacy ?provider= deep link to the canonical path on load', () => {
+  expect(replaceState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+});
 it('navigates to the provider console after an explicit wallet connect', async () => {
   await events.get('wallet-connect')?.(); await settle();
-  expect(history.pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+  expect(pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
 });
 it('does not push a redundant history entry when reconnecting the same provider wallet', async () => {
   // Update location to reflect the canonical path that syncRoute would have rewritten to
   vi.stubGlobal('location', new URL(`https://verdikt.example/provider/${OWNER}`));
-  history.pushState.mockClear();
+  pushState.mockClear();
   await events.get('wallet-connect')?.(); await settle();
-  expect(history.pushState).not.toHaveBeenCalled();
+  expect(pushState).not.toHaveBeenCalled();
 });
 it('does not navigate to the provider console on a silent wallet restoration', async () => {
   change(OTHER);
   await settle();
-  expect(history.pushState).not.toHaveBeenCalled();
+  expect(pushState).not.toHaveBeenCalled();
 });

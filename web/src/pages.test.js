@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { render as renderToIterable } from '@lit-labs/ssr';
 import { landing, legalFooter, privacy, terms } from './pages.js';
 
+/** @param {unknown} template */
 const stringify = (template) => Array.from(renderToIterable(template)).join('');
 
 describe('static pages', () => {
