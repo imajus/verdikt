@@ -41,9 +41,10 @@ export class VerdiktSubscribe extends LitElement {
       return html`<p class="form-done" role="status">Noted — <code>${this.email}</code> gets one message per milestone, and nothing else.</p>`;
     }
     if (!this.endpoint) {
-      // The entry's own link row sits below both forms and reaches the same two
-      // places, so an off-state that repeated them would say it twice.
-      return html`<p class="form-off">No list is wired into this build yet, so there is nothing here to submit to. Every milestone lands in the repository first.</p>`;
+      // Says what the visitor gets, not which VITE_ value is missing. The
+      // entry's own link row sits below both forms and reaches the repository,
+      // so this names it without spending a second link on it.
+      return html`<p class="form-off">The mailing list is not open yet. Until it is, the repository is where each milestone lands first.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>

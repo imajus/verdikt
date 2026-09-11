@@ -64,9 +64,10 @@ export class VerdiktContact extends LitElement {
       return html`<p class="form-done" role="status">Sent. You will get an answer at <code>${this.email}</code> — from a person, not a sequence.</p>`;
     }
     if (!this.endpoint) {
-      // Both links this used to carry now sit in the entry's own link row,
-      // below this form, and reach the same person.
-      return html`<p class="form-off">No contact endpoint is wired into this build yet, so there is nothing here to submit to. An issue on the repository reaches the same person.</p>`;
+      // Same register as the subscribe off-state: what the visitor gets, not
+      // which VITE_ value is missing. Both links this used to carry now sit in
+      // the entry's own link row below this form.
+      return html`<p class="form-off">This form is not open yet. An issue on the repository reaches the same person it would.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>
