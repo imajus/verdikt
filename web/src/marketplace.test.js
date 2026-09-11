@@ -233,6 +233,51 @@ describe('loadMarketplace', () => {
   });
 });
 
+// `deregister` delists (Specification.md §3) and the proxy answers
+// `service_not_active` 503 to any call for one. A retired service that stays
+// on the marketplace is the marketplace advertising a route that cannot be
+// taken — and, because deregistering on Arc leaves the ENS records standing,
+// a clean retired record sorts above live services under byReputation.
+describe('a retired service', () => {
+  const retired = () =>
+    deps({
+      services: [
+        service('weather', HONEST, { status: 'DEREGISTERED', deposit: 0n }),
+        service('lite', FLAKY)
+      ],
+      verdicts: [verdict(HONEST, 'PASS', '0x01')],
+      records: {
+        weather: record({}),
+        lite: record({ slug: 'lite', name: 'lite.verdikt.eth', serviceId: FLAKY })
+      }
+    });
+
+  it('is left off the public marketplace listing', async () => {
+    const html = renderApp(await loadMarketplace(retired()), 'demo', 'marketplace', null);
+    expect(html).not.toContain('weather.verdikt.eth');
+    expect(html).toContain('lite.verdikt.eth');
+  });
+
+  it('is not counted among the platform’s services', async () => {
+    const { stats } = await loadMarketplace(retired());
+    expect(stats).toMatchObject({ services: 1, active: 1, suspended: 0 });
+  });
+
+  // Verdict history is keyed by serviceId and stays on Arc forever, so an
+  // existing link to a retired service's page must still resolve rather than
+  // 404 the record it is citing.
+  it('still has its own page, so a link to its verdict history keeps working', async () => {
+    const html = renderApp(await loadMarketplace(retired()), 'demo', 'service', 'weather');
+    expect(html).toContain('What it delivered');
+  });
+
+  it('says on that page that it has been retired', async () => {
+    const { services } = await loadMarketplace(retired());
+    const listing = /** @type {Listing} */ (services.find((entry) => entry.slug === 'weather'));
+    expect(renderDetail(listing)).toContain('retired');
+  });
+});
+
 describe('byReputation', () => {
   /** @param {Partial<Listing>} overrides @returns {Listing} */
   const listing = (overrides) =>

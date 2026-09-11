@@ -3,6 +3,7 @@ import { formatMinorUsdc, formatNativeUsdc, formatScore, formatWhen, scoreBand, 
 import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
+import { isListed } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
@@ -92,6 +93,7 @@ export const detailTemplate = (listing) => {
       </dl>
     </header>
     ${unpublished ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>` : nothing}
+    ${listing.status === 'DEREGISTERED' ? html`<p class="aside">This service has been retired by its provider: its bond was returned, the proxy no longer routes calls to it, and the slug cannot be registered again. Its verdict history is on Arc and is shown below.</p>` : nothing}
     ${listing.namingLayer === 'unreachable' ? html`<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>` : nothing}
     ${listing.contested ? html`<p class="aside warn">This slug's ENS subname and its Arc registration are owned by different addresses. The proxy refuses to route it until they agree — see <a href="/how">how it works</a>.</p>` : nothing}
     <section class="block">
@@ -238,10 +240,14 @@ export class VerdiktApp extends LitElement {
   }
   /** @param {PlatformStats} stats @param {Listing[]} services @param {(path: string) => void} go */
   renderMarketplace(stats, services, go) {
+    // Retired services are dropped here rather than in loadMarketplace: they
+    // stay in `marketplace.services` so their own page and their provider's
+    // console still find them by slug. See isListed (marketplace.js).
+    const listed = services.filter(isListed);
     return html`${pageHead('Marketplace', TAGLINE, html`<p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p>`)}
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
-      <section class="listing flush">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
-      <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${services.length ? html` · <a href=${providerUrl(services[0].provider)} @click=${navigateOnClick(go, providerUrl(services[0].provider))}>provider view</a>` : nothing}</footer>`;
+      <section class="listing flush">${listingHead()}${listed.length ? listed.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
+      <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${listed.length ? html` · <a href=${providerUrl(listed[0].provider)} @click=${navigateOnClick(go, providerUrl(listed[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */
   renderService(services, slug, go) {
