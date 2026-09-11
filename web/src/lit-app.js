@@ -124,7 +124,7 @@ export const detailTemplate = (listing) => {
     </section>`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
+/** @param {'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
 const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
@@ -202,7 +202,7 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'light'|'dark'} */ this.theme = 'light';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
   }
   createRenderRoot() { return this; }
@@ -265,6 +265,22 @@ export class VerdiktApp extends LitElement {
         <section class="editor block"><h3>SLA editor <small>${listing.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
         <section class="block"><h3>Bond <small>${listing.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
   }
+  /** @param {(path: string) => void} go */
+  renderRegister(go) {
+    const account = getConnectedAccount();
+    const auth = this.writeAuthorization(account?.address ?? null);
+    const consoleUrl = account ? providerUrl(account.address) : PROVIDER_PATH;
+    return html`${pageHead('List a service', 'Claim the ENS subname, register the bond and publish the SLA that calls will be judged against.')}
+      ${this.mode !== 'live' ? html`<p class="aside warn">Registration needs a live chain. This build is showing seeded demo data.</p>` : nothing}
+      <section class="block">
+        ${!account
+          ? html`<p>Connect a wallet to register a service.${this.mode === 'live' ? '' : ' Provider consoles read Arc Testnet; this build is showing seeded demo data.'}</p>${this.mode === 'live' ? html`<wa-button type="button" appearance="outlined" size="s" @click=${this.connect}>Connect wallet</wa-button>` : nothing}`
+          : !auth.canWrite
+            ? html`<p>${auth.signedIn ? 'Switch to a supported network to register a service.' : 'Sign in once to register a service. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}`
+            : html`<verdikt-wizard id="wizard-mount"></verdikt-wizard>`}
+      </section>
+      <p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>`;
+  }
   render() {
     /** @type {(path: string) => void} */
     const go = (path) => this.go(path);
@@ -282,6 +298,11 @@ export class VerdiktApp extends LitElement {
     // nothing to read off a chain either.
     if (this.route.view === 'provider' && !this.route.address) {
       return html`${navBar}${providerPrompt(this.mode, account, this.route.rejected ?? null, () => this.connect(), go)}${legalFooter(go)}`;
+    }
+    // /register needs no listing to be itself — like landing/terms/privacy,
+    // it must survive a dead RPC or a marketplace still in flight.
+    if (this.route.view === 'register') {
+      return html`${navBar}${this.renderRegister(go)}${legalFooter(go)}`;
     }
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
     if (!this.marketplace) return html`${navBar}${skeleton()}${legalFooter(go)}`;

@@ -587,6 +587,44 @@ describe('who gets a service page’s write controls', () => {
     expect(present(html)).toEqual([]);
   });
 });
+
+describe('the registration page', () => {
+  /** @param {any} account */
+  const as = (account) => { wallet.account = account; };
+
+  afterEach(() => as(null));
+
+  it('renders with no marketplace loaded at all', () => {
+    expect(renderApp(null, 'live', 'register', null)).toContain('List a service');
+  });
+
+  it('prompts a visitor with no wallet connected to connect one', () => {
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('Connect a wallet');
+    expect(html).not.toContain('wizard-mount');
+  });
+
+  it('prompts a connected but unsigned wallet to sign in, not the wizard', () => {
+    as({ address: '0xA11ce00000000000000000000000000000000001', chainId: ARC.chainId });
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('Enable provider actions');
+    expect(html).not.toContain('wizard-mount');
+  });
+
+  it('mounts the wizard for a signed-in, supported-chain wallet', () => {
+    as({ address: '0xA11ce00000000000000000000000000000000001', chainId: ARC.chainId });
+    wallet.session = { address: '0xA11ce00000000000000000000000000000000001', expiresAt: Date.now() + 60_000 };
+    const html = renderApp(null, 'live', 'register', null);
+    expect(html).toContain('wizard-mount');
+    wallet.session = null;
+  });
+
+  it('shows a demo-mode notice instead of a wallet prompt', () => {
+    const html = renderApp(null, 'demo', 'register', null);
+    expect(html).toContain('List a service');
+    expect(html).not.toContain('wizard-mount');
+  });
+});
 // against: a section without a mount behind it is a dead control, a mount
 // with no section around it is an invisible one. These four cases are the
 // same four that function distinguishes.
