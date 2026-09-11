@@ -42,6 +42,9 @@ describe('parseRoute', () => {
     expect(parseRoute(new URL('https://verdikt.example/terms')).view).toBe('terms');
     expect(parseRoute(new URL('https://verdikt.example/privacy')).view).toBe('privacy');
   });
+  it('reads the register path', () => {
+    expect(parseRoute(new URL('https://verdikt.example/register'))).toEqual({ view: 'register', slug: null, address: null, rejected: null, canonicalPath: '/register' });
+  });
   it('tolerates a trailing slash', () => {
     expect(parseRoute(new URL('https://verdikt.example/marketplace/')).view).toBe('marketplace');
   });
@@ -86,5 +89,8 @@ describe('titleFor', () => {
   it('titles both provider states the same', () => {
     expect(titleFor(parseRoute(new URL('https://verdikt.example/provider')))).toBe('Provider — Verdikt');
     expect(titleFor(parseRoute(new URL(`https://verdikt.example/provider/${OWNER}`)))).toBe('Provider — Verdikt');
+  });
+  it('titles the register page', () => {
+    expect(titleFor(parseRoute(new URL('https://verdikt.example/register')))).toBe('List a service — Verdikt');
   });
 });
