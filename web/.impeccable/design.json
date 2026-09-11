@@ -341,6 +341,10 @@
       "record-caption": {
         "displayName": "Record Caption",
         "purpose": "Uppercase mono heading of an outer-margin annotation block. Margin only; not a kicker above a heading in the measure."
+      },
+      "landing-body": {
+        "displayName": "Landing Body",
+        "purpose": "The landing page's own base reading size, +10% over the site-wide body default (16.5 -> 18.15px). Scoped to `.entry-body > p`, which renders only inside the landing page's entries."
       }
     },
     "shadows": [

@@ -14,6 +14,14 @@
 // deep link to any provider's page. parseRoute still reads it, but always
 // returns the canonical `/provider/0x…` path so main.js can rewrite the
 // address bar forward.
+//
+// An address is validated here and nowhere else: past parseRoute, `address`
+// is either a real address or null, and null means no provider is selected
+// at all. The connected wallet never fills that gap — routing decides whose
+// console this is, authorization only decides what renders on it
+// (docs/superpowers/specs/2026-09-11-provider-route-authorization-design.md).
+
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 
 export const LANDING_PATH = '/';
 export const MARKETPLACE_PATH = '/marketplace';
@@ -67,37 +75,51 @@ function normalize(pathname) {
  *   view: 'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy',
  *   slug: string|null,
  *   address: string|null,
+ *   rejected: string|null,
  *   canonicalPath: string
  * }}
  */
 export function parseRoute(url) {
   const legacyProvider = url.searchParams.get('provider');
-  if (legacyProvider) return { view: 'provider', slug: null, address: legacyProvider, canonicalPath: providerUrl(legacyProvider) };
+  // A junk legacy param is rewritten away rather than reported: the URL that
+  // carried it does not survive, so there would be nothing on screen for a
+  // message to refer to.
+  if (legacyProvider) {
+    return ADDRESS.test(legacyProvider)
+      ? { view: 'provider', slug: null, address: legacyProvider, rejected: null, canonicalPath: providerUrl(legacyProvider) }
+      : { view: 'provider', slug: null, address: null, rejected: null, canonicalPath: PROVIDER_PATH };
+  }
 
   const path = normalize(url.pathname);
   const staticView = STATIC_VIEWS[path];
-  if (staticView) return { view: /** @type {any} */ (staticView), slug: null, address: null, canonicalPath: path };
+  if (staticView) return { view: /** @type {any} */ (staticView), slug: null, address: null, rejected: null, canonicalPath: path };
 
   const service = path.match(/^\/services\/([^/]+)$/);
   if (service) {
     try {
       const slug = decodeURIComponent(service[1]);
-      return { view: 'service', slug, address: null, canonicalPath: path };
+      return { view: 'service', slug, address: null, rejected: null, canonicalPath: path };
     } catch (e) {
       if (e instanceof URIError) {
-        return { view: 'marketplace', slug: null, address: null, canonicalPath: MARKETPLACE_PATH };
+        return { view: 'marketplace', slug: null, address: null, rejected: null, canonicalPath: MARKETPLACE_PATH };
       }
       throw e;
     }
   }
 
-  if (path === PROVIDER_PATH) return { view: 'provider', slug: null, address: null, canonicalPath: path };
+  if (path === PROVIDER_PATH) return { view: 'provider', slug: null, address: null, rejected: null, canonicalPath: path };
   const provider = path.match(/^\/provider\/(.+)$/);
-  if (provider) return { view: 'provider', slug: null, address: provider[1], canonicalPath: path };
+  if (provider) {
+    // Unlike an unrecognized path, a malformed address keeps its URL: the
+    // page names what it rejected, which a rewrite to /provider could not.
+    return ADDRESS.test(provider[1])
+      ? { view: 'provider', slug: null, address: provider[1], rejected: null, canonicalPath: path }
+      : { view: 'provider', slug: null, address: null, rejected: provider[1], canonicalPath: path };
+  }
 
   // A typo or an old bookmark to a path that never existed isn't worth a
   // dedicated 404 view — send it to the listing.
-  return { view: 'marketplace', slug: null, address: null, canonicalPath: MARKETPLACE_PATH };
+  return { view: 'marketplace', slug: null, address: null, rejected: null, canonicalPath: MARKETPLACE_PATH };
 }
 
 const TITLES = /** @type {Record<string, string>} */ ({

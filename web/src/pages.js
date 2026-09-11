@@ -8,7 +8,7 @@
 // to landing.js; TAGLINE stays because every page's head uses it.
 
 import { html, nothing } from 'lit';
-import { HOW_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
+import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick, providerUrl } from './router.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
 
@@ -22,6 +22,29 @@ export const pageHead = (title, description, aside = nothing) => html`
     <div><h1>${title}</h1><p class="tagline">${description}</p></div>
     ${aside}
   </header>`;
+
+// `/provider` with no valid address in it. A provider console is a public
+// page keyed by the address in its URL, so with no address there is no
+// console to show — and the connected wallet does not get to stand in for
+// one, which is what this page exists to say out loud
+// (docs/superpowers/specs/2026-09-11-provider-route-authorization-design.md).
+// It reads no chain data, so it renders before the marketplace has loaded and
+// survives a dead RPC.
+/** @param {'live'|'demo'} mode @param {string|null} account @param {string|null} rejected @param {() => void} connect @param {(path: string) => void} go */
+export const providerPrompt = (mode, account, rejected, connect, go) => html`
+  ${pageHead('Provider', 'A provider console is a public page: one address’s services, bonds and verdicts, addressed by that address.')}
+  ${rejected ? html`<p class="aside warn"><code>${rejected}</code> is not a wallet address.</p>` : nothing}
+  <section class="block">
+    ${account
+      ? html`
+        <p>Connected as <code>${account}</code>.</p>
+        <p><a href=${providerUrl(account)} @click=${navigateOnClick(go, providerUrl(account))}>Open your console →</a></p>`
+      : html`
+        <p>No provider selected.${mode === 'live' ? ' Connect a wallet to open your own console, or reach one from a service in the marketplace.' : ' Provider consoles read Arc Testnet; this build is showing seeded demo data.'}</p>
+        ${mode === 'live' ? html`<wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>` : nothing}`}
+    <p class="aside">Every console is readable by anyone — the address in the URL picks which one. Signing in with that address is what adds the controls to manage it.
+      <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</a>.</p>
+  </section>`;
 
 export const terms = () => html`
   ${pageHead('Terms of Service', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}

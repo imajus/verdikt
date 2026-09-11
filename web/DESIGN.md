@@ -71,6 +71,12 @@ typography:
     fontWeight: 400
     lineHeight: 1.5
     letterSpacing: "0.1em"
+  landing-body:
+    fontFamily: "IBM Plex Sans, Helvetica Neue, Helvetica, Arial, sans-serif"
+    fontSize: "18.15px"
+    fontWeight: 400
+    lineHeight: 1.5
+    letterSpacing: "normal"
 rounded:
   none: "0"
   hairline: "1px"

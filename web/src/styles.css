@@ -398,7 +398,14 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 }
 .entry:first-child .entry-index { padding-top: 12px; }
 .entry-body { grid-column: 2; min-width: 0; }
-.entry-body > p { max-width: 70ch; color: var(--ink-2); }
+/* The landing page's own base text size, +10% over the site-wide 16.5px body
+   default (16.5 * 1.1 = 18.15) — scoped here because `.entry-body` renders
+   only inside the landing page's entries, nowhere else in the app. Headings,
+   labels, buttons, mono record type and the margin's smaller caption scale
+   are deliberate steps of their own and are left at their documented sizes;
+   this touches only the page's ambient reading text. `line-height: 1.5` on
+   `body` is unitless, so it recomputes from this size automatically. */
+.entry-body > p { max-width: 70ch; color: var(--ink-2); font-size: 18.15px; }
 .entry-body > p:last-child { margin-bottom: 0; }
 .entry-body h2 {
   font: 600 26px/1.2 var(--display); margin: 0 0 14px; letter-spacing: -0.02em;
