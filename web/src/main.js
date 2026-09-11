@@ -84,7 +84,8 @@ async function main() {
   }
 }
 
-function draw() {
+/** @param {{ scrollToTop?: boolean }} [options] */
+function draw(options = {}) {
   const route = syncRoute();
   app.mode = mode;
   app.theme = savedTheme();
@@ -104,6 +105,9 @@ function draw() {
   if (route.view === 'provider' && mode === 'live') {
     app.updateComplete.then(() => mountProviderConsole(route));
   }
+  // History navigation owns restoration for popstate. Only a newly pushed
+  // route starts at its heading, and only once Lit has put that heading in DOM.
+  if (options.scrollToTop) app.updateComplete.then(() => window.scrollTo(0, 0));
 }
 
 function clearProviderControls(reset = true) {
@@ -240,8 +244,9 @@ app.addEventListener('wallet-disconnect', async () => {
 });
 app.addEventListener('navigate', (event) => {
   const path = /** @type {CustomEvent<string>} */ (event).detail;
-  if (path !== location.pathname + location.search) history.pushState(null, '', path);
-  draw();
+  const changed = path !== location.pathname + location.search;
+  if (changed) history.pushState(null, '', path);
+  draw({ scrollToTop: changed });
 });
 app.addEventListener('theme-select', (event) => {
   saveTheme(/** @type {CustomEvent<'light'|'dark'>} */ (event).detail);

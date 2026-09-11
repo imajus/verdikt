@@ -41,8 +41,10 @@ vi.mock('@awesome.me/webawesome/dist/components/textarea/textarea.js', () => ({}
 /** @type {any} */ let app;
 /** @type {Record<string, any>} */ let controls;
 /** @type {Map<string, Function>} */ let events;
+/** @type {Map<string, Function>} */ let windowEvents;
 /** @type {import('vitest').Mock} */ let pushState;
 /** @type {import('vitest').Mock} */ let replaceState;
+/** @type {import('vitest').Mock} */ let scrollTo;
 async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 function authenticate() { state.session = { ...state.account, expiresAt: Date.now() + 60000 }; }
 function change(address = OWNER, chainId = 11155111, identityChanged = true) {
@@ -64,13 +66,15 @@ beforeEach(async () => {
     clear() { this.deps = null; this.listing = null; this.draft = ''; this.step = 1; }
   }]));
   events = new Map();
+  windowEvents = new Map();
   app = { querySelector: (/** @type {string} */ selector) => controls[selector.slice(1)], updateComplete: Promise.resolve(), addEventListener: (/** @type {string} */ name, /** @type {Function} */ fn) => events.set(name, fn) };
   vi.stubGlobal('document', { getElementById: () => ({ append: vi.fn() }), createElement: () => app });
   vi.stubGlobal('location', new URL(`https://verdikt.example/?provider=${OWNER}`));
   pushState = vi.fn();
   replaceState = vi.fn();
+  scrollTo = vi.fn();
   vi.stubGlobal('history', { replaceState, pushState });
-  vi.stubGlobal('window', { addEventListener: vi.fn() });
+  vi.stubGlobal('window', { addEventListener: (/** @type {string} */ name, /** @type {Function} */ listener) => windowEvents.set(name, listener), scrollTo });
   await import('./main.js'); await settle();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -161,6 +165,17 @@ it('does not push a redundant history entry when reconnecting the same provider 
   pushState.mockClear();
   await events.get('wallet-connect')?.(); await settle();
   expect(pushState).not.toHaveBeenCalled();
+});
+it('scrolls to the new page heading after Lit renders a forward navigation', async () => {
+  events.get('navigate')?.({ detail: '/terms' });
+  expect(scrollTo).not.toHaveBeenCalled();
+  await settle();
+  expect(scrollTo).toHaveBeenCalledWith(0, 0);
+});
+it('leaves scroll restoration to the browser for back and forward history', async () => {
+  windowEvents.get('popstate')?.();
+  await settle();
+  expect(scrollTo).not.toHaveBeenCalled();
 });
 // /provider selects no provider, so there is nothing for the controls to act
 // on — not even for the wallet that would own the console one path segment

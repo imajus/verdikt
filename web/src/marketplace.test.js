@@ -334,6 +334,12 @@ describe('rendering', () => {
     expect(html).toContain('back to the marketplace');
   });
 
+  it('identifies standalone service details as seeded in demo mode', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
+    expect(html).toContain('Showing seeded data, not a live chain');
+    expect(html).toContain('VITE_ARC_RPC_URL');
+  });
+
   it('shows what a service promised alongside what it delivered', async () => {
     const { services } = await build();
     const html = renderDetail(services[0]);

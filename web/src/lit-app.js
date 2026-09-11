@@ -244,7 +244,7 @@ export class VerdiktApp extends LitElement {
     const listing = services.find((service) => service.slug === slug) ?? null;
     const back = html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>`;
     if (!listing) return html`${back}<p class="empty">No service found for “${slug}”.</p>`;
-    return html`${back}${detailTemplate(listing)}`;
+    return html`${back}${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}${detailTemplate(listing)}`;
   }
   render() {
     /** @type {(path: string) => void} */
