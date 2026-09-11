@@ -134,7 +134,7 @@ const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) =
     const active = view === activeView || (activeView === 'marketplace' && view === 'service');
     return html`<a href=${path} class="nav-item ${active ? 'active' : ''}" data-nav=${activeView} @click=${navigateOnClick(go, path)}>${label}</a>`;
   };
-  const themeToggle = html`<wa-button class="theme-toggle" appearance="outlined" size="s" aria-label=${theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} @click=${() => changeTheme(theme === 'light' ? 'dark' : 'light')}>${theme === 'light' ? sunIcon() : moonIcon()}</wa-button>`;
+  const themeToggle = html`<button type="button" class="theme-toggle" aria-label=${theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} @click=${() => changeTheme(theme === 'light' ? 'dark' : 'light')}>${theme === 'light' ? sunIcon() : moonIcon()}</button>`;
   /** @param {CustomEvent<{ item: { value: string } }>} event */
   const selectWalletAction = (event) => {
     if (event.detail.item.value === 'change') connect();
