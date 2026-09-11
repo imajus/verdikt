@@ -103,7 +103,6 @@ describe('the wizard element', () => {
     ready(el);
     for (let i = 0; i < 4; i++) await el.runStep(i);
     expect(el.done).toBe(4);
-    expect(el.status).toBe('Done.');
     expect(el.deps.onDone).toHaveBeenCalledOnce();
   });
 

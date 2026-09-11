@@ -73,13 +73,13 @@ export class VerdiktWizard extends LitElement {
   static properties = {
     deps: { attribute: false }, message: {}, step: { state: true }, slug: { state: true },
     availability: { state: true }, available: { state: true }, url: { state: true }, sla: { state: true },
-    done: { state: true }, execError: { state: true }, pending: { state: true }, status: { state: true }
+    done: { state: true }, execError: { state: true }, pending: { state: true }
   };
   constructor() {
     super();
     /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void, pushStep:(step:number)=>void, backStep:()=>void}|null} */ this.deps = null;
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
-    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
+    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
     this.checkToken = 0;
     this.slugDebounceTimer = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
   }
@@ -89,7 +89,7 @@ export class VerdiktWizard extends LitElement {
     this.checkToken++;
     clearTimeout(this.slugDebounceTimer ?? undefined);
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
-    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
+    this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
   }
   // The four steps share one URL, so each forward move records a same-URL
   // history entry and in-page Back walks that history rather than pushing a
@@ -162,15 +162,11 @@ export class VerdiktWizard extends LitElement {
     const step = steps[index];
     this.pending = true;
     this.execError = '';
-    this.status = '';
     try {
       await step.ensure();
       await step.run();
       this.done = index + 1;
-      if (this.done === steps.length) {
-        this.status = 'Done.';
-        deps.onDone();
-      }
+      if (this.done === steps.length) deps.onDone();
     } catch (error) {
       this.execError = formatTxError(error);
     } finally {
@@ -236,7 +232,7 @@ export class VerdiktWizard extends LitElement {
       <section class="block">
         <h3>Transactions <small>${steps.length}, across two chains, in this order</small></h3>
         <ol class="wizard-run">${steps.map((step, i) => this.renderRunRow(step, i))}</ol>
-        ${finished ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service</wa-button>` : nothing}
+        ${finished ? html`<wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service</wa-button>` : nothing}
       </section>
       </div>`;
   }
