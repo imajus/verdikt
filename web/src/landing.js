@@ -21,8 +21,6 @@ import { HOW_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick } from './ro
 import { TAGLINE } from './pages.js';
 import './diagram.js';
 
-const GITHUB_URL = 'https://github.com/imajus/verdikt';
-
 /**
  * Splits "12.34 USDC" so the unit can be set quieter than the figure. Shared
  * with the detail and provider views, which set amounts the same way.
@@ -160,34 +158,25 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
 
     ${entry('02', html`
       <h2>The payment is verifiable. The delivery is not.</h2>
-      <p>x402 settles a call and its price inside one request, which is the whole appeal: an agent can pay an endpoint it has never met, in one round trip, with no account. What it cannot do is prove it got what it paid for.</p>
-      <p>So the promise lives in a README and the record of whether the promise was kept lives nowhere. When a response comes back late, or shaped wrong, or carrying an error under a 200, there is nothing to appeal to — the money moved, the endpoint answered, and an arbitration queue would cost more than the call it was arguing about. Marketplaces paper over this with a reputation score computed by whoever runs the marketplace: a number the provider cannot audit and the caller cannot verify.</p>
-      <p>A provider has the mirror of the same problem. Its reliability is its own claim about itself, so running a genuinely dependable endpoint buys nothing that a confident landing page does not.</p>
-      <p>Verdikt deletes the claim. The SLA is a text record only the provider can write, the judgement runs inside an enclave neither side controls, and the consequence is a refund drawn from a bond that was posted before the first call.</p>`, html`
+      <p>x402 proves a call was paid for. Nothing proves it was answered. The promise lives in a README, the record of whether it was kept lives nowhere, and an arbitration queue would cost more than the call it was arguing about — so reliability stays whatever the provider says it is.</p>
+      <p>Verdikt deletes the claim.</p>`, html`
       <p class="note-head">Why no dispute layer</p>
       <p class="note-line">A refund is capped at <code>min(fixed refund, what was paid, what remains of the bond)</code> — never a penalty on top. A FAIL someone manufactured is never worth more than the call it broke, which is what lets the verdict be final with nothing to appeal to.</p>`)}
 
     ${entry('03', html`
       <h2>The request path</h2>
-      <p>Two chains, each for one reason. Arc holds the registry, the bond, the verdicts and the refunds — USDC is its native gas token, so payment and refund are the same asset on the same chain. Ethereum Sepolia holds ENS, where the SLA lives as a text record scoped per key, so the provider can write its promise and only the verification signer can write the scores.</p>
+      <p>Two chains, one reason each. USDC is Arc’s native gas token, so the payment, the bond and the refund are all the same asset on the same chain.</p>
       <verdikt-diagram class="diagram"></verdikt-diagram>
       <p class="figure-source">The same loop in prose, including what happens to a 4xx and why an empty window scores 1000: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`, html`
       <p class="note-head">What never leaves</p>
       <p class="note-line">The observed value stays off the chain. It is a slice of a response the agent paid for, so it comes back to that agent on its own response as <code>x-verdikt-expected</code> and <code>x-verdikt-actual</code>, and to nobody else.</p>`, true)}
 
     ${entry('04', html`
-      <h2>When the next piece lands</h2>
-      <p>Three things here are deliberately unfinished, and each is argued in the open rather than hidden: a paid call carried end to end, production enrollment of the verification workflow, and the recorded walkthrough. Leave an address and you get one short message as each lands. No digest, no drip, nothing else.</p>
-      <verdikt-subscribe></verdikt-subscribe>`, html`
-      <p class="note-head">Already shipped</p>
-      <!-- TEMPORARY (demo window): "trailing-1-day" tracks WINDOW_SECONDS in
-           cre/lib/reputation.js; restore "trailing-7-day" when it goes back. -->
-      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written through the real KeystoneForwarder, refunds credited and withdrawn, and trailing-1-day scores published hourly to ENS.</p>`)}
-
-    ${entry('05', html`
-      <h2>Tell us what you are building</h2>
-      <p>Three kinds of message are useful here: you have a service worth listing and want to know what bonding it costs; you are pointing a paying agent at somebody else’s endpoint and want the proxy in front of it; or you have found a hole in the mechanism. The third is the most welcome of the three.</p>
+      <h2>Leave an address, or a message</h2>
+      <p>Three things here are deliberately unfinished, and each is argued in the open rather than hidden: a paid call carried end to end, production enrollment of the verification workflow, and the recorded walkthrough. One short message as each lands.</p>
+      <verdikt-subscribe></verdikt-subscribe>
+      <p>Or write instead. A hole in the mechanism is the most welcome thing in the inbox.</p>
       <verdikt-contact></verdikt-contact>`, html`
-      <p class="note-head">Or argue in public</p>
-      <p class="note-line">The mechanism, the open risks and the unfinished tasks are all in the repository. <a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">imajus/verdikt</a> — an issue reaches the same person a message does, and leaves a trail.</p>`)}
+      <p class="note-head">Already shipped</p>
+      <p class="note-line">The loop runs end to end on public testnets: two services bonded, verdicts written through the real KeystoneForwarder, refunds credited and withdrawn, and scores published hourly to ENS.</p>`)}
   </div>`;

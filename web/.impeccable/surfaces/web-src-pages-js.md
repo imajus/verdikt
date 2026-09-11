@@ -25,6 +25,14 @@ The Privacy page gains a line because an email now leaves the page.
 The architecture section is a drawn request-path schematic with short labels;
 `/how` keeps the prose and the section links to it. No prose duplication.
 
+The sheet runs five entries, 00–04. Subscribe and contact share entry 04: they
+ask for the same thing, and split across two entries a demo build showed two
+"nothing is wired into this build" notices in a row. The copy budget is the
+rule that keeps the page scannable — an entry states its point once and lets
+the drawing, the form, or `/how` carry the rest. Anything the schematic already
+labels does not get a paragraph above it, and anything a form's own label or
+placeholder says does not get restated in the prose that introduces it.
+
 Unresolved: the two form endpoint URLs are not yet supplied.
 
 ## Direction contract
@@ -48,7 +56,9 @@ STORY: A provider or agent operator understands within one viewport that
 delivery here is judged per call against a published SLA and that failure
 refunds without arbitration; believes it because the figures and the latest
 verdict beside them were read off Arc in their own browser; then browses the
-marketplace, reads the path, or leaves an address.
+marketplace, reads the path, or leaves an address. They get there by reading
+five entries, not by reading an essay: entry 02 states the gap in two
+paragraphs and hands the answer to the drawing below it.
 
 FIRST VIEWPORT: Nav, then entry 00. The index rail runs down the far left in
 mono at 13px. `00` sits in it, level with a display line at 60px/1.02 across an

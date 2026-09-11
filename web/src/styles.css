@@ -595,6 +595,12 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    A field on this page is a line you write on, not a box dropped onto a
    ledger: no fill, no frame, one rule under it that thickens on focus. */
 
+/* Both forms sit in one entry, so the turn line between them needs a box to be
+   spaced from. The form elements render into light DOM and are inline by
+   default, which is a margin with nothing to push against. */
+verdikt-subscribe, verdikt-contact { display: block; }
+.entry-body > verdikt-subscribe + p { margin-top: 32px; }
+
 .ledger-form { margin: 22px 0 0; max-width: 30rem; }
 .ledger-field + .ledger-field { margin-top: 18px; }
 .ledger-field label { margin: 0 0 4px; }

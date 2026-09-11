@@ -43,7 +43,7 @@ export class VerdiktSubscribe extends LitElement {
       return html`<p class="form-done" role="status">Noted — <code>${this.email}</code> gets one message per milestone, and nothing else.</p>`;
     }
     if (!this.endpoint) {
-      return html`<p class="form-off">No list is wired into this build, so there is nothing here to submit to. <a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Watch the repository</a> instead — every milestone below lands there first.</p>`;
+      return html`<p class="form-off">No list is wired into this build, so there is nothing here to submit to. <a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Watch the repository</a> instead — each milestone lands there first.</p>`;
     }
     return html`
       <form class="ledger-form" novalidate @submit=${this.submit}>
