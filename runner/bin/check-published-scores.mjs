@@ -26,7 +26,30 @@ const LIVE = new Set(['ACTIVE', 'SUSPENDED']);
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+/**
+ * Refuse the SDK's public-RPC default rather than inherit it.
+ *
+ * `createRegistryReader` falls back to Arc's public endpoint, which cannot
+ * serve this scan: it rate-limits after three sequential `eth_getLogs` calls
+ * and a full registry scan is dozens. Unset, the check therefore fails in a
+ * way that reads like the publish failed, moments after a publish that
+ * succeeded — so it is worth naming the variable rather than guessing.
+ */
+function assertRpcConfigured() {
+  const missing = ['ARC_RPC_URL', 'SEPOLIA_RPC_URL'].filter((name) => !process.env[name]?.trim());
+  if (missing.length === 0) return;
+  throw new ConfigError(
+    `${missing.join(' and ')} unset. The scores were published — this check just cannot read them back, ` +
+      "because Arc's public default rate-limits well below a full registry scan. Set them on the runner " +
+      'container (runner/README.md, "Required environment variables").'
+  );
+}
+
+/** Distinguishes "could not check" from "checked, and scores are missing". */
+class ConfigError extends Error {}
+
 async function main() {
+  assertRpcConfigured();
   if (SETTLE_MS > 0) await sleep(SETTLE_MS);
 
   const services = (await createRegistryReader().listServices()).filter((service) => LIVE.has(service.status));
@@ -68,6 +91,14 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`check-published-scores failed: ${error.message}`);
+  // Both exit non-zero — a check that cannot run is not a pass — but the two
+  // send the operator to completely different places, so they must not read
+  // the same. The `cre` step has already printed a tx hash per service either
+  // way; that is the thread to pull if this is a config failure.
+  console.error(
+    error instanceof ConfigError
+      ? `check-published-scores could not run: ${error.message}`
+      : `check-published-scores failed: ${error.message}`
+  );
   process.exitCode = 1;
 });
