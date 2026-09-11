@@ -139,7 +139,9 @@ export class VerdiktWizard extends LitElement {
       } catch (error) {
         this.pending = false;
         this.execError = /** @type {Error} */ (error).message;
-        this.status = '';
+        // Keep naming the step that failed: Retry resumes from it, and no
+        // per-step list carries that fact any more.
+        this.status = `${i + 1}/${steps.length} ${steps[i].label}`;
         return;
       }
     }
@@ -175,9 +177,8 @@ export class VerdiktWizard extends LitElement {
         <div><dt>Bond</dt><dd>${deps.formatNativeUsdc(deps.depositAmount)}</dd></div>
       </dl>
       ${this.done === 0 ? html`<div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-register" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Register service</wa-button></div>` : nothing}
-      <ol class="wizard-progress">${steps.map((step, i) => html`<li class=${i < this.done ? 'done' : i === this.done && this.execError ? 'error' : ''}>${i + 1}/${steps.length} ${step.label} <small>${step.chain}</small></li>`)}</ol>
       ${this.execError
-        ? html`<p class="form-status" id="wizard-status">Failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>`
+        ? html`<p class="form-status" id="wizard-status">${this.status} — failed: ${this.execError}</p><wa-button type="button" id="wizard-retry" ?disabled=${this.pending} ?loading=${this.pending} @click=${this.execute}>Retry</wa-button>`
         : this.done === steps.length
           ? html`<p class="form-status" id="wizard-status">${this.status}</p><wa-button id="wizard-view-service" href=${serviceUrl(this.slug)} @click=${navigateOnClick(deps.go, serviceUrl(this.slug))}>View your service →</wa-button>`
           : this.status ? html`<p class="form-status" id="wizard-status">${this.status}</p>` : nothing}`;

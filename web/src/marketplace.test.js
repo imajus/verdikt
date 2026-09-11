@@ -514,28 +514,38 @@ describe('the provider view', () => {
 // shown only on your own page. Whether that page lets you proceed is its own
 // concern (Task 5) — this link must not itself require being signed in, or an
 // owner who hasn't signed in yet would have no way to find registration.
-describe('the provider console’s "add a service" link', () => {
+// Registering acts on the signed-in wallet, so the button appears only where
+// that wallet could actually use it: signed in, on its own console. A
+// console belonging to someone else never offers it, however you arrived.
+describe('the provider console’s "add a service" button', () => {
   const build = async () =>
     loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
-  /** @param {any} account */
-  const as = (account) => { wallet.account = account; };
+  /** @param {any} account @param {any} session */
+  const as = (account, session = null) => { wallet.account = account; wallet.session = session; };
+  const session = { address: PROVIDER, expiresAt: Date.now() + 60_000 };
 
-  afterEach(() => as(null));
+  afterEach(() => as(null, null));
 
-  it('shows it on your own console, connected or not signed in', async () => {
-    as({ address: PROVIDER, chainId: ARC.chainId });
+  it('shows it to the signed-in owner of this console', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, session);
     const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
     expect(html).toContain('href="/register"');
   });
 
-  it('does not show it on somebody else’s console', async () => {
-    const other = '0xB0b0000000000000000000000000000000000002';
-    as({ address: other, chainId: ARC.chainId });
+  it('withholds it from an owner who has connected but not signed in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, null);
     const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
     expect(html).not.toContain('href="/register"');
   });
 
-  it('does not show it to an unconnected visitor', async () => {
+  it('withholds it from a signed-in wallet viewing somebody else’s console', async () => {
+    const other = '0xB0b0000000000000000000000000000000000002';
+    as({ address: other, chainId: ARC.chainId }, { address: other, expiresAt: Date.now() + 60_000 });
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(html).not.toContain('href="/register"');
+  });
+
+  it('withholds it from an unconnected visitor', async () => {
     const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
     expect(html).not.toContain('href="/register"');
   });

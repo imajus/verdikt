@@ -154,6 +154,22 @@ describe('the wizard element', () => {
     expect(el.step).toBe(1);
   });
 
+  // Retry resumes from the step that failed, so which step that was has to
+  // survive on screen — it is no longer carried by a per-step list.
+  it('keeps naming the failed step alongside the failure', async () => {
+    const register = vi.fn(async () => { throw new Error('user rejected'); });
+    const el = mount();
+    el.deps = deps({ walletClientFor: (/** @type {string} */ chain) => (chain === 'arc' ? { writeContract: register } : { writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
+    el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}';
+    el.step = 4;
+    await el.execute();
+    expect(el.status).toContain('2/4');
+    expect(el.status).toContain('Register on Arc');
+    const html = stringify(el.render());
+    expect(html).toContain('2/4');
+    expect(html).toContain('user rejected');
+  });
+
   it('offers a link to the new service once registration finishes', async () => {
     const el = mount();
     el.deps = deps({ walletClientFor: () => ({ writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
