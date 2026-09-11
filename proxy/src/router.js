@@ -33,11 +33,19 @@ const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
  */
 const PAYMENT_HEADER_NAMES = ['payment-signature', 'x-payment'];
 
-/** @param {Headers} headers */
+/**
+ * Returns both the value and which of `PAYMENT_HEADER_NAMES` matched — the
+ * enclave replays the payment to the provider itself and must send it back
+ * under the same name, so the name is as load-bearing downstream as the
+ * value.
+ *
+ * @param {Headers} headers
+ * @returns {{ name: string, value: string } | null}
+ */
 const paymentHeaderOf = (headers) => {
   for (const name of PAYMENT_HEADER_NAMES) {
     const value = headers.get(name);
-    if (value) return value;
+    if (value) return { name, value };
   }
   return null;
 };
@@ -299,7 +307,7 @@ function failureDetailHeaders(clauses) {
  *   request: Request,
  *   record: ServiceRecord,
  *   upstream: URL,
- *   paymentHeader: string,
+ *   paymentHeader: { name: string, value: string },
  *   decode: (header: string, options: { accepts: unknown[] }) => Promise<DecodedPayment>,
  *   workflow: WorkflowClient|null,
  *   newRequestId: () => string,
@@ -349,7 +357,7 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
   /** @type {DecodedPayment} */
   let payment;
   try {
-    payment = await decode(paymentHeader, { accepts });
+    payment = await decode(paymentHeader.value, { accepts });
   } catch (error) {
     // Refused before the workflow is triggered: every refund targets the payer
     // this returns, so a proxy that cannot decode a payment must not verify one.
@@ -365,7 +373,8 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
       requestId,
       providerUrl: upstream.toString(),
       method: request.method,
-      paymentHeader,
+      paymentHeader: paymentHeader.value,
+      paymentHeaderName: paymentHeader.name,
       payer: payment.payer,
       paidAmountMinorUnits: payment.amount.toString(),
       sla: record.sla
