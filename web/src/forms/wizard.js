@@ -12,6 +12,10 @@ import { claimSubname, publishSla, publishUrl, registerService } from '../action
 import { describeSlaValidity } from './sla-editor.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+// A keystroke-per-RPC-call availability check would spam the Sepolia
+// endpoint on every letter typed; this is the pause after the last keystroke
+// before the real lookup fires.
+const SLUG_CHECK_DEBOUNCE_MS = 400;
 
 /**
  * The four transactions registration requires, in the order the module
@@ -57,11 +61,13 @@ export class VerdiktWizard extends LitElement {
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
     this.checkToken = 0;
+    this.slugDebounceTimer = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
   }
   createRenderRoot() { return this; }
   clear() {
     this.deps = null;
     this.checkToken++;
+    clearTimeout(this.slugDebounceTimer ?? undefined);
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false; this.status = '';
   }
@@ -70,13 +76,17 @@ export class VerdiktWizard extends LitElement {
   /** @param {InputEvent} event */
   editSlug(event) {
     this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
-    this.checkAvailability();
-  }
-  async checkAvailability() {
-    const token = ++this.checkToken;
     this.available = false;
+    // Invalidate any check already scheduled or in flight for the previous
+    // value — its result must never land after a keystroke has moved on.
+    this.checkToken++;
+    clearTimeout(this.slugDebounceTimer ?? undefined);
     if (!SLUG.test(this.slug)) { this.availability = 'Lowercase letters, digits and hyphens only.'; return; }
     this.availability = 'Checking…';
+    this.slugDebounceTimer = setTimeout(() => this.checkAvailability(), SLUG_CHECK_DEBOUNCE_MS);
+  }
+  async checkAvailability() {
+    const token = this.checkToken;
     try {
       const record = await resolveServiceRecord(this.slug, { rpcUrl: /** @type {NonNullable<typeof this.deps>} */ (this.deps).sepoliaRpcUrl });
       if (token !== this.checkToken) return;

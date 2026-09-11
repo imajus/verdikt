@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
+import { resolveServiceRecord } from '@verdikt/sdk';
 import { VerdiktWizard, buildExecutionSteps } from './wizard.js';
+
+vi.mock('@verdikt/sdk', async (importOriginal) => ({
+  ...(await importOriginal()),
+  resolveServiceRecord: vi.fn(async () => ({ owner: null }))
+}));
 
 /** @returns {any} */
 const deps = (overrides = {}) => ({
@@ -47,6 +53,40 @@ describe('the wizard element', () => {
     const el = mount();
     expect(el.step).toBe(1);
     expect(el.done).toBe(0);
+  });
+
+  it('debounces rapid keystrokes into a single availability lookup', async () => {
+    vi.useFakeTimers();
+    try {
+      const el = mount();
+      el.deps = deps();
+      const type = (/** @type {string} */ value) => el.editSlug(/** @type {any} */ ({ currentTarget: { value } }));
+      for (const value of ['w', 'we', 'wea', 'weat', 'weath', 'weathe', 'weather']) type(value);
+      expect(resolveServiceRecord).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(400);
+      expect(resolveServiceRecord).toHaveBeenCalledTimes(1);
+      expect(resolveServiceRecord).toHaveBeenCalledWith('weather', expect.anything());
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(resolveServiceRecord).mockClear();
+    }
+  });
+
+  it('never applies a stale lookup once the slug has moved on', async () => {
+    vi.useFakeTimers();
+    try {
+      const el = mount();
+      el.deps = deps();
+      el.editSlug(/** @type {any} */ ({ currentTarget: { value: 'weather' } }));
+      await vi.advanceTimersByTimeAsync(400);
+      expect(el.availability).toBe('Available.');
+      el.editSlug(/** @type {any} */ ({ currentTarget: { value: 'quotes' } }));
+      expect(el.availability).toBe('Checking…');
+      expect(el.available).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(resolveServiceRecord).mockClear();
+    }
   });
 
   it('runs the four steps in order and reports done', async () => {
