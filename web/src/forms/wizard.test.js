@@ -185,6 +185,23 @@ describe('the wizard element', () => {
     expect(html).toContain('wizard-run-register');
   });
 
+  // viem's `message` carries calldata, a docs URL and its version; only its
+  // short sentence belongs on the page.
+  it('shows a wallet rejection as one sentence, not viem’s diagnostic body', async () => {
+    const rejected = Object.assign(
+      new Error('User rejected the request.\n\nRequest Arguments:\n  data: 0xf2c298be0000\n\nVersion: viem@2.56.3'),
+      { shortMessage: 'User rejected the request.' }
+    );
+    const el = mount();
+    el.deps = deps({ walletClientFor: () => ({ writeContract: async () => { throw rejected; }, sendTransaction: async () => '0xhash' }) });
+    ready(el);
+    await el.runStep(0);
+    expect(el.execError).toBe('User rejected the request.');
+    const html = stringify(el.render());
+    expect(html).not.toContain('0xf2c298be');
+    expect(html).not.toContain('viem@');
+  });
+
   it('offers a link to the new service once registration finishes', async () => {
     const el = mount();
     el.deps = deps();

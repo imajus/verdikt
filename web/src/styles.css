@@ -714,7 +714,9 @@ textarea {
   resize: vertical;
 }
 textarea:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
-.check { display: flex; align-items: baseline; gap: 9px; font-size: 15.5px; margin: 10px 0 0; }
+/* A wallet or RPC message is arbitrary text this page does not author, so it
+   wraps anywhere rather than pushing the layout wider than its column. */
+.check { display: flex; align-items: baseline; gap: 9px; font-size: 15.5px; margin: 10px 0 0; min-width: 0; overflow-wrap: anywhere; }
 .check.ok { color: var(--good); }
 .check.bad { color: var(--poor); }
 code.wrap { display: block; max-height: 9em; overflow: auto; line-height: 1.45; }

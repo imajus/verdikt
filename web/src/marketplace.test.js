@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
 import { ARC } from '@verdikt/sdk';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
-import { formatMinorUsdc, formatNativeUsdc, formatScore, scoreBand, shortHex } from './format.js';
+import { formatMinorUsdc, formatNativeUsdc, formatScore, formatTxError, scoreBand, shortHex } from './format.js';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
 
@@ -86,6 +86,48 @@ const verdict = (serviceId, outcome, requestId, failedClause = NO_CLAUSE) => ({
   failedClause,
   blockNumber: 10n,
   transactionHash: `0x${'ab'.repeat(32)}`
+});
+
+// viem throws with the human sentence on `shortMessage` and a full diagnostic
+// body on `message` — calldata, a docs URL, its own version. The body puts an
+// unbroken hex blob through the layout and buries the one fact a provider can
+// act on.
+describe('formatting a wallet error', () => {
+  const rejection = Object.assign(
+    new Error([
+      'User rejected the request.',
+      '',
+      'Request Arguments:',
+      '  from:  0x9cbb40d45ec9dd095309bba505f3bc54e63a3a79',
+      '  data:  0xf2c298be0000000000000000000000000000000000000000000000000000000000000020',
+      '',
+      'Docs: https://viem.sh/docs/contract/writeContract',
+      'Version: viem@2.56.3'
+    ].join('\n')),
+    { shortMessage: 'User rejected the request.' }
+  );
+
+  it('keeps the short sentence and drops the diagnostic body', () => {
+    expect(formatTxError(rejection)).toBe('User rejected the request.');
+  });
+  it('never carries calldata, a docs link or a version through to the page', () => {
+    const shown = formatTxError(rejection);
+    expect(shown).not.toContain('0xf2c298be');
+    expect(shown).not.toContain('viem.sh');
+    expect(shown).not.toContain('Version:');
+  });
+  it('falls back to the first line when an error carries no short form', () => {
+    expect(formatTxError(new Error('Transport failed.\nstack line\nanother'))).toBe('Transport failed.');
+  });
+  it('caps a single long line rather than letting it run', () => {
+    const shown = formatTxError(new Error('x'.repeat(400)));
+    expect(shown.length).toBeLessThanOrEqual(160);
+    expect(shown.endsWith('…')).toBe(true);
+  });
+  it('says something honest when the throw carries no message at all', () => {
+    expect(formatTxError(null)).toBe('The request failed without a message.');
+    expect(formatTxError({})).toBe('The request failed without a message.');
+  });
 });
 
 describe('formatting the two USDC views', () => {

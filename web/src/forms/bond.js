@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { retireService, topUpBond } from '../actions.js';
+import { formatTxError } from '../format.js';
 
 /** @param {string} input @returns {bigint|null} */
 function parseUsdcToNativeUnits(input) {
@@ -42,7 +43,7 @@ export class VerdiktBondControls extends LitElement {
       await this.deps.ensureArc();
       const { hash } = await topUpBond({ walletClient: this.deps.walletClientFor(), registryAddress: this.deps.registryAddress, serviceId: this.listing.serviceId, amount });
       this.topUpStatus = `Sent: ${hash}`;
-    } catch (error) { this.topUpStatus = `Failed: ${/** @type {Error} */ (error).message}`; }
+    } catch (error) { this.topUpStatus = `Failed: ${formatTxError(error)}`; }
     finally { this.topUpPending = false; }
   }
   async retire() {
@@ -52,7 +53,7 @@ export class VerdiktBondControls extends LitElement {
       await this.deps.ensureArc();
       const { hash } = await retireService({ walletClient: this.deps.walletClientFor(), registryAddress: this.deps.registryAddress, serviceId: this.listing.serviceId });
       this.retireStatus = `Sent: ${hash}`;
-    } catch (error) { this.retireStatus = `Failed: ${/** @type {Error} */ (error).message}`; }
+    } catch (error) { this.retireStatus = `Failed: ${formatTxError(error)}`; }
     finally { this.retirePending = false; }
   }
   render() {

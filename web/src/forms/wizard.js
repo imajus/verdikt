@@ -10,6 +10,7 @@ import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
+import { formatTxError } from '../format.js';
 import { navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-editor.js';
 
@@ -136,7 +137,7 @@ export class VerdiktWizard extends LitElement {
       this.availability = record.owner ? `Already claimed by ${record.owner}.` : 'Available.';
     } catch (error) {
       if (token !== this.checkToken) return;
-      this.availability = `Could not check availability: ${/** @type {Error} */ (error).message}`;
+      this.availability = `Could not check availability: ${formatTxError(error)}`;
     }
   }
   /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
@@ -171,7 +172,7 @@ export class VerdiktWizard extends LitElement {
         deps.onDone();
       }
     } catch (error) {
-      this.execError = /** @type {Error} */ (error).message;
+      this.execError = formatTxError(error);
     } finally {
       this.pending = false;
     }
