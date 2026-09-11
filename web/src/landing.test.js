@@ -161,9 +161,11 @@ describe('landing page', () => {
     expect(html.indexOf('Tell us what you are building')).toBeLessThan(html.indexOf('Be informed about our progress'));
   });
 
-  it('offers the provider console only where a chain is configured to register on', () => {
+  it('points the provider CTA at the registration wizard, only in live mode', () => {
     const services = marketplace([listing('weather', [verdict({})])]);
-    expect(stringify(landing(() => {}, services, 'live'))).toContain('list a service of your own');
+    const live = stringify(landing(() => {}, services, 'live'));
+    expect(live).toContain('list a service of your own');
+    expect(live).toContain('href="/register"');
     expect(stringify(landing(() => {}, services, 'demo'))).not.toContain('list a service of your own');
   });
 
