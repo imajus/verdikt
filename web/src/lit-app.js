@@ -4,17 +4,14 @@ import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, MARKETPLACE_PATH, PROVIDER_PATH, providerUrl, serviceUrl } from './router.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, landing, legalFooter, privacy, terms } from './pages.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/verdict402';
 
-/** @param {(path: string) => void} go @param {string} path */
-const link = (go, path) => (/** @type {Event} */ event) => { event.preventDefault(); go(path); };
-
 /** @param {(path: string) => void} go */
-const brand = (go) => html`<h1><a class="brand" href="/" aria-label="Verdikt home" @click=${link(go, '/')}><img class="brand-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>Verdikt</span></a></h1>`;
+const brand = (go) => html`<h1><a class="brand" href=${LANDING_PATH} aria-label="Verdikt home" @click=${navigateOnClick(go, LANDING_PATH)}><img class="brand-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>Verdikt</span></a></h1>`;
 const githubIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"></path></svg>`;
 const xIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.53 6.78 15.17.5h-1.34L8.94 5.87 5.02.5H0l5.92 8.15L0 15.5h1.34l5.19-5.7 4.15 5.7H16L9.53 6.78Zm-1.84 2.02-.6-.83L2.3 1.44h2.06l3.84 5.29.6.83 4.99 6.87h-2.06L7.69 8.8Z"></path></svg>`;
 
@@ -70,7 +67,7 @@ const listingRow = (listing, go) => {
   const unranked = listing.published.conformance === null && listing.published.availability === null;
   const href = serviceUrl(listing.slug);
   return html`
-    <a class="row" href=${href} data-slug=${listing.slug} @click=${link(go, href)}>
+    <a class="row" href=${href} data-slug=${listing.slug} @click=${navigateOnClick(go, href)}>
       <span class="cell name">
         <strong>${listing.slug}</strong><small>${listing.name}</small>
         ${listing.contested ? html`<span class="contested">contested</span>` : nothing}
@@ -133,7 +130,7 @@ const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) =
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
     const active = view === activeView || (activeView === 'marketplace' && view === 'service');
-    return html`<a href=${path} class="nav-item ${active ? 'active' : ''}" data-nav=${activeView} @click=${link(go, path)}>${label}</a>`;
+    return html`<a href=${path} class="nav-item ${active ? 'active' : ''}" data-nav=${activeView} @click=${navigateOnClick(go, path)}>${label}</a>`;
   };
   /** @param {'light'|'dark'} value @param {string} label */
   const themeButton = (value, label) => html`<wa-button class="theme-button ${theme === value ? 'selected' : ''}" appearance="outlined" size="xs" aria-pressed=${String(theme === value)} @click=${() => changeTheme(value)}>${label}</wa-button>`;
@@ -225,7 +222,7 @@ export class VerdiktApp extends LitElement {
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
     const target = owned[0] ?? null;
-    return html`<header class="masthead"><div>${brand(go)}<p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${link(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
+    return html`<header class="masthead"><div>${brand(go)}<p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p></header>
       ${ownPage && (!signedIn || !supported) ? html`<div class="aside"><p>${signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
       <section class="block"><h3>Add a service</h3><verdikt-wizard id="wizard-mount"></verdikt-wizard></section>
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">refunded from your bonds</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
@@ -241,12 +238,12 @@ export class VerdiktApp extends LitElement {
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
       <section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>
       <section class="listing">${listingHead()}${services.length ? services.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
-      <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${services.length ? html` · <a href=${providerUrl(services[0].provider)} @click=${link(go, providerUrl(services[0].provider))}>provider view</a>` : nothing}</footer>`;
+      <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${services.length ? html` · <a href=${providerUrl(services[0].provider)} @click=${navigateOnClick(go, providerUrl(services[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */
   renderService(services, slug, go) {
     const listing = services.find((service) => service.slug === slug) ?? null;
-    const back = html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${link(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>`;
+    const back = html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>`;
     if (!listing) return html`${back}<p class="empty">No service found for “${slug}”.</p>`;
     return html`${back}${detailTemplate(listing)}`;
   }

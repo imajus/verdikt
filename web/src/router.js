@@ -40,6 +40,21 @@ export function providerUrl(address) {
   return `${PROVIDER_PATH}/${address}`;
 }
 
+/**
+ * A click handler for an in-app `<a href>`: lets a modifier-click or a
+ * non-primary button open the link normally (new tab, new window, etc.),
+ * and otherwise intercepts the navigation for the SPA router.
+ * @param {(path: string) => void} go
+ * @param {string} path
+ */
+export function navigateOnClick(go, path) {
+  return (/** @type {MouseEvent} */ event) => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    event.preventDefault();
+    go(path);
+  };
+}
+
 /** @param {string} pathname */
 function normalize(pathname) {
   if (pathname.length > 1 && pathname.endsWith('/')) return pathname.slice(0, -1);

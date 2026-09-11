@@ -5,22 +5,20 @@
 // docs/superpowers/specs/2026-09-11-landing-routing-legal-design.md §3, §7.
 
 import { html } from 'lit';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick } from './router.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
-
-/** @param {(path: string) => void} go @param {string} path */
-const follow = (go, path) => (/** @type {Event} */ event) => { event.preventDefault(); go(path); };
 
 /** @param {(path: string) => void} go */
 export const landing = (go) => html`
   <header class="masthead">
     <div>
-      <h1><a class="brand" href="/" aria-label="Verdikt home" @click=${follow(go, '/')}><img class="brand-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>Verdikt</span></a></h1>
+      <h1><a class="brand" href=${LANDING_PATH} aria-label="Verdikt home" @click=${navigateOnClick(go, LANDING_PATH)}><img class="brand-mark" src="/favicon.svg" alt="" width="42" height="42" /><span>Verdikt</span></a></h1>
       <p class="tagline">${TAGLINE}</p>
     </div>
   </header>
   <p class="landing-cta">
-    <wa-button href="/marketplace" @click=${follow(go, '/marketplace')}>Browse the marketplace</wa-button>
+    <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
   </p>`;
 
 export const terms = () => html`
@@ -32,7 +30,7 @@ export const terms = () => html`
   </section>
   <section class="block">
     <h3>No warranty</h3>
-    <p>Everything here — listings, scores, verdicts, refunds — is provided as-is, for demonstration purposes, with no warranty of any kind. A verdict written by the verification workflow is final by design (see <a href="/how">how it works</a>); Verdikt is not a party to, and takes no responsibility for, any agreement between a provider and a caller.</p>
+    <p>Everything here — listings, scores, verdicts, refunds — is provided as-is, for demonstration purposes, with no warranty of any kind. A verdict written by the verification workflow is final by design (see <a href=${HOW_PATH}>how it works</a>); Verdikt is not a party to, and takes no responsibility for, any agreement between a provider and a caller.</p>
   </section>
   <section class="block">
     <h3>Use at your own risk</h3>
@@ -52,12 +50,12 @@ export const privacy = () => html`
   </section>
   <section class="block">
     <h3>Local storage</h3>
-    <p>Your theme preference and, if you sign in as a provider, a short-lived proof of address control (<a href="/how">how it works</a>) are kept in your browser's local storage. Neither ever leaves your device.</p>
+    <p>Your theme preference and, if you sign in as a provider, a short-lived proof of address control (<a href=${HOW_PATH}>how it works</a>) are kept in your browser's local storage. Neither ever leaves your device.</p>
   </section>`;
 
 /** @param {(path: string) => void} go */
 export const legalFooter = (go) => html`
   <footer class="legal">
-    <a href="/terms" @click=${follow(go, '/terms')}>Terms</a>
-    <a href="/privacy" @click=${follow(go, '/privacy')}>Privacy</a>
+    <a href=${TERMS_PATH} @click=${navigateOnClick(go, TERMS_PATH)}>Terms</a>
+    <a href=${PRIVACY_PATH} @click=${navigateOnClick(go, PRIVACY_PATH)}>Privacy</a>
   </footer>`;
