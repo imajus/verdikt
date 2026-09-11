@@ -60,8 +60,18 @@ const TYPES = {
   ]
 };
 
-/** Sign an ERC-3009 authorization exactly as a paying agent would. */
-async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, option = EIP3009_OPTION } = {}) {
+/**
+ * Sign an ERC-3009 authorization exactly as a paying agent would.
+ *
+ * `shape: 'v2'` builds the envelope the way a real x402 v2 `PAYMENT-SIGNATURE`
+ * header does — `scheme`/`network` nested under `accepted` rather than at the
+ * envelope's top level — matching a capture from a live Alchemy call (a real
+ * paid call to portfolio.verdikt.bond, 2026-09-11). That capture is what
+ * exposed the bug: `decodePaymentEnvelope` only looked at the top level, so
+ * every v2 payment refused with "envelope is missing scheme or network" even
+ * once the proxy's header-name detection was fixed.
+ */
+async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, option = EIP3009_OPTION, shape = 'v1' } = {}) {
   const signature = await account.signTypedData({
     domain: {
       name: option.extra.name,
@@ -80,7 +90,12 @@ async function signedHeader({ account = PAYER, authorization = AUTHORIZATION, op
       nonce: authorization.nonce
     }
   });
-  return header({ scheme: option.scheme, network: option.network, payload: { signature, authorization } });
+  const payload = { signature, authorization };
+  return shape === 'v2'
+    ? Buffer.from(
+        JSON.stringify({ x402Version: 2, payload, accepted: { scheme: option.scheme, network: option.network } })
+      ).toString('base64')
+    : header({ scheme: option.scheme, network: option.network, payload });
 }
 
 /** @param {Record<string, unknown>} envelope */
@@ -98,9 +113,25 @@ async function tamperedWith(patch) {
 }
 
 describe('the envelope', () => {
-  it('reads the x402 fields out of base64 JSON', () => {
+  it('reads the x402 v1 fields out of base64 JSON, scheme/network at the top level', () => {
     const envelope = decodePaymentEnvelope(header({ scheme: 'exact', network: 'eip155:84532', payload: { a: 1 } }));
     expect(envelope).toMatchObject({ x402Version: 2, scheme: 'exact', network: 'eip155:84532' });
+  });
+
+  // x402 v2 renamed the header (X-PAYMENT → PAYMENT-SIGNATURE) and moved
+  // scheme/network under `accepted` — verified against a real capture, see
+  // `signedHeader`'s doc. `accepted`'s other fields are never read here.
+  it('reads scheme/network out of `accepted` for a v2-shaped envelope', () => {
+    const envelope = decodePaymentEnvelope(
+      Buffer.from(
+        JSON.stringify({
+          x402Version: 2,
+          payload: { a: 1 },
+          accepted: { scheme: 'exact', network: 'eip155:8453', asset: '0xshouldnotmatter' }
+        })
+      ).toString('base64')
+    );
+    expect(envelope).toMatchObject({ x402Version: 2, scheme: 'exact', network: 'eip155:8453' });
   });
 
   for (const [name, value] of [
@@ -108,7 +139,11 @@ describe('the envelope', () => {
     ['something that is not base64 JSON', 'not-base64-@@@'],
     ['base64 of a non-object', Buffer.from('42').toString('base64')],
     ['an envelope with no scheme', header({ network: 'eip155:1', payload: {} })],
-    ['an envelope with no payload', header({ scheme: 'exact', network: 'eip155:1' })]
+    ['an envelope with no payload', header({ scheme: 'exact', network: 'eip155:1' })],
+    [
+      'a v2 envelope whose `accepted` has no scheme',
+      Buffer.from(JSON.stringify({ x402Version: 2, payload: {}, accepted: { network: 'eip155:1' } })).toString('base64')
+    ]
   ]) {
     it(`refuses ${name}`, () => {
       expect(() => decodePaymentEnvelope(/** @type {string} */ (value))).toThrow(/decodePayment/);
@@ -123,6 +158,17 @@ describe('decodePayment — the eip3009 path, which is an open standard end to e
 
   it('recovers the payer and the amount from a real signature', async () => {
     const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(payment.amount).toBe(2500n);
+  });
+
+  // Reproduces a production incident: a real paid call to portfolio.verdikt.bond
+  // went through — money moved, response delivered — but wrote no verdict.
+  // Root cause was two-layered: the proxy read only `x-payment` (fixed
+  // separately in proxy/src/router.js), and even once that header is found,
+  // this envelope shape rejected it before the signature was ever checked.
+  it('recovers the payer from a v2-shaped envelope (PAYMENT-SIGNATURE), scheme/network nested under `accepted`', async () => {
+    const payment = await decodePayment(await signedHeader({ shape: 'v2' }), { accepts: ACCEPTS });
     expect(payment.payer).toBe(PAYER.address);
     expect(payment.amount).toBe(2500n);
   });

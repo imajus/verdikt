@@ -139,6 +139,56 @@ describe('the verified branch — the accepts wiring', () => {
   });
 });
 
+describe('the verified branch — x402 v2’s payment-signature header', () => {
+  // Reproduces a production incident: a real paid call to portfolio.verdikt.bond
+  // (Circle's CLI, against Alchemy's x402 v2 endpoint) settled and delivered
+  // data but wrote no verdict, because the proxy looked for `x-payment` only.
+  // Confirmed live by tailing the proxy: the paid request carried
+  // `payment-signature` and no `x-payment` at all.
+  it('takes the paid branch on a v2 `payment-signature` header, with no `x-payment` present', async () => {
+    const { deps, verify } = harness();
+    const response = await call(deps, {
+      method: 'GET',
+      url: '/weather/current?lat=52',
+      headers: { host: 'proxy.local', 'payment-signature': 'eyJzY2hlbWUiOiJHYXRld2F5V2FsbGV0QmF0Y2hlZCJ9' }
+    });
+    expect(verify).toHaveBeenCalled();
+    expect(response.statusCode).toBe(200);
+  });
+
+  it('prefers `payment-signature` over `x-payment` when a caller somehow sends both', async () => {
+    const { deps, decodePayment } = harness();
+    await call(deps, {
+      method: 'GET',
+      url: '/weather/current?lat=52',
+      headers: { host: 'proxy.local', 'payment-signature': 'v2-header', 'x-payment': 'v1-header' }
+    });
+    expect(decodePayment).toHaveBeenCalledWith('v2-header', expect.anything());
+  });
+
+  it('strips both payment header names from the accepts probe, so neither can settle the payment a second time', async () => {
+    const { deps, upstreamFetch } = harness();
+    await call(deps, {
+      method: 'GET',
+      url: '/weather/current?lat=52',
+      headers: { host: 'proxy.local', 'payment-signature': 'v2-header' }
+    });
+    const [, init] = upstreamFetch.mock.calls[0];
+    const headers = /** @type {Record<string,string>} */ (init.headers);
+    expect(headers['payment-signature']).toBeUndefined();
+    expect(headers['x-payment']).toBeUndefined();
+  });
+
+  it('reads the accepts probe’s challenge out of the v2 `payment-required` header when the body has none', async () => {
+    const encoded = Buffer.from(JSON.stringify({ accepts: CHALLENGE_ACCEPTS })).toString('base64');
+    const { deps, decodePayment } = harness({
+      upstream: () => new Response('not json at all', { status: 402, headers: { 'payment-required': encoded } })
+    });
+    await paidCall(deps);
+    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), { accepts: CHALLENGE_ACCEPTS });
+  });
+});
+
 describe('the verified branch — outcomes that are not PASS', () => {
   it('relays a FAIL response with the verdict and the failing clause detail', async () => {
     const { deps } = harness({

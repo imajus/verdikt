@@ -56,14 +56,21 @@ const EIP3009 = 'eip3009';
 export const isPaymentDecodingImplemented = () => true;
 
 /**
- * Parse the `X-PAYMENT` envelope. No cryptography, no network.
+ * Parse the payment envelope (`X-PAYMENT` in x402 v1, `PAYMENT-SIGNATURE` in
+ * v2). No cryptography, no network.
  *
  * Split out from verification because the envelope is the part every scheme
- * shares — x402 defines it as base64 of
- * `{x402Version, scheme, network, payload}` — while `payload` is
- * scheme-specific and only some of them are knowable.
+ * shares — while `payload` is scheme-specific and only some of them are
+ * knowable. The two versions disagree on where `scheme`/`network` live: v1
+ * puts them at the envelope's top level (`{x402Version, scheme, network,
+ * payload}`); v2 nests them under `accepted`, the `accepts` option the payer
+ * says it is answering (`{x402Version, payload, accepted: {scheme, network,
+ * ...}}`) — confirmed against a real `PAYMENT-SIGNATURE` capture from a live
+ * Alchemy call. Only `accepted.scheme`/`accepted.network` are read here;
+ * `accepted`'s other fields (asset, extra) are never trusted as the EIP-712
+ * domain — see `matchingOption`'s doc for why that boundary matters.
  *
- * @param {string} header raw `X-PAYMENT` header value
+ * @param {string} header raw payment header value
  * @returns {{ x402Version: number, scheme: string, network: string, payload: Record<string, any> }}
  */
 export function decodePaymentEnvelope(header) {
@@ -77,7 +84,9 @@ export function decodePaymentEnvelope(header) {
     throw new Error('decodePayment: header is not base64-encoded JSON');
   }
   if (!json || typeof json !== 'object') throw new Error('decodePayment: header did not decode to an object');
-  const { x402Version, scheme, network, payload } = json;
+  const { x402Version, payload } = json;
+  const scheme = json.scheme ?? json.accepted?.scheme;
+  const network = json.network ?? json.accepted?.network;
   if (typeof scheme !== 'string' || typeof network !== 'string') {
     throw new Error('decodePayment: envelope is missing scheme or network');
   }
