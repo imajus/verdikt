@@ -108,11 +108,14 @@ evidence.
 
 The proxy branches on the `X-PAYMENT` header:
 
-- **Absent** — plain passthrough. The provider returns its 402 challenge; the
-  proxy compares the challenge's `payTo` against the address record on the
-  service's ENS subname (§4) and blocks on mismatch, so the agent never signs a
-  payment to a spoofed address. The 402 challenge is public, so this check runs
-  in ordinary proxy code, outside the enclave.
+- **Absent** — plain passthrough. The provider's response, 402 challenge
+  included, is relayed unchanged. The proxy's trust anchor is the service's
+  registered `url` (§4, bound to the slug's bond via the ownership check);
+  whatever `payTo` that URL's own challenge names is exactly as legitimate as
+  the URL itself, so the proxy does not compare it against anything (issue
+  #37 — a prior `payTo`-vs-ENS-`address` check was removed as security
+  theater: a compromised or malicious upstream can declare whatever `payTo`
+  it wants regardless of what is pinned in ENS).
 - **Present** — the proxy triggers the confidential workflow and passes the
   header through. The enclave replays it against the provider, evaluates the paid
   response (§1), writes the verdict to Arc (§3), and returns the payload to relay
@@ -245,12 +248,9 @@ an accepted scope decision for a two-week build.
     workflows"), never per call and never a refund trigger (§3). Per-call
     `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
   - **address** — owner-controlled, set to the provider's payout wallet.
-- On the unpaid leg the proxy resolves the address record and compares it against
-  the live 402 challenge's `payTo` before relaying (§2) — every option the
-  challenge offers, since the agent may pick any of them. A mismatch blocks
-  pre-payment, not post-hoc like §1's checks, since a spoofed `payTo` leaves no
-  bonded deposit to reclaim from; so does a challenge that will not parse or
-  carries no `payTo` at all. Runs outside the enclave — the challenge is public.
+    Surfaced in the marketplace listing; no longer compared against a 402
+    challenge's `payTo` (removed, issue #37) — it is not part of the trust
+    chain the proxy enforces.
 - Because the proxy dials the `url` record from Verdikt's own network, a
   provider-authored URL is a server-side-request-forgery primitive unless it is
   constrained. Private, loopback, link-local and CGNAT hosts are refused before
@@ -320,9 +320,10 @@ Paying agent (signs its own x402 payment; Verdikt holds no payment wallet)
    v
 Verdikt proxy, passthrough branch (ordinary code, outside the enclave)
    - relays the request to the provider, gets the 402 challenge back
-   - resolves <slug>.verdikt.eth address record (Sepolia)
-   - blocks if the challenge's payTo != that record; otherwise relays the
-     challenge on -- the challenge is public, so no attestation needed
+   - relays the challenge on unchanged -- the challenge is public, so no
+     attestation needed, and the provider's own `url` (bound to the slug's
+     bond) is already the trust anchor, so the challenge's payTo is not
+     separately checked
    |
    | agent signs the payment, retries with X-PAYMENT
    v

@@ -134,12 +134,7 @@ interface WorkflowClientOptions {
   fetch?: typeof fetch;
 }
 
-type ChallengeBlockReason =
-  | 'no_address_record'
-  | 'unparseable_challenge'
-  | 'challenge_has_no_pay_to'
-  | 'pay_to_mismatch'
-  | 'owner_mismatch';
+type ChallengeBlockReason = 'owner_mismatch';
 
 interface TriggerJwtOptions {
   /** The exact JSON-RPC body that will be sent — the token digests these bytes. */
