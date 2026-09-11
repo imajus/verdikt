@@ -1,12 +1,21 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
+import { ARC } from '@verdikt/sdk';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
 import { formatMinorUsdc, formatNativeUsdc, formatScore, scoreBand, shortHex } from './format.js';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
 
+// The rendered page asks who is connected and whether they are signed in.
+// Both answer "nobody" unless a test says otherwise, which is the visitor's
+// view every other test here renders.
+const wallet = vi.hoisted(() => ({ account: /** @type {any} */ (null), session: /** @type {any} */ (null) }));
+vi.mock('./wallet.js', () => ({ getConnectedAccount: () => wallet.account }));
+vi.mock('./session.js', () => ({ getSession: () => wallet.session }));
+
 const HONEST = `0x${'11'.repeat(32)}`;
 const FLAKY = `0x${'22'.repeat(32)}`;
+const PROVIDER = '0xA11ce00000000000000000000000000000000001';
 
 /** @param {Partial<ServiceRecord>} overrides @returns {ServiceRecord} */
 const record = (overrides) => ({
@@ -292,11 +301,43 @@ describe('rendering', () => {
       })
     );
 
-  it('renders the whole page without a DOM', async () => {
-    const html = renderApp(await build(), 'demo', 'marketplace', 'weather');
+  it('renders the marketplace listing without a DOM', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
     expect(html).toContain('weather.verdikt.eth');
     expect(html).toContain('demo data');
+  });
+
+  it('no longer shows platform stats on the marketplace listing itself', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).not.toContain('class="figures"');
+  });
+
+  it('no longer shows a platform-stats skeleton while the marketplace is loading', async () => {
+    const html = renderApp(null, 'demo', 'marketplace', null);
+    expect(html).not.toContain('class="figures"');
+  });
+
+  it('removes the doubled rule above the listing left by the removed figures section', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).toContain('class="listing flush"');
+  });
+
+  it('shows platform stats on the landing page once the marketplace has loaded', async () => {
+    const html = renderApp(await build(), 'demo', 'landing', null);
+    expect(html).toContain('class="figures"');
+    expect(html).toContain('>services<');
+  });
+
+  it('renders a standalone service page without a DOM', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
     expect(html).toContain('responds-within-5s');
+    expect(html).toContain('back to the marketplace');
+  });
+
+  it('identifies standalone service details as seeded in demo mode', async () => {
+    const html = renderApp(await build(), 'demo', 'service', 'weather');
+    expect(html).toContain('Showing seeded data, not a live chain');
+    expect(html).toContain('VITE_ARC_RPC_URL');
   });
 
   it('shows what a service promised alongside what it delivered', async () => {
@@ -389,9 +430,11 @@ describe('the provider view', () => {
     expect(html).not.toContain('>other<');
   });
 
+  // "your bonds" only reads correctly to the provider. A console is a public
+  // page, and this render has nobody connected — the visitor's wording.
   it('shows what has been refunded out of that provider’s own bonds', async () => {
-    const html = renderApp(await build(), 'demo', 'provider', null, '0xA11ce00000000000000000000000000000000001');
-    expect(html).toContain('refunded from your bonds');
+    const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
+    expect(html).toContain('refunded from these bonds');
     expect(html).toContain('1 USDC');
   });
 
@@ -401,9 +444,98 @@ describe('the provider view', () => {
   });
 
   it('says so plainly when an address owns nothing', async () => {
-    const html = renderApp(await build(), 'demo', 'provider', null, '0xdead');
+    const html = renderApp(await build(), 'demo', 'provider', null, '0xdead00000000000000000000000000000000dead');
     expect(html).toContain('No services registered');
     expect(html).not.toContain('sla-editor-mount');
     expect(html).not.toContain('bond-controls-mount');
+  });
+
+  // A console is a public page, so a visitor sees the record and nothing to
+  // act on it with. No wallet is connected in this render, which is exactly
+  // the case: the write sections are absent, not disabled.
+  it('renders no write controls for anyone but the signed-in owner', async () => {
+    const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
+    expect(html).toContain('weather');
+    expect(html).not.toContain('wizard-mount');
+    expect(html).not.toContain('sla-editor-mount');
+    expect(html).not.toContain('bond-controls-mount');
+  });
+});
+
+// The rendering half of the pair main.js's providerAuthorization mounts
+// against: a section without a mount behind it is a dead control, a mount
+// with no section around it is an invisible one. These four cases are the
+// same four that function distinguishes.
+describe('who gets the provider console’s write controls', () => {
+  const build = async () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
+  /** @param {any} account @param {any} session */
+  const as = (account, session) => { wallet.account = account; wallet.session = session; };
+  const signedIn = { address: PROVIDER, expiresAt: Date.now() + 60_000 };
+  const controls = ['wizard-mount', 'sla-editor-mount', 'bond-controls-mount'];
+  /** @param {string} html */
+  const present = (html) => controls.filter((id) => html.includes(id));
+
+  afterEach(() => as(null, null));
+
+  it('gives them to the owner, connected on a supported chain and signed in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, signedIn);
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(present(html)).toEqual(controls);
+    expect(html).toContain('refunded from your bonds');
+  });
+  it('withholds them from the owner until they sign in', async () => {
+    as({ address: PROVIDER, chainId: ARC.chainId }, null);
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(present(html)).toEqual([]);
+    expect(html).toContain('Enable provider actions');
+  });
+  it('withholds them on an unsupported chain, and says which way out', async () => {
+    as({ address: PROVIDER, chainId: 1 }, signedIn);
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(present(html)).toEqual([]);
+    expect(html).toContain('Switch network');
+  });
+  it('withholds them from a signed-in wallet viewing somebody else’s console', async () => {
+    const other = '0xB0b0000000000000000000000000000000000002';
+    as({ address: other, chainId: ARC.chainId }, { address: other, expiresAt: Date.now() + 60_000 });
+    const html = renderApp(await build(), 'live', 'provider', null, PROVIDER);
+    expect(present(html)).toEqual([]);
+    expect(html).not.toContain('Enable provider actions');
+  });
+});
+
+// /provider with nothing usable in the path. The old behaviour was to render
+// the marketplace here, under a Provider title.
+describe('the address-less provider page', () => {
+  const build = async () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], verdicts: [], records: { weather: record({}) } }));
+
+  it('shows no provider data and no listing', async () => {
+    const html = renderApp(await build(), 'demo', 'provider', null, null);
+    expect(html).toContain('No provider selected');
+    expect(html).not.toContain('weather');
+    expect(html).not.toContain('class="figures"');
+  });
+
+  it('names what it rejected, without looking it up', async () => {
+    const html = renderApp(await build(), 'demo', 'provider', null, null, 'foo');
+    expect(html).toContain('is not a wallet address');
+    expect(html).toContain('foo');
+    expect(html).not.toContain('weather');
+  });
+
+  // Two in live mode: the nav's and the page's own. Demo mode has neither —
+  // a console reads Arc, and demo data comes from no chain at all.
+  it('offers a connect button only where a wallet can be connected', async () => {
+    const live = renderApp(await build(), 'live', 'provider', null, null);
+    expect(live.match(/Connect wallet/g)).toHaveLength(2);
+    expect(renderApp(await build(), 'demo', 'provider', null, null)).not.toContain('Connect wallet');
+  });
+
+  // It reads nothing off a chain, so a dead RPC must not take it down with
+  // the marketplace — the same rule the legal pages already follow.
+  it('renders with no marketplace loaded at all', () => {
+    expect(renderApp(null, 'live', 'provider', null, null)).toContain('No provider selected');
   });
 });

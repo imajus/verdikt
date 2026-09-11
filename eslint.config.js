@@ -18,7 +18,11 @@ export default [
       // plus the bundler's own build artefacts, which are vendored code.
       'cre/spike/**',
       'cre/workflows/**/.tmp/**',
-      'cre/workflows/**/.cre_build_tmp.js'
+      'cre/workflows/**/.cre_build_tmp.js',
+      // Vendored Impeccable skill files (0803a6e): third-party browser-runtime
+      // scripts and a bundled UMD build, not code this repo lints or owns.
+      '.agents/skills/impeccable/scripts/**',
+      '.claude/skills/impeccable/scripts/**'
     ]
   },
   js.configs.recommended,

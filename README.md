@@ -239,20 +239,6 @@ verification would be self-refuting.
   contract accepts. So the verdicts above carry a fixture payer. The proxy also
   does not yet keep the challenge a payment answers, which verification needs —
   the header names its scheme but not its asset.
-Two caveats that used to live here are now resolved, and both were worth the
-trouble:
-
-- The **KeystoneForwarder metadata offsets** were wrong, and matching
-  `@chainlink/cre-sdk`'s own constants is what hid it — the DON signs 109 bytes
-  and the forwarder passes the receiver only the trailing **64**. A live
-  delivery caught it (`MalformedReportMetadata(64)`); nothing else would have,
-  because the forwarder swallows a receiver revert and mines anyway
-  ([spike CRE-8](docs/spikes/cre.md)).
-- **Per-verdict clause detail** now reaches the chain as `keccak256(clauseId)`,
-  and the dashboard resolves it against the SLA it reads from ENS. The observed
-  value deliberately does not: it is a slice of a paid response, so it goes to
-  the agent that paid (`x-verdikt-expected` / `-actual`) rather than to
-  everyone.
 
 ## Design decisions worth knowing
 
@@ -265,6 +251,10 @@ trouble:
   payer address that rejects transfers revert the call and erase its own `FAIL` —
   a provider farming its own service through a reverting contract could hold a
   spotless record while failing real calls.
+- **A verdict stores `keccak256(clauseId)`, never the observed value.** The
+  dashboard resolves the hash against the SLA it reads from ENS; the value
+  itself is a slice of a paid response, so it reaches only the agent that paid
+  for it (`x-verdikt-expected` / `-actual`).
 - **A service with no traffic scores 1000, not 0.** Verdikt measures what agents
   actually bought, not what a synthetic prober would have seen. Getting this
   backwards brands every new listing as broken.

@@ -38,3 +38,8 @@ ens-setup-plan.json
 
 # Superpowers skill working state (task briefs, review diffs, brainstorm server state)
 .superpowers/
+
+# Impeccable live-mode session journals (local state, not source)
+web/.impeccable/live/sessions/
+web/.impeccable/live/roots.json
+web/.impeccable/live/inject-journal.json

@@ -1,16 +1,18 @@
 /**
- * Resolves the provider console from a shareable address or the connected
- * wallet, and narrows the marketplace to services owned by that address.
+ * Narrows the marketplace to the services owned by the address in the path.
+ *
+ * This knows nothing about the connected wallet, and must not: routing
+ * decides whose console is on screen, authorization decides only which
+ * controls appear on it. A null address selects no provider at all — it is
+ * never quietly filled in from whoever happens to be connected
+ * (docs/superpowers/specs/2026-09-11-provider-route-authorization-design.md).
  *
  * @param {Listing[]} services
- * @param {'marketplace'|'provider'|'how'} view
- * @param {string|null} routeProvider
- * @param {string|null} account
+ * @param {string|null} address
  */
-export function resolveProviderConsole(services, view, routeProvider, account) {
-  const effectiveProvider = routeProvider ?? (view === 'provider' ? account : null);
-  const owned = effectiveProvider
-    ? services.filter((listing) => listing.provider.toLowerCase() === effectiveProvider.toLowerCase())
+export function resolveProviderConsole(services, address) {
+  const owned = address
+    ? services.filter((listing) => listing.provider.toLowerCase() === address.toLowerCase())
     : [];
-  return { effectiveProvider, owned, target: owned[0] ?? null };
+  return { owned, target: owned[0] ?? null };
 }

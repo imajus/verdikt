@@ -13,6 +13,10 @@
   "name": "verdikt-web",
   "compatibility_date": "2026-09-07",
   "assets": {
-    "directory": "./dist"
+    "directory": "./dist",
+    // Real paths (see web/src/router.js) need any unmatched request to
+    // resolve to index.html — otherwise a hard refresh on e.g. /marketplace
+    // 404s instead of letting the client-side router take over.
+    "not_found_handling": "single-page-application"
   }
 }

@@ -22,4 +22,7 @@ RUN pnpm --filter @verdikt/web build
 
 FROM nginx:1.27-alpine AS serve
 COPY --from=build /app/web/dist /usr/share/nginx/html
+# Real paths (web/src/router.js) need an unmatched request to fall back to
+# index.html — nginx's default config has no such rule.
+COPY web/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80

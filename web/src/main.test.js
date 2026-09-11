@@ -28,6 +28,8 @@ vi.mock('./lit-app.js', () => ({}));
 vi.mock('./forms/sla-editor.js', () => ({}));
 vi.mock('./forms/bond.js', () => ({}));
 vi.mock('./forms/wizard.js', () => ({}));
+vi.mock('./forms/subscribe.js', () => ({}));
+vi.mock('./forms/contact.js', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/styles/themes/default.css', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/components/button/button.js', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/components/button-group/button-group.js', () => ({}));
@@ -39,6 +41,10 @@ vi.mock('@awesome.me/webawesome/dist/components/textarea/textarea.js', () => ({}
 /** @type {any} */ let app;
 /** @type {Record<string, any>} */ let controls;
 /** @type {Map<string, Function>} */ let events;
+/** @type {Map<string, Function>} */ let windowEvents;
+/** @type {import('vitest').Mock} */ let pushState;
+/** @type {import('vitest').Mock} */ let replaceState;
+/** @type {import('vitest').Mock} */ let scrollTo;
 async function settle() { for (let i = 0; i < 8; i++) await Promise.resolve(); }
 function authenticate() { state.session = { ...state.account, expiresAt: Date.now() + 60000 }; }
 function change(address = OWNER, chainId = 11155111, identityChanged = true) {
@@ -60,9 +66,15 @@ beforeEach(async () => {
     clear() { this.deps = null; this.listing = null; this.draft = ''; this.step = 1; }
   }]));
   events = new Map();
+  windowEvents = new Map();
   app = { querySelector: (/** @type {string} */ selector) => controls[selector.slice(1)], updateComplete: Promise.resolve(), addEventListener: (/** @type {string} */ name, /** @type {Function} */ fn) => events.set(name, fn) };
   vi.stubGlobal('document', { getElementById: () => ({ append: vi.fn() }), createElement: () => app });
   vi.stubGlobal('location', new URL(`https://verdikt.example/?provider=${OWNER}`));
+  pushState = vi.fn();
+  replaceState = vi.fn();
+  scrollTo = vi.fn();
+  vi.stubGlobal('history', { replaceState, pushState });
+  vi.stubGlobal('window', { addEventListener: (/** @type {string} */ name, /** @type {Function} */ listener) => windowEvents.set(name, listener), scrollTo });
   await import('./main.js'); await settle();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -139,4 +151,43 @@ it('reports a rejected provider sign-in without reconnecting or enabling actions
   expect(app.signInPending).toBe(false);
   expect(state.connectWallet).not.toHaveBeenCalled();
   expect(controls['bond-controls-mount'].deps).toBeNull();
+});
+it('rewrites a legacy ?provider= deep link to the canonical path on load', () => {
+  expect(replaceState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+});
+it('navigates to the provider console after an explicit wallet connect', async () => {
+  await events.get('wallet-connect')?.(); await settle();
+  expect(pushState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+});
+it('does not push a redundant history entry when reconnecting the same provider wallet', async () => {
+  // Update location to reflect the canonical path that syncRoute would have rewritten to
+  vi.stubGlobal('location', new URL(`https://verdikt.example/provider/${OWNER}`));
+  pushState.mockClear();
+  await events.get('wallet-connect')?.(); await settle();
+  expect(pushState).not.toHaveBeenCalled();
+});
+it('scrolls to the new page heading after Lit renders a forward navigation', async () => {
+  events.get('navigate')?.({ detail: '/terms' });
+  expect(scrollTo).not.toHaveBeenCalled();
+  await settle();
+  expect(scrollTo).toHaveBeenCalledWith(0, 0);
+});
+it('leaves scroll restoration to the browser for back and forward history', async () => {
+  windowEvents.get('popstate')?.();
+  await settle();
+  expect(scrollTo).not.toHaveBeenCalled();
+});
+// /provider selects no provider, so there is nothing for the controls to act
+// on — not even for the wallet that would own the console one path segment
+// later. The connected account never stands in for a missing address.
+it('mounts nothing on the address-less provider path, signed in or not', async () => {
+  vi.stubGlobal('location', new URL('https://verdikt.example/provider'));
+  events.get('navigate')?.({ detail: '/provider' });
+  await settle();
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
+it('does not navigate to the provider console on a silent wallet restoration', async () => {
+  change(OTHER);
+  await settle();
+  expect(pushState).not.toHaveBeenCalled();
 });

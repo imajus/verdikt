@@ -14,17 +14,18 @@ export function renderDetail(listing) {
 }
 
 /**
- * @param {Marketplace} marketplace
+ * @param {Marketplace|null} marketplace
  * @param {'live'|'demo'} mode
- * @param {'marketplace'|'provider'|'how'} view
+ * @param {'landing'|'marketplace'|'service'|'provider'|'how'|'terms'|'privacy'} view
  * @param {string|null} selectedSlug
- * @param {string|null} [provider]
+ * @param {string|null} [address]
+ * @param {string|null} [rejected]
  */
-export function renderApp(marketplace, mode, view, selectedSlug, provider = null) {
+export function renderApp(marketplace, mode, view, selectedSlug, address = null, rejected = null) {
   const app = new VerdiktApp();
   app.marketplace = marketplace;
   app.mode = mode;
-  app.route = { view, service: selectedSlug, provider };
+  app.route = { view, slug: selectedSlug, address, rejected };
   return stringify(app.render());
 }
 
