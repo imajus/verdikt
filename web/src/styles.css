@@ -742,3 +742,12 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 
 .wizard-steps { display: flex; gap: 24px; list-style: none; padding: 0; margin: 0 0 16px; font-size: 14.5px; color: var(--muted); }
 .wizard-steps li.done { color: var(--good); font-weight: 500; }
+.wizard-nav { display: flex; gap: 12px; margin-top: 18px; }
+.wizard-nav wa-button { margin-top: 0; }
+.wizard-review { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 6px 18px; margin: 4px 0 20px; font-size: 15px; }
+.wizard-review dt { color: var(--muted); }
+.wizard-review dd { margin: 0; font-family: var(--mono); overflow-wrap: anywhere; }
+.wizard-progress { list-style: none; padding: 0; margin: 8px 0 0; font-size: 14.5px; color: var(--muted); display: grid; gap: 4px; }
+.wizard-progress li.done { color: var(--good); }
+.wizard-progress li.error { color: var(--poor); }
+.wizard-progress small { color: var(--muted); margin-left: 6px; }
