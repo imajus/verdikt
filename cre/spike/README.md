@@ -55,8 +55,13 @@ cre workflow simulate ./verify \
 
 Add `--broadcast` to submit the verdict write through Arc Testnet's
 MockKeystoneForwarder for real. That needs `CRE_ETH_PRIVATE_KEY` in `.env`
-(see `.env.example`), a funded Arc Testnet account, and a deployed receiver at
-`registryAddress` — none of which exist until Phase 2, so leave it off for now.
+(see `.env.example`), a funded Arc Testnet account, and `registryAddress` in
+`verify/config.staging.json` pointed at a real receiver — it's still the
+placeholder `0x0…1`, so leave `--broadcast` off here.
+
+This spike is superseded by the real workflow at `cre/workflows/verify`,
+which already points at the deployed `VerdiktRegistry` (see root `CLAUDE.md`).
+Use this directory only to re-run the original spike check.
 
 ## What each check actually proves
 
