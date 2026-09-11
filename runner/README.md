@@ -85,8 +85,8 @@ Provide these through the runner environment or its external Docker
 | `RUNNER_TRIGGER_ADDRESS` | Always | Public Ethereum address derived from the proxy's `CRE_TRIGGER_PRIVATE_KEY`. |
 | `CRE_CALLBACK_TOKEN_VAR` | A trigger includes `callbackUrl` (the normal proxy flow) | Same secret value as proxy `CRE_CALLBACK_TOKEN`; mapped to workflow secret `CALLBACK_TOKEN`. |
 | `CRE_ETH_PRIVATE_KEY` | `RUNNER_CRE_BROADCAST=true`, or the hourly score job | Funded burner key for `cre workflow simulate --broadcast`; never use a mainnet or application signing key. **Needs gas on both chains**: `verify` broadcasts to Arc, `aggregate` broadcasts to Sepolia. |
-| `ARC_RPC_URL` | The hourly score job | Arc RPC for the post-run read-back. Arc's public default rate-limits `eth_getLogs` well below a full registry scan. |
-| `SEPOLIA_RPC_URL` | The hourly score job | Sepolia RPC for the post-run read-back. |
+| `ARC_RPC_URL` | The hourly score job | Arc RPC for the post-run **read-back**, not for the workflow — `cre` resolves its own RPCs from `cre/workflows/project.yaml`. `bin/check-published-scores.mjs` refuses to start without it rather than inherit the SDK's public default, which rate-limits after three `eth_getLogs` calls and fails moments after a publish that worked. |
+| `SEPOLIA_RPC_URL` | The hourly score job | Sepolia RPC for the same read-back, on the same terms. |
 
 All other settings have defaults. See [`.env.example`](.env.example) for
 `RUNNER_PORT`, timeouts, request-size limit, workflow location/target/name,
@@ -108,6 +108,15 @@ by cron", per the CLI's own help), so `aggregate` is a fire-once-and-exit run
 rather than a second daemon. That is what lets it share this container with the
 long-lived `verify --listen` process: the two workflows compile into their own
 directories, and only `verify` binds the HTTP trigger port.
+
+The run needs one production limit raised. CRE allows 15 chain reads per
+workflow execution and the aggregate spends about a hundred — one per log chunk
+plus one `getService` per service — so it passes
+[`cre/workflows/limits.json`](../cre/workflows/limits.json), the exported
+defaults with that single number raised, as `--limits`. By absolute path: the
+CLI resolves that flag against its own working directory, not the shell's.
+`cre/workflows/README.md` has the arithmetic and what it implies for production
+enrollment.
 
 [`bin/publish-scores.sh`](bin/publish-scores.sh) is that single run, plus a
 read-back of what landed. The read-back is not belt-and-braces: the
@@ -133,11 +142,25 @@ the environment the container was created with — so `CRE_ETH_PRIVATE_KEY`,
 `ARC_RPC_URL` and `SEPOLIA_RPC_URL` come from the runner's own env file, not
 from the job definition.
 
-Run it once by hand before scheduling it. A first run proves three things that
-nothing else does: that the `cre login` session inside the container is still
-valid (simulate refuses outright when it is not), that the burner key has
-Sepolia gas, and that a second `cre` process alongside the `--listen` one
-causes no contention.
+Run it once by hand after any image rebuild. All three of its unknowns have now
+been answered in this container — the `cre login` session is valid, the burner
+key has Sepolia gas, and a second `cre` process alongside the `--listen` one
+causes no contention — but a rebuild can undo any of them, and simulate refuses
+outright on an expired session.
+
+A good run ends with a per-service summary carrying a transaction hash each,
+then the read-back:
+
+```text
+"window 86400s ending 1789149940: weather=0/1000 tx=0xad0ca389… portfolio=500/1000 tx=0x02df56ea… …"
+publish-scores: … simulate finished — reading the records back
+  portfolio      conformance= 500  availability=1000
+check-published-scores: all 6 live listing(s) carry both scores
+```
+
+The hashes matter on their own: the forwarder mines a receiver revert and still
+reports success, so they are the thread back to what happened on Sepolia when
+the read-back disagrees.
 
 `RUNNER_CRE_BROADCAST` does not gate this job — that flag belongs to the
 `verify` supervisor. `publish-scores.sh` always passes `--broadcast` and
