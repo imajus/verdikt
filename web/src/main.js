@@ -83,18 +83,18 @@ async function main() {
 }
 
 function draw() {
+  const route = syncRoute();
+  app.mode = mode;
+  app.theme = savedTheme();
+  app.route = route;
   if (!marketplaceCache) return;
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
-  const route = syncRoute();
   // `verdikt-app` is patched asynchronously by Lit. Clear the currently
   // mounted controls before that patch removes them, otherwise a wallet that
   // owns no services can retain the prior provider's listing and dependencies.
   if (route.view === 'provider' && mode === 'live' && !resolveProviderConsole(marketplace.services, route.view, route.address, getConnectedAccount()?.address ?? null).target) {
     clearProviderControls(false);
   }
-  app.mode = mode;
-  app.theme = savedTheme();
-  app.route = route;
   app.marketplace = marketplace;
   if (route.view === 'provider' && mode === 'live') {
     app.updateComplete.then(() => mountProviderConsole(route));
