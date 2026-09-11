@@ -332,6 +332,16 @@ table.clauses td:first-child { white-space: nowrap; }
 
 footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 13px; max-width: 90ch; }
 
+footer.legal { display: flex; gap: 16px; margin-top: 40px; }
+footer.legal a { color: var(--muted); text-decoration: none; }
+footer.legal a:hover { color: var(--ink); }
+footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
+
+.landing-cta { margin: 28px 0 0; }
+.landing-cta wa-button::part(button) { font-size: 15px; padding-inline: 22px; }
+
+.page-title { font: 700 34px/1.1 var(--display); margin: 8px 0 24px; letter-spacing: -0.02em; }
+
 /* Provider view --------------------------------------------------------------- */
 
 .editor { margin-top: 44px; }
