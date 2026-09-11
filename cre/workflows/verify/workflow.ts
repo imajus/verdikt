@@ -254,9 +254,15 @@ const finish = (
           }
         })
         .result();
-    } catch {
-      // Deliberately not logged: the payload is in scope here and log output
-      // leaves the enclave.
+    } catch (error) {
+      // TEMPORARY (remove before any real TEE deployment — production CRE
+      // enrollment is not live yet, and `cre workflow simulate` explicitly
+      // is not a real TEE, so this is safe for now): the callback is failing
+      // silently against the runner, and the blanket swallow below makes it
+      // undiagnosable. Error message only, never `payload` or `result`.
+      runtime.log(`finish(): callback POST failed: ${error instanceof Error ? error.message : String(error)}`);
+      // Deliberately not logged in the general case: the payload is in scope
+      // here and log output leaves the enclave.
     }
   }
   return payload;
