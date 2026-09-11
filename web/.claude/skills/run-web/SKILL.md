@@ -39,22 +39,38 @@ Then navigate your browser tool to `http://localhost:5173/` and wait for the tex
 fuser -k 5173/tcp
 ```
 
-Routes are **query params**, not paths (`src/router.js`) — there is no SPA
-fallback to configure, and deep links can be navigated directly:
+Routes are **real URL paths** (`src/router.js`), and deep links can be
+navigated directly:
 
 | URL | view |
 |---|---|
-| `http://localhost:5173/` | marketplace, first service selected |
-| `http://localhost:5173/?service=weather-lite` | marketplace, that service's detail pane |
-| `http://localhost:5173/?view=how` | "How it works" |
-| `http://localhost:5173/?provider=0xA11ce00000000000000000000000000000000001` | provider console |
+| `http://localhost:5173/` | landing page |
+| `http://localhost:5173/marketplace` | marketplace listing |
+| `http://localhost:5173/services/weather-lite` | that service's standalone detail page |
+| `http://localhost:5173/how` | "How it works" |
+| `http://localhost:5173/provider` | provider console (connected wallet) |
+| `http://localhost:5173/provider/0xA11ce00000000000000000000000000000000001` | provider console for that address |
+| `http://localhost:5173/terms` | Terms of Service |
+| `http://localhost:5173/privacy` | Privacy Policy |
 
-Clicking a service row is a real button and updates the URL:
+A legacy `?provider=0x…` deep link still resolves — `parseRoute` rewrites it
+forward to `/provider/0x…` via `history.replaceState` on load — but
+`?service=…`/`?view=…` query params are no longer read; those now fall
+through to the marketplace/landing route.
+
+Because routes are real paths, both deploy targets need (and have) an SPA
+fallback that serves `index.html` for any unmatched path: `web/wrangler.jsonc`'s
+`not_found_handling` for the Cloudflare Worker target, and `web/nginx.conf`'s
+`try_files` for the Docker/nginx target. Vite's own dev server already falls
+back to `index.html` for any path by default, so local dev needs no extra
+config — a hard refresh on e.g. `http://localhost:5173/marketplace` just works.
+
+Clicking a service row follows a real `<a href>` and updates the URL:
 
 ```js
 // after clicking the "weather-lite" row
 ({ url: location.href, selected: document.querySelector('h2')?.textContent })
-// -> { url: ".../?service=weather-lite", selected: "weather-lite" }
+// -> { url: ".../services/weather-lite", selected: "weather-lite" }
 ```
 
 ### Demo data vs. live mode
@@ -76,7 +92,7 @@ Gotchas.
 ### Driving the provider console and the onboarding wizard
 
 `verdikt-wizard`, `verdikt-sla-editor` and `verdikt-bond-controls` render on the
-`?provider=…` route in demo mode, but `main.js` only injects their `deps` when
+`/provider/:address` route in demo mode, but `main.js` only injects their `deps` when
 `mode === 'live'`, so they mount **inert**: `document.querySelector('#wizard-mount').deps === null`
 and the element renders nothing.
 
@@ -85,7 +101,7 @@ functions, so assign it yourself. This is the harness for any wizard/SLA/bond
 change — verified working against the running dev server:
 
 ```js
-// navigate to /?provider=0xA11ce00000000000000000000000000000000001 first
+// navigate to /provider/0xA11ce00000000000000000000000000000000001 first
 const w = document.querySelector('#wizard-mount');
 w.deps = {
   account: '0x4088f83b25Ff1dcc8bd1D88250e316ed5AB29AEE',
