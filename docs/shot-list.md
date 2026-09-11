@@ -5,6 +5,13 @@ submission. This is the cut: seven shots, ~3:00, ordered so the strongest claim
 lands first and every number on screen is one you can re-read off a public
 chain afterwards.
 
+**Blocked as written.** `weather` and `weather-lite` were deregistered on Arc
+Testnet on 2026-09-11 — the dashboard now shows both `DEREGISTERED` with a
+zero bond, not the conformance numbers this script points at. Before shooting:
+re-register both slugs under new bonds (`pnpm onboard`), re-publish their SLAs,
+and generate enough PASS/FAIL traffic for the hourly aggregate to produce fresh
+`weather`/`weather-lite` conformance numbers on ENS.
+
 **Before you start**
 
 ```bash

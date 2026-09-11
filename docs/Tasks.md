@@ -909,4 +909,7 @@ day saved in Phase 4 here.
       that is the only part left: [`shot-list.md`](./shot-list.md) is the
       3-minute submission cut — seven timed shots, what is on screen, the lines
       to say, and the one sentence about what is simulated — and
-      [`walkthrough.md`](./walkthrough.md) is the long version it was cut from
+      [`walkthrough.md`](./walkthrough.md) is the long version it was cut from.
+      `weather` and `weather-lite` were deregistered on 2026-09-11, so
+      `shot-list.md`'s setup step needs both slugs re-registered under new
+      bonds before this can be shot

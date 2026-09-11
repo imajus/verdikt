@@ -217,6 +217,12 @@ verification would be self-refuting.
   those events and publishing both to ENS, where they can be read back off
   `<slug>.verdikt.eth`. All of it in [`docs/evidence/`](docs/evidence).
 
+`weather` and `weather-lite` were deregistered on Arc Testnet on 2026-09-11 —
+their bonds were returned to the provider wallet and the registry now marks
+both `DEREGISTERED`. The evidence above is the transcript from while they were
+live; a fresh recording needs both slugs re-registered under new bonds first,
+since a deregistered slug can't be reused on this deployment.
+
 **Simulated or blocked, and why:**
 
 - **Attestation is simulated.** CRE production enrollment is early access

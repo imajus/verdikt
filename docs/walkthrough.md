@@ -8,6 +8,13 @@ Arc Testnet and Ethereum Sepolia; the transcripts are in
 Tasks.md 6.3 stays open for that. What this is, is the script for one: the same
 order, with the commands and the numbers to expect.
 
+**`weather` and `weather-lite` were deregistered on 2026-09-11**, after this
+walkthrough and its evidence were captured. Steps 1–7 below are an accurate
+record of what happened and every number is still readable from the chain —
+but re-running step 6 or 7 today shows both services `DEREGISTERED` with a
+zero bond, not the bonded state described here. Recording a fresh video needs
+both slugs re-registered first.
+
 ## What is deployed
 
 | | |
