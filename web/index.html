@@ -66,6 +66,12 @@
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
     />
+    <!-- web/public/_headers pins this exact script's sha256 hash in its CSP
+         script-src, instead of 'unsafe-inline'. Edit so much as a
+         character here and that hash goes stale: the theme silently stops
+         applying, no error page, just a CSP violation in the browser
+         console — which conveniently names the exact new hash to paste
+         into _headers, so recovery is a copy-paste, not a rebuild. -->
     <script>
       try {
         const stored = localStorage.getItem('verdikt-theme');
