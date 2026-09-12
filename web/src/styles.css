@@ -1183,39 +1183,59 @@ table.tree tr.ignored td { padding-left: calc(var(--depth, 0) * 18px); font-size
 
 /* Try-it demo chat -------------------------------------------------------- */
 
-/* A real chat, not another ledger row: turns lean toward their speaker and
-   carry a bubble, using only shapes the system already owns — the 2px
-   control radius, the paper-2 tonal step, an outlined rule for the other
-   voice — so the metaphor lands without borrowing a messaging app's shadows
-   or saturated per-sender colour. The closing "on the record" line stays
-   outside that vocabulary: it is the page speaking again once the exchange
-   is over, not a turn, so it carries no bubble. */
+/* Three registers, not one. A chat bubble (you lean right, the agent leans
+   left) carries only shapes the system already owns — the 2px control
+   radius, the paper-2 tonal step, an outlined rule for the other voice — so
+   the metaphor lands without borrowing a messaging app's shadows or
+   saturated per-sender colour. Between the two bubbles, the agent's own
+   status log is a third register again: a plain mono trail down a hairline,
+   the same left-rule idiom an aside already uses for "supporting evidence,
+   no fill" — because a log line is not something either party said, it is
+   what happened. The closing "on the record" line is a fourth register:
+   the page speaking directly once the roleplay is over, so it carries no
+   bubble and no rule either. */
 .demo-chat { display: flex; flex-direction: column; gap: 18px; max-width: 66ch; }
 .demo-turn { display: flex; flex-direction: column; }
-.demo-turn.demo-agent { align-items: flex-end; }
-.demo-turn.demo-verdikt { align-items: flex-start; }
+.demo-turn.demo-user { align-items: flex-end; }
+.demo-turn.demo-reply { align-items: flex-start; }
 .demo-who {
   margin: 0 0 6px; font-family: var(--mono); font-size: 11px;
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
 }
 .demo-bubble { max-width: 85%; padding: 12px 14px; border-radius: 2px; }
-.demo-agent .demo-bubble { background: transparent; border: 1.5px solid var(--rule-strong); }
-.demo-verdikt .demo-bubble { background: var(--paper-2); }
+.demo-user .demo-bubble { background: transparent; border: 1.5px solid var(--rule-strong); }
+.demo-reply .demo-bubble { background: var(--paper-2); }
 .demo-text { margin: 0; font-size: 16.5px; color: var(--ink); }
 .demo-link {
   display: inline-block; margin-top: 8px; font-size: 14.5px; color: var(--muted);
   text-decoration: none; border-bottom: 1px solid var(--rule);
 }
 .demo-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
-.demo-turn.demo-record {
-  margin: 0; padding-top: 16px; border-top: 1px solid var(--rule);
+.demo-log-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.demo-log-line {
+  padding-left: 14px; border-left: 1.5px solid var(--rule);
+  font-family: var(--mono); font-size: 13px; line-height: 1.5; color: var(--muted);
+}
+.demo-log-line .outcome { font-family: var(--sans); }
+/* The evidence opens its own line rather than hanging under it, so the link
+   flows inline — and lifts to `ink-2` to read as the one clickable phrase on
+   a line of muted mono. */
+.demo-log-line .demo-link { display: inline; margin-top: 0; font-size: inherit; color: var(--ink-2); }
+/* The route the agent calls, named rather than linked — underlined wherever
+   it appears so one identifier reads as one thing in the log and in prose. */
+.demo-host { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+/* Block, not the flex column every other turn is: as a flex item the closing
+   link would stretch, and its 1px underline would read as a full-width rule
+   across the sheet rather than as the link's own. */
+.demo-turn.demo-coda {
+  display: block; margin: 0; padding-top: 16px; border-top: 1px solid var(--rule);
   color: var(--ink-2); font-size: 16.5px; font-style: italic;
 }
-.demo-record .demo-link { color: var(--muted); }
+.demo-coda .demo-link { margin-top: 0; color: var(--muted); }
 .demo-actions { margin-top: 22px; display: flex; align-items: center; gap: 14px; }
 .demo-actions wa-button { margin-top: 0; }
-.demo-count { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: no-preference) {
   .demo-turn { animation: demo-in 260ms ease both; }
+  .demo-log-line { animation: demo-in 220ms ease both; }
 }
 @keyframes demo-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

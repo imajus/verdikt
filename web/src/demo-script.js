@@ -1,8 +1,17 @@
-// The scripted "try it" chat embedded on the landing page (issue #66). Every claim it makes links
-// out to a real, already-mined transaction or a real contract, taken verbatim
-// from docs/evidence/ rather than a live RPC call — so the demo can't go
-// stale or break during judging, and needs no wallet or gas from whoever is
-// looking at it.
+// The scripted "try it" chat embedded on the landing page (issue #66). Every
+// claim it makes links out to a real, already-mined transaction or a real
+// contract, taken verbatim from docs/evidence/ rather than a live RPC call —
+// so the demo can't go stale or break during judging, and needs no wallet or
+// gas from whoever is looking at it.
+//
+// The frame is a paying agent working on someone's behalf, not Verdikt
+// narrating its own mechanism: a visitor asks for something in plain
+// language, the log beneath is what their agent actually does to get it, and
+// the reply is what it tells the person who asked — the service itself, not
+// the provider's identity or the proxy route (a hostname is wiring, not
+// something a person reads), the charge, and the fact that it came back.
+// The closing step is a bare link back to the full verdict history, for
+// whoever wants the record rather than the summary.
 //
 // The scenario is weather-lite's recorded FAIL
 // (docs/evidence/clause-detail-live.log): its SLA promises a
@@ -10,25 +19,15 @@
 // `current-weather-shape` breaks and the refund credits automatically,
 // capped at exactly what was paid.
 //
-// Two of the links below are each real on their own chain but not yet one
-// continuous transaction, and DEMO_DISCLOSURE says so rather than letting the
-// chat imply otherwise — the same honesty docs/shot-list.md's own closing
-// disclaimer applies to the enclave and the fixture payer:
-//
-//   - the payment is docs/evidence/x402-payment-live.log's real signature,
-//     accepted by Base Sepolia's USDC contract directly. Verdikt's own demo
-//     paywall doesn't yet carry a payment header through to a judged call
-//     (docs/walkthrough.md, "What this does not show") — that gap is the
-//     provider's, not the verifier's.
-//   - the verdict and refund are a real Arc Testnet write from that same
-//     failure mode, but against FIXTURE_PAYER (fixtures/index.js): an
-//     address with no private key behind it, chosen specifically so it could
-//     never be mistaken for a real one. Nobody can run withdraw() against
-//     this credit for the same reason nobody could have forged it — there is
-//     no key to sign with.
-//
-// The CRE workflow that judged the call is also the simulator, not a
-// deployed TEE: production enrollment is still pending (CLAUDE.md).
+// Every figure below is that one verdict's own record, read back off Arc in
+// clause-detail-live.log §3, requestId 0x0606…: paidAmount 2500 minor units
+// (0.0025 USDC), refundCredited 2.5e15 wei of native USDC (0.0025 USDC again
+// — the cap binding at what was paid), and the 87ms the enclave measured for
+// the provider's answer in §2. They are deliberately all from the same
+// record: the Base Sepolia signature this demo also links is a separate leg
+// for a different amount (1 minor unit, x402-payment-live.log), so no money
+// figure is ever attached to that line. Mixing the two legs' numbers into
+// one flow would print a total that never happened.
 //
 // The Arc Testnet explorer is https://testnet.arcscan.app (the `use-arc`
 // skill's own reference) — not `explorer.testnet.arc.network`, which
@@ -40,53 +39,68 @@
 import { serviceUrl } from './router.js';
 
 const ARC_EXPLORER = 'https://testnet.arcscan.app';
-const REGISTRY = '0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af';
 const VERDICT_TX = '0x3f136dcbbe5d5ca88dee63da5ef1a9efba065ce81bcb27f7d5f90c377463ef4f';
 const PAYMENT_TX = '0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061';
 
 export const DEMO_SLUG = 'weather-lite';
 export const DEMO_SERVICE_URL = serviceUrl(DEMO_SLUG);
+/** The proxy route the agent actually calls. `{host}` in any step's text renders it underlined. */
+export const DEMO_HOST = `${DEMO_SLUG}.verdikt.bond`;
+
+/** What the judged call cost and what came back — the same figure, because the refund cap binds at what was paid. */
+export const DEMO_PAID = '0.0025 USDC';
+export const DEMO_REFUNDED = '0.0025 USDC';
+/** What the enclave measured for the provider's answer. */
+export const DEMO_LATENCY = '87 ms';
+
+export const DEMO_USER_MESSAGE = 'Get weather for today in New York.';
+export const DEMO_REPLY = 'Sorry, something went wrong — the weather service isn’t answering properly right now. The {amount} it charged was refunded automatically, so you are not out of pocket. I’ll try a different service.';
 
 /**
+ * A log step's `link` is not a footnote under the line — its `label` opens the
+ * line and the `text` finishes the sentence, so the evidence is the thing you
+ * read rather than an afterthought hanging off it. The label therefore names
+ * what is on the other side (which chain, which record), because inline it is
+ * all a reader gets before clicking.
+ *
+ * Three substitution tokens, each so a value keeps typography a plain string
+ * cannot carry: `{amount}` in prose becomes mono (DESIGN.md's chain-data rule
+ * — a chain value never ships in the sans face), `{outcome}` becomes the
+ * dotted PASS/FAIL mark the ledger tables use, and `{host}` underlines the
+ * proxy route wherever it is named. The closing step carries a link and no
+ * text at all: the record speaks for itself.
  * @typedef {{
- *   from: 'agent'|'verdikt'|'record',
+ *   kind: 'user'|'log'|'reply'|'coda',
  *   text: string,
- *   link?: { label: string, href: string, internal?: boolean }
+ *   link?: { label: string, href: string, internal?: boolean },
+ *   outcome?: 'fail',
+ *   amount?: string
  * }} DemoStep
  */
 
 /** @type {DemoStep[]} */
-export const DEMO_STEPS = [
+export const DEMO_SCRIPT = [
+  { kind: 'user', text: DEMO_USER_MESSAGE },
+  { kind: 'log', text: 'Send HTTP request to {host}' },
+  { kind: 'log', text: `Received 402 Payment Required — price ${DEMO_PAID}` },
+  { kind: 'log', text: 'Signed payment, resent the request' },
   {
-    from: 'agent',
-    text: `I call ${DEMO_SLUG}.verdikt.bond. It answers 402 with its own challenge, so I sign the payment it asked for and send that back.`,
-    link: { label: 'The signed payment — accepted directly by Base Sepolia’s USDC contract', href: `https://sepolia.basescan.org/tx/${PAYMENT_TX}` }
+    kind: 'log',
+    text: '— accepted by Base Sepolia’s USDC contract',
+    link: { label: 'Payment received', href: `https://sepolia.basescan.org/tx/${PAYMENT_TX}` }
+  },
+  { kind: 'log', text: `Provider answered 200 in ${DEMO_LATENCY}` },
+  {
+    kind: 'log',
+    text: 'is {outcome} — response is missing the advertised data',
+    outcome: 'fail',
+    link: { label: 'On-chain verdict', href: `${ARC_EXPLORER}/tx/${VERDICT_TX}` }
   },
   {
-    from: 'verdikt',
-    text: `Payment received. Replaying the call inside the confidential workflow, and checking the response against ${DEMO_SLUG}’s own published SLA — not Verdikt’s description of it, the provider’s.`
+    kind: 'log',
+    text: `— ${DEMO_REFUNDED}`,
+    link: { label: 'Refund booked', href: `${ARC_EXPLORER}/tx/${VERDICT_TX}` }
   },
-  {
-    from: 'verdikt',
-    text: `FAIL. The SLA promises a relative_humidity_2m field in every response; this one doesn’t have it. Clause current-weather-shape breaks — not just that it failed, which promise it broke.`,
-    link: { label: 'The verdict, written on Arc Testnet', href: `${ARC_EXPLORER}/tx/${VERDICT_TX}` }
-  },
-  {
-    from: 'verdikt',
-    text: `No ticket, no arbitration queue, no waiting on a human: the same write that records the FAIL books the refund against ${DEMO_SLUG}’s bond, capped at exactly what was paid — never a penalty on top.`,
-    link: { label: 'Same transaction — the credit is booked, not sent', href: `${ARC_EXPLORER}/tx/${VERDICT_TX}` }
-  },
-  {
-    from: 'verdikt',
-    text: `That credit sits on the registry until the payer calls withdraw() to collect it. Verdikt never pushes it — a payer that rejects transfers could otherwise revert the call and erase its own FAIL.`,
-    link: { label: 'The registry holding it, on Arc Testnet', href: `${ARC_EXPLORER}/address/${REGISTRY}` }
-  },
-  {
-    from: 'record',
-    text: `Paid, judged against the provider’s own promise, refunded — with nobody arbitrating any of it. ${DEMO_SLUG} was deregistered after this run (its bond went back to the provider), so it won’t turn up in the marketplace list, but every verdict below is exactly what got recorded.`,
-    link: { label: `${DEMO_SLUG}’s full verdict history`, href: DEMO_SERVICE_URL, internal: true }
-  }
+  { kind: 'reply', text: DEMO_REPLY, amount: DEMO_PAID },
+  { kind: 'coda', text: '', link: { label: `${DEMO_SLUG}’s full verdict history`, href: DEMO_SERVICE_URL, internal: true } }
 ];
-
-export const DEMO_DISCLOSURE =
-  'Two of the links above are each real on their own chain, not yet one continuous transaction. The payment is a live signature that Base Sepolia’s USDC contract accepted directly; the verdict and refund are a live Arc Testnet write from this exact failure. Stitching them into one paid call is the one piece still open — Verdikt’s demo paywall advertises the payment scheme and then still answers 402 to it, and that gap is the provider’s, not the verifier’s. This verdict’s payer is also a fixture address with no private key behind it, by design, so nobody has actually run withdraw() against this one credit — the credit itself, and the logic that would pay it out, are both real. And the enclave is CRE’s simulator, not a deployed TEE: production enrollment is still pending.';

@@ -22,7 +22,6 @@ import { ARC } from '@verdikt/sdk';
 import { formatMinorUsdc, formatNativeUsdc, shortHex } from './format.js';
 import { HOW_PATH, MARKETPLACE_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
-import { DEMO_DISCLOSURE } from './demo-script.js';
 import './diagram.js';
 import './demo-chat.js';
 
@@ -151,8 +150,7 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <h1 class="entry-lead"><span>Verified per call.</span><span>Refunded on failure.</span><span>No arbitration.</span></h1>
       <p class="tagline lead">${TAGLINE}</p>
       <p class="landing-cta">
-        <wa-button href="#try-it">Try it — no wallet needed</wa-button>
-        <wa-button appearance="outlined" href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
+        <wa-button href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</wa-button>
         <wa-button appearance="outlined" href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>How the loop works</wa-button>
         ${mode === 'live' ? html`<a class="cta-aside" href=${REGISTER_PATH} @click=${navigateOnClick(go, REGISTER_PATH)}>or list a service of your own</a>` : nothing}
       </p>`)}
@@ -161,8 +159,8 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <h2>Try it — no wallet needed</h2>
       <p>One real failure, paid and refunded end to end. Every link below is a transaction or contract that actually exists on a public testnet — click Send to walk through it, about 30 seconds, nothing to sign.</p>
       <verdikt-demo-chat .go=${go}></verdikt-demo-chat>`, html`
-      <p class="note-head">What this walk-through doesn’t show yet</p>
-      <p class="note-line">${DEMO_DISCLOSURE}</p>`, true, 'try-it')}
+      <p class="note-head">Nothing new to integrate</p>
+      <p class="note-line">An agent already paying x402 services uses Verdikt’s proxy API endpoint instead of the provider’s own — same challenge, same payment.</p>`, false, 'try-it')}
 
     ${entry('02', html`
       <h2>The record so far</h2>

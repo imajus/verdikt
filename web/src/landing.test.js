@@ -161,13 +161,16 @@ describe('landing page', () => {
     expect(html.match(/class="entry-note"/g)?.length).toBe(4);
   });
 
+  // The hero itself carries no CTA to it any more — the chat is the very next
+  // thing on the page, so there is nothing to jump to. The anchor id stays,
+  // in case anything still links to #try-it from outside the page.
   it('embeds the try-it chat right after the hero, as its own anchorable entry', () => {
     const html = stringify(landing(() => {}));
     expect(html).toContain('id="try-it"');
     expect(html).toContain('<verdikt-demo-chat');
     expect(html.indexOf('id="try-it"')).toBeGreaterThan(html.indexOf('No arbitration'));
     expect(html.indexOf('id="try-it"')).toBeLessThan(html.indexOf('class="figures"'));
-    expect(html).toContain('href="#try-it"');
+    expect(html).not.toContain('href="#try-it"');
   });
 
   // The split entry's two halves ask for different things and must not collapse
