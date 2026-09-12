@@ -99,6 +99,25 @@ a verdict says from where to go and check it.
   the table under it runs newest-first, and an unlabelled row of marks gives a
   reader no way to know that.
 
+- **The subname links out to `explorer.ens.dev` wherever it is an identifier**
+  — a listing row, the service page's head, the `On the record` block, and the
+  registration docket once the claim has landed. Not in prose and not as a
+  heading's disambiguator: the same outbound link four times on one page is
+  noise. The explorer reads the same Sepolia records this app does and shows
+  who wrote each one, which makes it the independent check on the ENS half of
+  what the app claims. URL builder is `ensExplorerUrl` in `router.js`, not in
+  `packages/sdk/ens.js` — that file is the choke point for ENS *reads* and
+  this resolves nothing.
+
+- **The listing row is a div with a stretched link, not an `<a>` wrapper.**
+  The subname inside it carries its own link, and an anchor inside an anchor
+  is not markup a browser keeps. `.row-link::after` covers the row; anything
+  else in it that is a link sits above the stretch on `z-index: 1`; the focus
+  ring is moved to the row by `:has`, scoped behind `@supports` so a browser
+  without `:has` keeps the ring it would have had. The accessibility tree
+  gained by this: each row is now two links with real names rather than one
+  whose name was the whole row's text.
+
 ## Unresolved
 
 - No block-explorer links: `explorer.testnet.arc.network` does not resolve

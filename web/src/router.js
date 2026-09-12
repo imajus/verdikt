@@ -56,6 +56,25 @@ export function providerUrl(address) {
 }
 
 /**
+ * A subname on the ENS explorer, which reads the same Sepolia records this app
+ * does and shows their write history — the owner, the resolver and every
+ * `sla` / `url` / `conformance` / `availability` write, attributed to the
+ * address that made it. That makes it the independent check on the ENS half
+ * of what this app claims, which is why the name is a link wherever it is
+ * presented as an identifier rather than mentioned in prose.
+ *
+ * Here rather than in `packages/sdk/ens.js`: that file is the choke point for
+ * ENS *reads*, and this resolves nothing — it is a URL builder, and it sits
+ * with the app's other URL builders so the dashboard and the registration
+ * wizard share one.
+ *
+ * @param {string} name a full ENS name, e.g. `weather.verdikt.eth`
+ */
+export function ensExplorerUrl(name) {
+  return `https://explorer.ens.dev/${encodeURIComponent(name)}`;
+}
+
+/**
  * A click handler for an in-app `<a href>`: lets a modifier-click or a
  * non-primary button open the link normally (new tab, new window, etc.),
  * and otherwise intercepts the navigation for the SPA router.

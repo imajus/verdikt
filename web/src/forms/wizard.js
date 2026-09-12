@@ -11,7 +11,7 @@ import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
 import { formatTxError } from '../format.js';
-import { navigateOnClick, serviceUrl } from '../router.js';
+import { ensExplorerUrl, navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-validity.js';
 import './sla-composer.js';
 
@@ -37,6 +37,24 @@ function describeSlaRecord(source) {
     return 'unreadable';
   }
 }
+
+/**
+ * The docket's subname, linked to the ENS explorer once it exists.
+ *
+ * `claimed` is the first step having been signed. Before that the review
+ * screen is stating an intention, and a link would send a provider to an
+ * explorer page for a name nobody has registered — the one reading of this
+ * docket where the name is not yet a fact.
+ *
+ * @param {string} slug
+ * @param {boolean} claimed
+ */
+const ensDocketName = (slug, claimed) => {
+  const name = `${slug}.verdikt.eth`;
+  if (!claimed) return name;
+  return html`<a class="ens-link" href=${ensExplorerUrl(name)} target="_blank" rel="noopener noreferrer"
+    title=${`${name} on the ENS explorer — its owner, its resolver and every record write`}>${name}</a>`;
+};
 
 /**
  * The four transactions registration requires, in the order the module
@@ -222,7 +240,7 @@ export class VerdiktWizard extends LitElement {
       <section class="block">
         <h3>Service record</h3>
         <table class="kv">
-          <tr><th>Subname</th><td><code>${this.slug}.verdikt.eth</code></td></tr>
+          <tr><th>Subname</th><td><code>${ensDocketName(this.slug, this.done >= 1)}</code></td></tr>
           <tr><th>Endpoint</th><td><code>${this.url.trim()}</code></td></tr>
           <tr><th>SLA</th><td>${describeSlaRecord(this.sla)}</td></tr>
           <tr><th>Bond</th><td><code>${deps.formatNativeUsdc(deps.depositAmount)}</code></td></tr>

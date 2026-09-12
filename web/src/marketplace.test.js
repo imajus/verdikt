@@ -618,6 +618,44 @@ describe('what the page says a call costs', () => {
   });
 });
 
+// The explorer reads the same Sepolia records this app does and shows who
+// wrote each one, so it is the independent check on the ENS half of what
+// every one of these pages claims.
+describe('the subname’s link out to the ENS explorer', () => {
+  const EXPLORER = 'https://explorer.ens.dev/weather.verdikt.eth';
+  const build = () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], records: { weather: record({}) } }));
+
+  it('is on the service page', async () => {
+    const { services } = await build();
+    expect(renderDetail(services[0])).toContain(EXPLORER);
+  });
+
+  it('is on the marketplace listing', async () => {
+    expect(renderApp(await build(), 'demo', 'marketplace', null)).toContain(EXPLORER);
+  });
+
+  it('is on a provider console', async () => {
+    expect(renderApp(await build(), 'demo', 'provider', null, PROVIDER)).toContain(EXPLORER);
+  });
+
+  // An anchor inside an anchor is not markup a browser keeps: the row's link
+  // to the service page would swallow this one, or the parser would split the
+  // row. The row is a div with a stretched link inside it instead.
+  it('is not nested inside the listing row’s own link', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).not.toContain('<a class="row"');
+    expect(html).toContain('href="/services/weather"');
+  });
+
+  it('leaves the site, so it opens where it will not lose the page behind it', async () => {
+    const { services } = await build();
+    const html = renderDetail(services[0]);
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('target="_blank"');
+  });
+});
+
 // Two records that were at the top of the page and should not have been: the
 // upstream URL an agent never types, and the ENS `address` record, which
 // issue #37 took out of the request path and which "Pays to" claimed was

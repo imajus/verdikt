@@ -6,7 +6,7 @@ import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { isListed } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
 import { amount, landing } from './landing.js';
 
@@ -102,14 +102,33 @@ const failedClauseCell = (verdict, anchors) => {
   return html`<a class="clause-link" href="#${anchor}" title="The clause this call broke, as the SLA declares it above."><code>${verdict.failedClauseId}</code></a>`;
 };
 
+/**
+ * The subname, linked out to the ENS explorer.
+ *
+ * Used wherever the name stands as the service's identifier — a listing row,
+ * the service page's head, its `On the record` block, and the registration
+ * docket once the subname exists. Deliberately not used where the name
+ * appears inside a sentence or as a section heading's disambiguator: the same
+ * outbound link four times on one page is noise, not access.
+ *
+ * @param {string} name
+ */
+const ensLink = (name) => html`<a
+  class="ens-link" href=${ensExplorerUrl(name)} target="_blank" rel="noopener noreferrer"
+  title=${`${name} on the ENS explorer — its owner, its resolver and every record write`}>${name}</a>`;
+
 /** @param {Listing} listing @param {(path: string) => void} go */
 const listingRow = (listing, go) => {
   const unranked = listing.published.conformance === null && listing.published.availability === null;
   const href = serviceUrl(listing.slug);
+  // The row is a div with a stretched link inside it, not an `<a>` wrapping
+  // everything: the subname carries its own link out to the ENS explorer, and
+  // an anchor inside an anchor is not markup a browser will keep.
   return html`
-    <a class="row" href=${href} data-slug=${listing.slug} @click=${navigateOnClick(go, href)}>
+    <div class="row" data-slug=${listing.slug}>
       <span class="cell name">
-        <strong>${listing.slug}</strong><small>${listing.name}</small>
+        <strong><a class="row-link" href=${href} @click=${navigateOnClick(go, href)}>${listing.slug}</a></strong>
+        <small>${ensLink(listing.name)}</small>
         ${listing.contested ? html`<span class="contested">contested</span>` : nothing}
         ${unranked ? html`<span class="unranked">not yet ranked</span>` : nothing}
       </span>
@@ -117,7 +136,7 @@ const listingRow = (listing, go) => {
       <span class="cell num">${availabilityCell(listing)}</span>
       <span class="cell num">${amount(formatNativeUsdc(listing.deposit, 2))}</span>
       <span class="cell status">${statusMark(listing.status)}</span>
-    </a>`;
+    </div>`;
 };
 
 const copyIcon = () => html`<svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-9A1.5 1.5 0 0 0 3 5.5v9A1.5 1.5 0 0 0 4.5 16"/></svg>`;
@@ -316,7 +335,7 @@ const recordSection = (listing, mode, go) => {
       <h3>On the record</h3>
       <table class="kv">
         <tr><th>Relays to</th><td>${listing.endpoint ? html`<code>${listing.endpoint}</code>` : html`<span class="muted">no <code>url</code> record published</span>`}</td></tr>
-        <tr><th>Subname</th><td><code>${listing.name}</code> <span class="muted">on Ethereum Sepolia</span></td></tr>
+        <tr><th>Subname</th><td><code>${ensLink(listing.name)}</code> <span class="muted">on Ethereum Sepolia</span></td></tr>
         <tr><th>Address record</th><td>${listing.payTo ? html`<code>${listing.payTo}</code>` : html`<span class="muted">none published</span>`}</td></tr>
         <tr><th>Provider</th><td><a href=${consolePath} @click=${navigateOnClick(go, consolePath)}><code>${listing.provider}</code></a></td></tr>
         <tr><th>Service id</th><td><code>${listing.serviceId}</code></td></tr>
@@ -336,7 +355,7 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
   const days = Math.round(WINDOW_SECONDS / 86400);
   return html`
     <header class="detail-head">
-      <div><h2>${listing.slug}</h2><p class="sub"><code>${listing.name}</code> ${statusMark(listing.status)}</p></div>
+      <div><h2>${listing.slug}</h2><p class="sub"><code>${ensLink(listing.name)}</code> ${statusMark(listing.status)}</p></div>
       <dl class="scores">
         <div><dt>Conformance</dt><dd>${scoreCell(listing.published.conformance)}</dd></div>
         <div><dt>Availability</dt><dd>${availabilityCell(listing)}</dd></div>

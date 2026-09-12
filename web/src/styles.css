@@ -286,6 +286,32 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .cell.name .unranked { color: var(--muted); font-size: 13px; font-style: italic; }
 .cell.name .contested { color: var(--poor); font-size: 13px; font-weight: 500; }
 
+/* The row's own link, stretched over the whole row by a pseudo-element rather
+   than by wrapping it — the subname under the slug links out to the ENS
+   explorer, and an anchor inside an anchor is not markup a browser keeps.
+   Anything else in the row that is itself a link has to sit above the stretch
+   to stay clickable. */
+.row-link { color: inherit; text-decoration: none; }
+.row-link::after { content: ''; position: absolute; inset: 0; }
+.cell.name a:not(.row-link) { position: relative; z-index: 1; }
+/* One ring around the row, not a short one around the slug. The suppression
+   is scoped to browsers that can draw the row's ring, so anywhere `:has` is
+   missing the link keeps the global focus ring it would have had. */
+@supports selector(:has(*)) {
+  .row:has(.row-link:focus-visible) { outline: 2px solid var(--ink); outline-offset: -2px; }
+  .row-link:focus-visible { outline: none; }
+}
+
+/* An outbound link to the ENS explorer, in the quiet rank: a hairline under
+   the name that goes ink on hover. Blue would put a marketplace row's loudest
+   mark on the one target that leaves the site. */
+.ens-link {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+  transition: color 120ms, border-color 120ms;
+}
+.ens-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
+
 /* A score is the number plus a meter beneath it, so two services can be
    compared at arm's length without reading either figure. The track is a
    lighter step of the same hue, so the band reads across the whole bar. */
@@ -490,6 +516,15 @@ table.ledger tbody .edge code { color: var(--ink-2); }
 .record table.kv th { color: var(--muted); }
 .record table.kv td { color: var(--ink-2); }
 .record table.kv code { color: var(--ink-2); }
+/* Both links in this block are the quiet rank — the provider's console and
+   the subname's explorer page are two ways to check the same record, and
+   painting one of them blue would rank them against each other. */
+.record table.kv a {
+  color: inherit; text-decoration: none;
+  border-bottom: 1px solid var(--rule);
+  transition: color 120ms, border-color 120ms;
+}
+.record table.kv a:hover { color: var(--ink); border-bottom-color: var(--ink); }
 .record table.kv a code { color: inherit; }
 
 .outcome { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; letter-spacing: 0.02em; }
