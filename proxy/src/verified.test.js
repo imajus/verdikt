@@ -231,13 +231,13 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
   // `decodePayment` can only settle it by asking the account (ERC-1271). That
   // ask is an `eth_call` on the *payment's* chain — whichever chain the
   // provider's 402 named, routinely neither of Verdikt's own two — so the
-  // proxy hands down a reader built from `PAYMENT_RPC_URLS`. Live, this was
+  // proxy hands down a reader built from the `PAYMENT_<NAME>_RPC_URL` vars. Live, this was
   // the whole of a `payment_undecodable` 500 on a call the agent had paid for.
   describe('the reader it gives decodePayment for a contract-account payer', () => {
     const withRpc = loadConfig({
       PROXY_PUBLIC_HOST: 'verdikt.bond',
       VERDIKT_REGISTRY_ADDRESS: '0x01',
-      PAYMENT_RPC_URLS: '8453=https://base.example/rpc'
+      PAYMENT_BASE_RPC_URL: 'https://base.example/rpc'
     });
     const MAGIC_WORD = `0x1626ba7e${'00'.repeat(28)}`;
 
@@ -257,6 +257,25 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
         method: 'eth_call',
         params: [{ to: '0xacc0', data: '0xdeadbeef' }, 'latest']
       });
+    });
+
+    // An RPC behind bot management answers a challenge page, not JSON. Live,
+    // `mainnet.base.org` did exactly this to the deployed Worker: the parse
+    // error became "the account did not validate", and the paid call failed
+    // with a message blaming the payer's signature. The status and the body
+    // have to reach the message, or the next one is just as invisible.
+    it('names the status and the body when an RPC answers something that is not JSON', async () => {
+      const { deps, decodePayment, upstreamFetch } = harness({ config: withRpc });
+      upstreamFetch.mockImplementation(async (/** @type {URL|string} */ url) =>
+        String(url) === 'https://base.example/rpc'
+          ? new Response('<!DOCTYPE html><title>Just a moment...</title>', { status: 403 })
+          : new Response(JSON.stringify({ accepts: CHALLENGE_ACCEPTS }), { status: 402 })
+      );
+      await paidCall(deps);
+      const ethCall = /** @type {EthCall} */ (decodePayment.mock.lastCall?.[1]?.ethCall);
+      await expect(ethCall({ chainId: 8453, to: '0xacc0', data: '0x' })).rejects.toThrow(
+        /answered 403 with non-JSON: <!DOCTYPE html>/
+      );
     });
 
     // Refusing beats guessing: an unconfigured chain means Verdikt cannot check

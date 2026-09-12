@@ -31,10 +31,29 @@
     // Not Verdikt's chains: these are the chains *providers* ask to be paid on,
     // named by their own 402. Read only to ask a smart-contract account whether
     // it authorized a payment (ERC-1271) — a Circle agent wallet is one, so
-    // without this its payments are refused as unverifiable. Public endpoints
-    // with no embedded credential, same rationale as ARC_RPC_URL above; swap in
-    // keyed ones if the rate limit ever bites.
-    "PAYMENT_RPC_URLS": "8453=https://mainnet.base.org,137=https://polygon-rpc.com"
+    // without this its payments are refused as unverifiable. Same Alchemy key
+    // as above, so this adds no exposure it does not already have.
+    //
+    // NOT `mainnet.base.org`, which this used to be: that endpoint sits behind
+    // Cloudflare bot management, and a request from a Worker carries no browser
+    // fingerprint, so it was answered with a challenge page rather than JSON —
+    // which this reader can only read as "the account did not validate". Any
+    // replacement has to be checked from a Worker, not from a laptop.
+    //
+    // Breadth is cheap here and the chain is the provider's choice, so every
+    // network enabled on the Alchemy app gets an entry. Chain ids live in
+    // `PAYMENT_CHAIN_IDS` (proxy/src/config.js); a name with no entry here
+    // cannot have contract payers verified on it.
+    "PAYMENT_ETHEREUM_RPC_URL": "https://eth-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BNB_RPC_URL": "https://bnb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_GNOSIS_RPC_URL": "https://gnosis-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_POLYGON_RPC_URL": "https://polygon-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_XLAYER_RPC_URL": "https://xlayer-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_TEMPO_RPC_URL": "https://tempo-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BASE_RPC_URL": "https://base-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_ARBITRUM_RPC_URL": "https://arb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_LINEA_RPC_URL": "https://linea-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BASE_SEPOLIA_RPC_URL": "https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every
