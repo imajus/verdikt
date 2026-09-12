@@ -12,6 +12,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
+import { decodeFunctionData, getAddress, hashTypedData } from 'viem';
 import { DECODED_PAYMENT } from '@verdikt/fixtures';
 import { decodePayment, decodePaymentEnvelope, isPaymentDecodingImplemented } from './payment.js';
 
@@ -258,13 +259,25 @@ describe('decodePayment — the eip3009 path, which is an open standard end to e
   });
 
   /**
-   * A valid signature over the wrong payment. Crediting it would let an agent
-   * pay somebody else and claim a refund on a call this provider never got.
+   * The recipient is deliberately NOT checked against the challenge's `payTo`.
+   *
+   * That check used to live here, to stop an agent paying itself and claiming a
+   * refund on a call the provider never got. It never stopped that: signing to
+   * the *correct* `payTo` from an account holding nothing satisfies it, the
+   * payment then fails to settle, and the provider's 402 was scored as its own
+   * failure. The real guard is at the verdict layer — a 402 on the replay writes
+   * no verdict at all (`judge`, cre/lib/judge.js) — so a refund can only exist
+   * on a call the provider accepted payment for.
+   *
+   * Removing it is also what makes a seller that mints a single-use `payTo` per
+   * challenge payable at all: the proxy re-probes for `accepts`, so the address
+   * it sees is never the one the payer signed.
    */
-  it('rejects a payment validly signed to a different recipient', async () => {
+  it('decodes a payment whose recipient is not the one this challenge names', async () => {
     const elsewhere = { ...AUTHORIZATION, to: '0x00000000000000000000000000000000deadbeef' };
-    const signed = await signedHeader({ authorization: elsewhere });
-    await expect(decodePayment(signed, { accepts: ACCEPTS })).rejects.toThrow(/is paid at/);
+    const payment = await decodePayment(await signedHeader({ authorization: elsewhere }), { accepts: ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(payment.amount).toBe(2500n);
   });
 
   // The domain is taken from the challenge, never from the header. A payer that
@@ -396,5 +409,132 @@ describe('decodePayment — the development stub', () => {
     const placeholderHeader = header({ scheme: 'exact', network: 'eip155:5042002', payload: { somethingCircleShaped: true } });
     const payment = await decodePayment(placeholderHeader, { accepts: ACCEPTS, allowStub: true });
     expect(payment.amount).toBe(DECODED_PAYMENT.amount);
+  });
+});
+
+describe('decodePayment — a smart-contract account as the payer (ERC-1271)', () => {
+  // Reproduces a live failure: a real paid call from a Circle agent wallet
+  // answered `payment_undecodable`. That wallet is a deployed smart-contract
+  // account, so its payment is signed by an owner key and validated by the
+  // account itself — `recoverAddress` returns the owner, never the account, and
+  // the equality check against `from` can never hold. Confirmed against the
+  // real header: the account's own `isValidSignature` returned the ERC-1271
+  // magic value for exactly the hash computed here.
+  //
+  // The account's answer is the authority, so it is asked over `ethCall` rather
+  // than guessed at locally. A "yes-man" contract that validates anything buys
+  // an attacker nothing it could not already do by signing properly from an
+  // address it controls — what stops a fabricated payment is the provider's own
+  // acceptance of it, not this check.
+  const SMART_ACCOUNT = '0xacc0000000000000000000000000000000000001';
+  const OWNER = OTHER;
+  const ERC1271_MAGIC_WORD = `0x1626ba7e${'00'.repeat(28)}`;
+
+  const IS_VALID_SIGNATURE_ABI = [
+    {
+      name: 'isValidSignature',
+      type: 'function',
+      stateMutability: 'view',
+      inputs: [
+        { name: 'hash', type: 'bytes32' },
+        { name: 'signature', type: 'bytes' }
+      ],
+      outputs: [{ name: '', type: 'bytes4' }]
+    }
+  ];
+
+  /** The authorization a contract account pays with: `from` is the account, not the signing key. */
+  const ACCOUNT_AUTHORIZATION = { ...AUTHORIZATION, from: SMART_ACCOUNT };
+
+  /** The hash the account should be asked about, computed the way `verifyExact` does. */
+  const expectedHash = () =>
+    hashTypedData({
+      domain: {
+        name: EIP3009_OPTION.extra.name,
+        version: EIP3009_OPTION.extra.version,
+        chainId: 84532,
+        verifyingContract: /** @type {`0x${string}`} */ (EIP3009_OPTION.asset)
+      },
+      types: TYPES,
+      primaryType: 'TransferWithAuthorization',
+      message: {
+        from: getAddress(ACCOUNT_AUTHORIZATION.from),
+        to: getAddress(ACCOUNT_AUTHORIZATION.to),
+        value: BigInt(ACCOUNT_AUTHORIZATION.value),
+        validAfter: BigInt(ACCOUNT_AUTHORIZATION.validAfter),
+        validBefore: BigInt(ACCOUNT_AUTHORIZATION.validBefore),
+        nonce: /** @type {`0x${string}`} */ (ACCOUNT_AUTHORIZATION.nonce)
+      }
+    });
+
+  /**
+   * Stands in for the account contract. Records what it was asked, so a test
+   * can check the *hash* reached it rather than merely that a call happened.
+   *
+   * @param {{ answer?: string }} [options]
+   */
+  function accountReader({ answer = ERC1271_MAGIC_WORD } = {}) {
+    /** @type {{ chainId: number, to: string, data: string }[]} */
+    const calls = [];
+    return {
+      calls,
+      ethCall: async (/** @type {{ chainId: number, to: string, data: string }} */ request) => {
+        calls.push(request);
+        return answer;
+      }
+    };
+  }
+
+  /** A header signed by the owner key, declaring the account as payer. */
+  const accountHeader = () => signedHeader({ account: OWNER, authorization: ACCOUNT_AUTHORIZATION });
+
+  it('accepts the account as payer when the account validates the signature', async () => {
+    const { ethCall } = accountReader();
+    const payment = await decodePayment(await accountHeader(), { accepts: ACCEPTS, ethCall });
+    expect(payment.payer).toBe(getAddress(SMART_ACCOUNT));
+    expect(payment.amount).toBe(2500n);
+  });
+
+  it('asks the account itself, on the payment’s own chain, about the exact hash that was signed', async () => {
+    const reader = accountReader();
+    await decodePayment(await accountHeader(), { accepts: ACCEPTS, ethCall: reader.ethCall });
+    expect(reader.calls).toHaveLength(1);
+    expect(reader.calls[0].chainId).toBe(84532);
+    expect(getAddress(reader.calls[0].to)).toBe(getAddress(SMART_ACCOUNT));
+    const asked = decodeFunctionData({
+      abi: IS_VALID_SIGNATURE_ABI,
+      data: /** @type {`0x${string}`} */ (reader.calls[0].data)
+    });
+    expect(asked.args?.[0]).toBe(expectedHash());
+  });
+
+  it('rejects the payment when the account does not validate the signature', async () => {
+    const { ethCall } = accountReader({ answer: `0x${'00'.repeat(32)}` });
+    await expect(decodePayment(await accountHeader(), { accepts: ACCEPTS, ethCall })).rejects.toThrow(
+      /does not bind this payment/
+    );
+  });
+
+  // An address with no code answers `0x`. Treated as "did not validate" rather
+  // than as an error, so a bogus payer address fails the same way a wrong
+  // signature does.
+  it('rejects the payment when the named payer has no code to answer with', async () => {
+    const { ethCall } = accountReader({ answer: '0x' });
+    await expect(decodePayment(await accountHeader(), { accepts: ACCEPTS, ethCall })).rejects.toThrow(
+      /does not bind this payment/
+    );
+  });
+
+  it('refuses rather than accepting an unverifiable contract payer when no reader is configured', async () => {
+    await expect(decodePayment(await accountHeader(), { accepts: ACCEPTS })).rejects.toThrow(/does not bind this payment/);
+  });
+
+  // The common case stays offline: an EOA payer settles by recovery alone, so a
+  // paid call does not pay for an RPC round trip it does not need.
+  it('never calls out for an EOA payer, whose signature recovers locally', async () => {
+    const reader = accountReader();
+    const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS, ethCall: reader.ethCall });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(reader.calls).toHaveLength(0);
   });
 });

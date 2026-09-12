@@ -26,6 +26,32 @@ export function loadConfig(source = process.env) {
     if (!triggerUrl || !workflowId || !privateKey || !callbackUrl) return null;
     return { triggerUrl, workflowId, privateKey, callbackUrl, timeoutMs: Number(env('PROXY_VERIFY_TIMEOUT_MS') ?? 45_000) };
   };
+  /**
+   * `PAYMENT_RPC_URLS` as `<chainId>=<url>` pairs, comma-separated —
+   * e.g. `8453=https://mainnet.base.org,137=https://polygon-rpc.com`.
+   *
+   * A map rather than a single URL because the chain is the *provider's*
+   * choice: its 402 names where it wants to be paid, and that is routinely
+   * neither of Verdikt's own two chains. Unparseable pairs are dropped rather
+   * than thrown on — a typo in one chain must not take the proxy down for the
+   * rest, and the consequence is only that contract payers on that chain are
+   * refused, which is the safe direction.
+   *
+   * @returns {Record<number, string>}
+   */
+  const paymentRpcUrls = () => {
+    /** @type {Record<number, string>} */
+    const urls = {};
+    for (const pair of (env('PAYMENT_RPC_URLS') ?? '').split(',')) {
+      const at = pair.indexOf('=');
+      if (at < 1) continue;
+      const chainId = Number(pair.slice(0, at).trim());
+      const url = pair.slice(at + 1).trim();
+      if (Number.isInteger(chainId) && chainId > 0 && url !== '') urls[chainId] = url;
+    }
+    return urls;
+  };
+
   return {
     /**
      * Agents call `<slug>.verdikt.bond/<path>`, so the slug arrives in the Host
@@ -63,6 +89,7 @@ export function loadConfig(source = process.env) {
      * its result to `callbackUrl` instead.
      */
     workflow: workflowConfig(),
+    paymentRpcUrls: paymentRpcUrls(),
     arc: {
       rpcUrl: env('ARC_RPC_URL'),
       address: env('VERDIKT_REGISTRY_ADDRESS'),

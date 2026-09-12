@@ -50,6 +50,34 @@ const paymentHeaderOf = (headers) => {
   return null;
 };
 
+/**
+ * One `eth_call` against whichever chain a payment names, or `undefined` when
+ * no RPC is configured for that chain.
+ *
+ * This exists only so `decodePayment` can ask a smart-contract account whether
+ * it authorized a payment (ERC-1271) — a Circle agent wallet is one, and its
+ * signature recovers to an owner key rather than to itself, so without this it
+ * is refused. Built here rather than in the SDK because which chains Verdikt
+ * is willing to read is deployment configuration, not a property of decoding.
+ *
+ * @param {ProxyConfig} config
+ * @param {typeof fetch} doFetch
+ * @returns {EthCall}
+ */
+const chainReader = (config, doFetch) => async ({ chainId, to, data }) => {
+  const rpcUrl = config.paymentRpcUrls[chainId];
+  if (!rpcUrl) throw new Error(`no RPC configured for chain ${chainId}`);
+  const response = await doFetch(rpcUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+    signal: AbortSignal.timeout(config.upstreamTimeoutMs)
+  });
+  const body = /** @type {{ result?: string, error?: { message?: string } }} */ (await response.json());
+  if (body.error) throw new Error(body.error.message ?? 'eth_call failed');
+  return body.result ?? '0x';
+};
+
 /** @param {unknown} body @param {number} [status] @param {Record<string,string>} [headers] */
 const json = (body, status = 200, headers = {}) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...headers } });
@@ -308,7 +336,7 @@ function failureDetailHeaders(clauses) {
  *   record: ServiceRecord,
  *   upstream: URL,
  *   paymentHeader: { name: string, value: string },
- *   decode: (header: string, options: { accepts: unknown[] }) => Promise<DecodedPayment>,
+ *   decode: (header: string, options: { accepts: unknown[], ethCall?: EthCall }) => Promise<DecodedPayment>,
  *   workflow: WorkflowClient|null,
  *   newRequestId: () => string,
  *   doFetch: typeof fetch,
@@ -357,7 +385,7 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
   /** @type {DecodedPayment} */
   let payment;
   try {
-    payment = await decode(paymentHeader.value, { accepts });
+    payment = await decode(paymentHeader.value, { accepts, ethCall: chainReader(config, doFetch) });
   } catch (error) {
     // Refused before the workflow is triggered: every refund targets the payer
     // this returns, so a proxy that cannot decode a payment must not verify one.

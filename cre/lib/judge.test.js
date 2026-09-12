@@ -78,6 +78,46 @@ describe('judge — when the SLA cannot be used', () => {
   });
 });
 
+describe('judge — when the provider says it was not paid', () => {
+  // A 402 on the replay is not a delivery failure, it is the payment leg
+  // failing: the provider is saying "I was not paid", so there is no delivered
+  // call to judge. Scoring it as the provider's fault is a refund farm — sign
+  // an authorization that cannot settle (right `payTo`, empty account), let the
+  // provider refuse it, and collect `min(FIXED_REFUND, paidAmount, deposit)`
+  // out of a bond while never paying anything. The status-only fallback already
+  // declined this through its 4xx carve-out; `evaluate` did not, because a 402
+  // passes the delivery clause (402 < 500) and then breaks the provider's own
+  // schema clause against the error body.
+  it('writes no verdict, even with a perfectly readable SLA', () => {
+    const result = judge(SLA_TEXT.honest, observe({ status: 402, body: { error: 'Payment Required' } }));
+    expect(result.outcome).toBeNull();
+    expect(shouldWriteVerdict(result)).toBe(false);
+  });
+
+  it('says why, so the agent is not left guessing at an empty verdict', () => {
+    const result = judge(SLA_TEXT.honest, observe({ status: 402, body: { error: 'Payment Required' } }));
+    expect(result.fallbackReason).toMatch(/payment/i);
+  });
+
+  it('names no failed clause, since no clause was judged', () => {
+    const result = judge(SLA_TEXT.honest, observe({ status: 402, body: { error: 'Payment Required' } }));
+    expect(result.clauses).toEqual([]);
+    expect(failedClauseOf(result)).toBeNull();
+  });
+
+  it('declines the same way when the SLA is unreadable', () => {
+    expect(shouldWriteVerdict(judge(null, observe({ status: 402 })))).toBe(false);
+  });
+
+  // The carve-out is for 402 alone. A 5xx is still the provider's failure, and
+  // an ordinary 4xx is still left to the provider's own clauses under a readable
+  // SLA — widening this would hand providers a way to never be scored.
+  it('does not extend to other statuses', () => {
+    expect(judge(SLA_TEXT.honest, observe({ status: 503, body: null })).outcome).toBe('FAIL');
+    expect(judge(SLA_TEXT.honest, observe({ status: 400, body: { error: 'bad request' } })).outcome).toBe('FAIL');
+  });
+});
+
 describe('failedClauseOf', () => {
   it('names nothing when every clause held', () => {
     expect(failedClauseOf(judge(SLA_TEXT.honest, observe()))).toBeNull();

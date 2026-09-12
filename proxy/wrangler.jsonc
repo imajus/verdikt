@@ -27,7 +27,14 @@
     // Same Alchemy key `web/.env.local` already bakes into the dashboard's
     // public bundle (CLAUDE.md), so it's no more exposed here than it already
     // is there.
-    "SEPOLIA_RPC_URL": "https://eth-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
+    "SEPOLIA_RPC_URL": "https://eth-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    // Not Verdikt's chains: these are the chains *providers* ask to be paid on,
+    // named by their own 402. Read only to ask a smart-contract account whether
+    // it authorized a payment (ERC-1271) — a Circle agent wallet is one, so
+    // without this its payments are refused as unverifiable. Public endpoints
+    // with no embedded credential, same rationale as ARC_RPC_URL above; swap in
+    // keyed ones if the rate limit ever bites.
+    "PAYMENT_RPC_URLS": "8453=https://mainnet.base.org,137=https://polygon-rpc.com"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every
