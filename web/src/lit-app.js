@@ -435,13 +435,18 @@ const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) =
   return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
-/** @param {string} width */
-const bar = (width) => html`<span class="bar" style="width:${width}"></span>`;
+/** @param {string} width @param {string} [height] when a redaction stands in for something that is not a line of text */
+const bar = (width, height) => html`<span class="bar" style=${height ? `width:${width};height:${height}` : `width:${width}`}></span>`;
 
-/** @param {string} nameWidth */
+/**
+ * Two lines in the name cell, because a listing row carries two — the slug
+ * over its subname. One bar left every row a line short, which is a hundred
+ * pixels of the marketplace moving the instant the data lands.
+ * @param {string} nameWidth
+ */
 const skeletonRow = (nameWidth) => html`
   <div class="row skeleton">
-    <span class="cell name">${bar(nameWidth)}</span>
+    <span class="cell name"><strong>${bar(nameWidth)}</strong><small>${bar('58%')}</small></span>
     <span class="cell num">${bar('2.2rem')}</span>
     <span class="cell num">${bar('2.2rem')}</span>
     <span class="cell num">${bar('2.6rem')}</span>
@@ -450,17 +455,95 @@ const skeletonRow = (nameWidth) => html`
 
 const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
 
-// Shaped like renderMarketplace(), not a generic spinner: the same page head
-// and listing grid the real page fills in, so nothing shifts when the data
-// arrives. Redacted rather than shimmered, to match the ledger's own
-// vocabulary of hairline rules and monospace rather than boxed cards. No
-// figures row — the marketplace itself doesn't show one any more.
-const skeleton = () => html`
+// Shaped like the page it is standing in for, not a generic spinner: the same
+// heads, grids and section rules the real page fills in, so nothing shifts
+// when the data arrives. Redacted rather than shimmered, to match the
+// ledger's own vocabulary of hairline rules and monospace rather than boxed
+// cards.
+//
+// One skeleton per view, because one Arc read feeds four different pages. A
+// service page that opened on a Marketplace title and a grid of six rows was
+// promising a page nobody asked for and then replacing it wholesale, which is
+// the one thing a skeleton exists to avoid.
+
+const marketplaceSkeleton = () => html`
+  ${pageHead('Marketplace', TAGLINE)}
+  <section class="listing flush">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>`;
+
+/**
+ * The identifier in each of these comes out of the URL rather than off a
+ * chain, so it is set real while everything around it is redacted — a visitor
+ * who followed a link can see they are on the page they meant before any of
+ * it resolves.
+ */
+const CLAUSE_SKELETON_WIDTHS = ['84%', '61%'];
+
+/** @param {string} slug @param {(path: string) => void} go */
+const serviceSkeleton = (slug, go) => html`
+  <p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>
   <div aria-hidden="true">
-    ${pageHead('Marketplace', TAGLINE)}
-    <section class="listing flush">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>
+    <header class="detail-head">
+      <div><h2>${slug}</h2><p class="sub"><code>${bar('11rem')}</code></p></div>
+      <div class="scores-group">
+        <dl class="scores">
+          ${['Conformance', 'Availability', 'Bond'].map((label) => html`
+            <div><dt>${label}</dt>
+              <dd><span class="score"><b>${bar('2.6rem')}</b>${bar('100%', '3px')}</span></dd></div>`)}
+        </dl>
+      </div>
+    </header>
+    <section class="block">
+      <h3>Call it</h3>
+      <p class="endpoint"><span class="endpoint-url">${bar('16rem')}</span></p>
+    </section>
+    <section class="block">
+      <h3>What it promised</h3>
+      <ol class="clauses">
+        ${CLAUSE_SKELETON_WIDTHS.map((width) => html`
+          <li class="clause">
+            <div class="clause-body"><p class="clause-promise">${bar('17rem')}</p><p class="clause-note">${bar(width)}</p></div>
+            <p class="clause-key"><span class="note-head">${bar('4rem')}</span>${bar('9rem')}</p>
+          </li>`)}
+      </ol>
+    </section>
   </div>
-  <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
+  <p class="visually-hidden" role="status">Loading ${slug}…</p>`;
+
+/** @param {string} address */
+const providerSkeleton = (address) => html`
+  <div aria-hidden="true">
+    <header class="page-head"><div><p class="tagline">Provider <code>${address}</code></p></div></header>
+    <section class="figures">
+      ${['services', 'bonded', 'refunded from these bonds', 'verdicts'].map((label) => html`
+        <div class="figure skeleton"><span class="value">${bar('3.5rem')}</span><span class="label">${label}</span></div>`)}
+    </section>
+    <section class="listing">${listingHead()}${SKELETON_ROW_WIDTHS.slice(0, 3).map(skeletonRow)}</section>
+  </div>
+  <p class="visually-hidden" role="status">Loading this provider’s services…</p>`;
+
+/**
+ * `/manage/:slug` resolves to one of four pages once the listing is in — the
+ * editor, or one of three refusals — and which one is not knowable from the
+ * URL. So this redacts nothing: it puts up the head the slug already
+ * determines and waits, rather than sketching a form that may never appear.
+ * @param {string} slug @param {(path: string) => void} go
+ */
+const manageSkeleton = (slug, go) => html`
+  <p class="back"><a href=${serviceUrl(slug)} @click=${navigateOnClick(go, serviceUrl(slug))}>← back to ${slug}</a></p>
+  ${pageHead(`Manage ${slug}`, 'Publish the SLA every call to this service is judged against, and keep the bond its refunds are drawn from. Each change is a transaction you sign yourself.')}
+  <p class="visually-hidden" role="status">Loading ${slug}…</p>`;
+
+/**
+ * @param {{view: string, slug: string|null, address: string|null}} route
+ * @param {(path: string) => void} go
+ */
+const skeleton = (route, go) => {
+  if (route.view === 'service' && route.slug) return serviceSkeleton(route.slug, go);
+  if (route.view === 'manage' && route.slug) return manageSkeleton(route.slug, go);
+  if (route.view === 'provider' && route.address) return providerSkeleton(route.address);
+  return html`<div aria-hidden="true">${marketplaceSkeleton()}</div>
+    <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
+};
 
 const how = () => html`
   <!-- TEMPORARY (demo window): the "trailing one-day scores" below tracks
@@ -606,15 +689,17 @@ export class VerdiktApp extends LitElement {
     if (this.route.view === 'register') {
       return html`${navBar}${this.renderRegister(go)}${legalFooter(go)}`;
     }
+    // /how is prose about the mechanism and reads nothing off either chain, so
+    // it belongs with them: waiting behind the marketplace only bought it a
+    // skeleton of a page it is not.
+    if (this.route.view === 'how') return html`${navBar}${how()}${legalFooter(go)}`;
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
-    if (!this.marketplace) return html`${navBar}${skeleton()}${legalFooter(go)}`;
+    if (!this.marketplace) return html`${navBar}${skeleton(this.route, go)}${legalFooter(go)}`;
     const { services, stats } = this.marketplace;
-    const body = this.route.view === 'how'
-      ? how()
-      : this.route.view === 'service'
-        ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
-        : this.route.view === 'manage'
-          ? this.renderManage(services, /** @type {string} */ (this.route.slug), go)
+    const body = this.route.view === 'service'
+      ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
+      : this.route.view === 'manage'
+        ? this.renderManage(services, /** @type {string} */ (this.route.slug), go)
         : this.route.view === 'provider'
           ? this.renderProvider(resolveProviderConsole(services, this.route.address).owned, /** @type {string} */ (this.route.address), go)
           : this.renderMarketplace(stats, services, go);

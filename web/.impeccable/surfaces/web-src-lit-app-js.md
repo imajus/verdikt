@@ -121,6 +121,20 @@ a verdict says from where to go and check it.
   `packages/sdk/ens.js` — that file is the choke point for ENS *reads* and
   this resolves nothing.
 
+- **One skeleton per view, not one per Arc read.** A single registry read
+  feeds the marketplace, a service page, a provider console and `/how`, and
+  all four used to wait behind it showing the marketplace's own skeleton — a
+  Marketplace title over six listing rows, then a wholesale replacement by a
+  page of a different shape. `skeleton(route, go)` now branches. Each stand-in
+  sets real whatever the URL already supplied — the slug, the provider address
+  — and redacts only what has to come off a chain, so a visitor who followed a
+  link sees they are on the right page before any of it resolves. `/how`
+  reads neither chain and no longer waits at all. Redactions are matched to
+  the line boxes they stand in for (a `code` around the subname bar, a
+  meter-height bar under the score bar, two lines in a clause key and in a
+  listing row's name cell): measured zero layout shift on arrival, which is
+  the only thing a skeleton is for.
+
 - **The listing row is a div with a stretched link, not an `<a>` wrapper.**
   The subname inside it carries its own link, and an anchor inside an anchor
   is not markup a browser keeps. `.row-link::after` covers the row; anything

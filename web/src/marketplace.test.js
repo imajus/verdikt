@@ -618,6 +618,62 @@ describe('what the page says a call costs', () => {
   });
 });
 
+// One Arc read feeds four pages, and every one of them used to wait behind it
+// showing the marketplace's own skeleton: a Marketplace title and a grid of
+// six rows, then a wholesale replacement by a page of another shape. A
+// skeleton that is not the shape of its page is worse than no skeleton.
+describe('what a page shows while the chain is still answering', () => {
+  /**
+   * @param {'marketplace'|'service'|'provider'|'how'} view
+   * @param {string|null} [slug]
+   * @param {string|null} [address]
+   */
+  const loading = (view, slug = null, address = null) => renderApp(null, 'live', view, slug, address);
+
+  it('stands in for the service page, with the slug the URL already gave it', () => {
+    const html = loading('service', 'weather');
+    expect(html).toContain('Call it');
+    expect(html).toContain('What it promised');
+    expect(html).toContain('>weather<');
+    // The listing grid is the marketplace skeleton's own shape; the word
+    // itself is in the nav on every page.
+    expect(html).not.toContain('class="listing flush"');
+    // SSR splits the interpolated slug into its own part, so the live
+            // region's text is asserted either side of it.
+            expect(html).toContain('role="status"');
+            expect(html).toContain('Loading ');
+  });
+
+  it('stands in for a provider console, with the address the URL already gave it', () => {
+    const html = loading('provider', null, PROVIDER);
+    expect(html).toContain(PROVIDER);
+    expect(html).toContain('>bonded<');
+    expect(html).not.toContain('class="listing flush"');
+  });
+
+  it('still stands in for the marketplace on the marketplace', () => {
+    const html = loading('marketplace');
+    expect(html).toContain('class="listing flush"');
+    expect(html).toContain('Loading the marketplace');
+  });
+
+  // /how is prose about the mechanism and reads neither chain, so waiting
+  // behind the marketplace only bought it a skeleton of a page it is not.
+  it('does not make /how wait for a chain it never reads', () => {
+    const html = loading('how');
+    expect(html).toContain('Two chains, each for one reason');
+    expect(html).not.toContain('class="bar"');
+  });
+
+  // The name cell carries the slug over its subname. A single bar left every
+  // row a line short — a hundred pixels of listing moving on arrival.
+  it('redacts a listing row at the height of a real one', () => {
+    const html = loading('marketplace');
+    expect(html.match(/<span class="cell name"><strong>/g)?.length).toBe(6);
+    expect(html.match(/<small>/g)?.length).toBe(6);
+  });
+});
+
 // Two rules that are true of every service on every reading — how a refund is
 // sized, which window the published ratios cover — used to stand as
 // paragraphs between the reader and the figures they came for. They are
