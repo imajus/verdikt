@@ -7,7 +7,10 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   account: /** @type {any} */ (null), session: /** @type {any} */ (null),
   changed: /** @type {any} */ (null), signIn: vi.fn(), ensureChain: vi.fn(),
-  connectWallet: vi.fn(), disconnectWallet: vi.fn(), restoreWallet: vi.fn()
+  connectWallet: vi.fn(), disconnectWallet: vi.fn(), restoreWallet: vi.fn(),
+  preference: /** @type {'system'|'light'|'dark'} */ ('system'),
+  applyTheme: vi.fn(),
+  systemChanged: /** @type {(() => void) | null} */ (null)
 }));
 const OWNER = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -33,7 +36,13 @@ vi.mock('./marketplace.js', () => ({
     stats: {}
   })
 }));
-vi.mock('./theme.js', () => ({ savedTheme: () => 'light', saveTheme: vi.fn() }));
+vi.mock('./theme.js', () => ({
+  savedPreference: () => state.preference,
+  effectiveTheme: (/** @type {string} */ preference) => (preference === 'system' ? 'light' : preference),
+  applyTheme: state.applyTheme,
+  savePreference: (/** @type {'system'|'light'|'dark'} */ preference) => { state.preference = preference; },
+  watchSystemTheme: (/** @type {() => void} */ callback) => { state.systemChanged = callback; return () => { state.systemChanged = null; }; }
+}));
 vi.mock('./lit-app.js', () => ({}));
 vi.mock('./forms/sla-editor.js', () => ({}));
 vi.mock('./forms/bond.js', () => ({}));
@@ -77,6 +86,7 @@ async function go(path) {
 
 beforeEach(async () => {
   vi.resetModules(); vi.clearAllMocks();
+  state.preference = 'system'; state.systemChanged = null;
   state.account = { address: OWNER, chainId: 11155111 }; authenticate();
   state.signIn.mockImplementation(async () => authenticate());
   state.connectWallet.mockImplementation(async () => state.account);
@@ -276,4 +286,16 @@ it('does not navigate to the provider console on a silent wallet restoration', a
   change(OTHER);
   await settle();
   expect(pushState).not.toHaveBeenCalled();
+});
+it('repaints when the OS theme changes while following the system preference', () => {
+  state.preference = 'system';
+  state.applyTheme.mockClear();
+  state.systemChanged?.();
+  expect(state.applyTheme).toHaveBeenCalledOnce();
+});
+it('ignores an OS theme change while an explicit override is saved', () => {
+  state.preference = 'dark';
+  state.applyTheme.mockClear();
+  state.systemChanged?.();
+  expect(state.applyTheme).not.toHaveBeenCalled();
 });

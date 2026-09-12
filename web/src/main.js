@@ -5,7 +5,7 @@ import { parseRoute, providerUrl, titleFor } from './router.js';
 import { createSource } from './source.js';
 import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, restoreWallet, walletClientFor } from './wallet.js';
 import { getSession, signIn } from './session.js';
-import { savedTheme, saveTheme } from './theme.js';
+import { applyTheme, effectiveTheme, savePreference, savedPreference, watchSystemTheme } from './theme.js';
 // Import tokens only. Web Awesome's all-in-one stylesheet also styles every
 // native button, table, and heading, which would override the ledger UI.
 import '@awesome.me/webawesome/dist/styles/themes/default.css';
@@ -26,7 +26,7 @@ import './lit-app.js';
 const root = /** @type {HTMLElement} */ (document.getElementById('app'));
 const app = /** @type {import('./lit-app.js').VerdiktApp} */ (document.createElement('verdikt-app'));
 root.append(app);
-app.theme = savedTheme();
+syncTheme();
 const env = import.meta.env ?? {};
 const { mode, deps } = createSource(env);
 // Set before main() resolves, not just in draw(), so the nav's wallet button
@@ -84,11 +84,17 @@ async function main() {
   }
 }
 
+function syncTheme() {
+  const preference = savedPreference();
+  applyTheme(effectiveTheme(preference));
+  app.theme = preference;
+}
+
 /** @param {{ scrollToTop?: boolean }} [options] */
 function draw(options = {}) {
   const route = syncRoute();
   app.mode = mode;
-  app.theme = savedTheme();
+  syncTheme();
   app.route = route;
   if (!marketplaceCache) return;
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
@@ -266,8 +272,11 @@ function go(path) {
 }
 app.addEventListener('navigate', (event) => go(/** @type {CustomEvent<string>} */ (event).detail));
 app.addEventListener('theme-select', (event) => {
-  saveTheme(/** @type {CustomEvent<'light'|'dark'>} */ (event).detail);
-  app.theme = savedTheme();
+  savePreference(/** @type {CustomEvent<'system'|'light'|'dark'>} */ (event).detail);
+  syncTheme();
+});
+watchSystemTheme(() => {
+  if (savedPreference() === 'system') syncTheme();
 });
 app.addEventListener('wallet-connect', async () => {
   try {
