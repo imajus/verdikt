@@ -89,8 +89,6 @@ interface MarketplaceFilters {
   maxPriceUsdc: string;
   /** Milliseconds as typed. `''` means no cap. */
   maxLatencyMs: string;
-  /** Show SUSPENDED and contested listings, both hidden by default. */
-  showHidden: boolean;
 }
 
 /** The SLA composer's model (forms/sla-draft.js). */

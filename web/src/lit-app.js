@@ -117,37 +117,34 @@ const scoreToPercentText = (score) => (score === 0 ? '' : String(score / 10));
  */
 const marketControls = (filters, onChange) => {
   /** @param {Event} event */
-  const valueOf = (event) => /** @type {HTMLInputElement} */ (event.target).value;
+  const valueOf = (event) => /** @type {{value: string}} */ (/** @type {unknown} */ (event.currentTarget)).value;
   const isDefault = Object.keys(DEFAULT_MARKETPLACE_FILTERS).every(
     (key) => filters[/** @type {keyof MarketplaceFilters} */ (key)] === DEFAULT_MARKETPLACE_FILTERS[/** @type {keyof MarketplaceFilters} */ (key)]
   );
   return html`
     <section class="market-controls" aria-label="Search and filter services">
       <input type="search" class="market-search" placeholder="Search by slug or name" aria-label="Search services"
-        .value=${filters.query} @input=${(/** @type {Event} */ event) => onChange({ query: valueOf(event) })} />
-      <label class="market-filter"><span>Min conformance</span>
-        <span class="market-filter-value"><input type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0"
-          .value=${scoreToPercentText(filters.minConformance)}
-          @input=${(/** @type {Event} */ event) => onChange({ minConformance: percentToScore(valueOf(event)) })} /><span class="unit">%</span></span>
-      </label>
-      <label class="market-filter"><span>Min availability</span>
-        <span class="market-filter-value"><input type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0"
-          .value=${scoreToPercentText(filters.minAvailability)}
-          @input=${(/** @type {Event} */ event) => onChange({ minAvailability: percentToScore(valueOf(event)) })} /><span class="unit">%</span></span>
-      </label>
-      <label class="market-filter"><span>Max price</span>
-        <span class="market-filter-value"><input type="text" inputmode="decimal" placeholder="any"
-          .value=${filters.maxPriceUsdc} @input=${(/** @type {Event} */ event) => onChange({ maxPriceUsdc: valueOf(event) })} /><span class="unit">USDC</span></span>
-      </label>
-      <label class="market-filter"><span>Max latency</span>
-        <span class="market-filter-value"><input type="number" inputmode="numeric" min="0" step="1" placeholder="any"
-          .value=${filters.maxLatencyMs} @input=${(/** @type {Event} */ event) => onChange({ maxLatencyMs: valueOf(event) })} /><span class="unit">ms</span></span>
-      </label>
-      <label class="market-filter toggle">
-        <input type="checkbox" .checked=${filters.showHidden}
-          @change=${(/** @type {Event} */ event) => onChange({ showHidden: /** @type {HTMLInputElement} */ (event.target).checked })} />
-        <span>Show suspended &amp; contested</span>
-      </label>
+        .value=${filters.query} @input=${(/** @type {Event} */ event) => onChange({ query: /** @type {HTMLInputElement} */ (event.target).value })} />
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0" without-spin-buttons
+        label="Min conformance" .value=${scoreToPercentText(filters.minConformance)}
+        @input=${(/** @type {Event} */ event) => onChange({ minConformance: percentToScore(valueOf(event)) })}>
+        <span slot="end" class="unit">%</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0" without-spin-buttons
+        label="Min availability" .value=${scoreToPercentText(filters.minAvailability)}
+        @input=${(/** @type {Event} */ event) => onChange({ minAvailability: percentToScore(valueOf(event)) })}>
+        <span slot="end" class="unit">%</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="text" inputmode="decimal" placeholder="any"
+        label="Max price" .value=${filters.maxPriceUsdc}
+        @input=${(/** @type {Event} */ event) => onChange({ maxPriceUsdc: valueOf(event) })}>
+        <span slot="end" class="unit">USDC</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" step="1" placeholder="any" without-spin-buttons
+        label="Max latency" .value=${filters.maxLatencyMs}
+        @input=${(/** @type {Event} */ event) => onChange({ maxLatencyMs: valueOf(event) })}>
+        <span slot="end" class="unit">ms</span>
+      </wa-input>
       ${isDefault ? nothing : html`<button type="button" class="market-reset" @click=${() => onChange(DEFAULT_MARKETPLACE_FILTERS)}>Reset filters</button>`}
     </section>`;
 };

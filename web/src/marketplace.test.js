@@ -413,16 +413,9 @@ describe('matchesFilters', () => {
       ...overrides
     });
 
-  it('hides a SUSPENDED listing unless told to show it', () => {
-    const suspended = listing({ status: 'SUSPENDED' });
-    expect(matchesFilters(suspended, DEFAULT_MARKETPLACE_FILTERS)).toBe(false);
-    expect(matchesFilters(suspended, { ...DEFAULT_MARKETPLACE_FILTERS, showHidden: true })).toBe(true);
-  });
-
-  it('hides a contested listing unless told to show it', () => {
-    const contested = listing({ contested: true });
-    expect(matchesFilters(contested, DEFAULT_MARKETPLACE_FILTERS)).toBe(false);
-    expect(matchesFilters(contested, { ...DEFAULT_MARKETPLACE_FILTERS, showHidden: true })).toBe(true);
+  it('does not exclude a SUSPENDED or contested listing — there is no hide toggle', () => {
+    expect(matchesFilters(listing({ status: 'SUSPENDED' }), DEFAULT_MARKETPLACE_FILTERS)).toBe(true);
+    expect(matchesFilters(listing({ contested: true }), DEFAULT_MARKETPLACE_FILTERS)).toBe(true);
   });
 
   it('matches the free-text search against slug and name, case-insensitively', () => {
@@ -534,7 +527,6 @@ describe('the marketplace listing’s search/filter/sort controls', () => {
   it('renders the search box and filter inputs on the marketplace page', async () => {
     const html = renderApp(await build(), 'demo', 'marketplace', null);
     expect(html).toContain('class="market-search"');
-    expect(html).toContain('Show suspended');
   });
 
   it('does not render the controls on the provider console, which has no sort/filter state of its own', async () => {
@@ -542,17 +534,15 @@ describe('the marketplace listing’s search/filter/sort controls', () => {
     expect(html).not.toContain('class="market-search"');
   });
 
-  it('hides a SUSPENDED listing by default and shows it once the toggle is set', async () => {
+  it('shows a SUSPENDED listing by default — there is no hide toggle', async () => {
     const marketplace = await build();
-    const hidden = renderApp(marketplace, 'demo', 'marketplace', null);
-    expect(hidden).not.toContain('>lite<');
-    const shown = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { showHidden: true });
-    expect(shown).toContain('>lite<');
+    const html = renderApp(marketplace, 'demo', 'marketplace', null);
+    expect(html).toContain('>lite<');
   });
 
   it('filters the listing by the free-text search', async () => {
     const marketplace = await build();
-    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { query: 'lite', showHidden: true });
+    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { query: 'lite' });
     expect(html).not.toContain('>weather<');
     expect(html).toContain('>lite<');
   });
@@ -581,7 +571,7 @@ describe('the marketplace listing’s search/filter/sort controls', () => {
         }
       })
     );
-    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { showHidden: true });
+    const html = renderApp(marketplace, 'demo', 'marketplace', null);
     expect(html.indexOf('>weather<')).toBeLessThan(html.indexOf('>lite<'));
   });
 });

@@ -182,7 +182,7 @@ function usdcTextToMinorUnits(text) {
 /**
  * Whether `listing` matches the marketplace's search box and filter controls
  * (issue #64). Pure and synchronous: the whole list is already in memory, so
- * every keystroke or toggle just re-filters it — no new RPC call.
+ * every keystroke just re-filters it — no new RPC call.
  *
  * A cap named against a bound the listing has not declared — no `priceRange`
  * clause, no `latency` clause — passes rather than being excluded: the filter
@@ -195,7 +195,6 @@ function usdcTextToMinorUnits(text) {
  * @param {MarketplaceFilters} filters
  */
 export function matchesFilters(listing, filters) {
-  if (!filters.showHidden && (listing.status === 'SUSPENDED' || listing.contested)) return false;
   const query = filters.query.trim().toLowerCase();
   if (query && !listing.slug.toLowerCase().includes(query) && !listing.name.toLowerCase().includes(query)) return false;
   if (listing.published.conformance !== null && listing.published.conformance < filters.minConformance) return false;
@@ -253,6 +252,5 @@ export const DEFAULT_MARKETPLACE_FILTERS = {
   minConformance: 0,
   minAvailability: 0,
   maxPriceUsdc: '',
-  maxLatencyMs: '',
-  showHidden: false
+  maxLatencyMs: ''
 };

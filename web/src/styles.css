@@ -282,18 +282,21 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
   font-family: var(--sans); font-size: 14.5px;
 }
 .market-search:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
-.market-filter { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin: 0; }
-.market-filter-value { display: flex; align-items: center; gap: 5px; }
-.market-filter input {
-  width: 5rem; padding: 7px 8px; margin: 0;
-  background: var(--paper-2); color: var(--ink);
-  border: 1px solid var(--rule); border-radius: 2px;
-  font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
+/* The four bound fields are `wa-input`, the same "boxed" console control the
+   wizard and bond forms already use (issue #64) — repainted through its parts
+   rather than hand-rolled, so the field family has exactly one implementation
+   instead of a third variant that can drift from it. */
+.market-filter { display: block; margin: 0; }
+.market-filter::part(form-control-label) { font: 400 13px var(--sans); color: var(--muted); margin-bottom: 4px; }
+.market-filter::part(input-wrapper) {
+  width: auto; background: var(--paper-2); border: 1px solid var(--rule); border-radius: 2px;
 }
-.market-filter input:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
-.market-filter .unit { font-size: 12px; color: var(--muted); }
-.market-filter.toggle { flex-direction: row; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); }
-.market-filter.toggle input { width: auto; }
+.market-filter::part(input) {
+  flex: 0 0 auto; width: 4rem; padding: 7px 4px 7px 8px;
+  font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums; color: var(--ink);
+}
+.market-filter::part(end) { display: flex; align-items: center; padding-inline-end: 8px; }
+.market-filter .unit { font-size: 12px; color: var(--muted); white-space: nowrap; }
 .market-reset {
   background: none; border: 1px solid var(--rule); color: var(--ink-2); border-radius: 2px;
   padding: 7px 12px; font-size: 13.5px;
@@ -320,6 +323,11 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .row.head .cell.name.sort { justify-content: flex-start; }
 .row.head .cell.num.sort { justify-content: flex-end; }
 .row.head button.cell.sort:hover, .row.head button.cell.sort[aria-sort]:not([aria-sort="none"]) { color: var(--ink); }
+/* `.cell.name`'s own `flex-direction: column` (for the two-line slug/name
+   body cell) would otherwise bleed into this button, since nothing else sets
+   that property for it — stacking the sort arrow under "Service" instead of
+   beside it. */
+.row.head .cell.name.sort { flex-direction: row; }
 .sort-dir {
   display: inline-block; width: 0; height: 0; flex: none;
   border-left: 4px solid transparent; border-right: 4px solid transparent;
