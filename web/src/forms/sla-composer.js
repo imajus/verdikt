@@ -12,13 +12,13 @@
 import { LitElement, html, nothing } from 'lit';
 import {
   citedClauseIds, draftFromText, draftProblems, draftToPrettyText, draftToText, emptyDraft, extraKeywords,
-  inferNode, newClause, refreshId, usdcToMinorUnits
+  inferNode, newClause, refreshId, schemaFromText, schemaToText, usdcToMinorUnits
 } from './sla-draft.js';
 import { describeSlaValidity } from './sla-validity.js';
 
 /** @type {Record<SlaDraftClauseKind, { title: string, blurb: string }>} */
 const KINDS = {
-  schema: { title: 'Response shape', blurb: 'The fields every response must carry, read off one real response.' },
+  schema: { title: 'Response shape', blurb: 'The fields every response must carry, read from a sample response or written as a JSON Schema.' },
   latency: { title: 'Response time', blurb: 'How long a call may take, measured by the verifier from send to last byte.' },
   priceRange: { title: 'Price band', blurb: 'What a call may cost the agent, so a paywall cannot quietly charge more.' }
 };
@@ -30,13 +30,30 @@ const removeIcon = html`<svg viewBox="0 0 16 16" width="16" height="16" fill="no
 /** @param {Event} event */
 const valueOf = (event) => /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value;
 
+/**
+ * A per-clause map with one clause gone and the later ones shifted down.
+ * @template T
+ * @param {Record<number, T>} map
+ * @param {number} removed
+ * @returns {Record<number, T>}
+ */
+const reindex = (map, removed) => Object.fromEntries(Object.entries(map).filter(([key]) => Number(key) !== removed).map(([key, value]) => [Number(key) > removed ? Number(key) - 1 : Number(key), value]));
+
+/**
+ * @template T
+ * @param {Record<number, T>} map
+ * @param {number} key
+ * @returns {Record<number, T>}
+ */
+const without = (map, key) => { const copy = { ...map }; delete copy[key]; return copy; };
+
 /** @param {Event} event */
 const checkedOf = (event) => /** @type {{checked:boolean}} */ (/** @type {unknown} */ (event.currentTarget)).checked;
 
 export class VerdiktSlaComposer extends LitElement {
   static properties = {
     value: {}, history: { attribute: false },
-    draft: { state: true }, view: { state: true }, jsonText: { state: true }, jsonError: { state: true }, openSamples: { state: true }, sampleErrors: { state: true }
+    draft: { state: true }, view: { state: true }, jsonText: { state: true }, jsonError: { state: true }, sources: { state: true }, sourceErrors: { state: true }
   };
   constructor() {
     super();
@@ -48,9 +65,15 @@ export class VerdiktSlaComposer extends LitElement {
     /** @type {'form'|'json'} */ this.view = 'form';
     this.jsonText = '';
     this.jsonError = '';
-    /** @type {Set<number>} Clause indices whose sample textarea is open although a tree exists. */
-    this.openSamples = new Set();
-    /** @type {Record<number, string>} */ this.sampleErrors = {};
+    /**
+     * Which source panel a schema clause has open, by clause index: a sample
+     * response to infer from, or a JSON Schema to take as written. A clause
+     * with no tree yet always shows one; a clause with a tree shows none
+     * until the provider reopens it.
+     * @type {Record<number, 'sample'|'schema'>}
+     */
+    this.sources = {};
+    /** @type {Record<number, string>} */ this.sourceErrors = {};
     /** @type {string|null} The last text this element emitted, so its own echo is not re-parsed. */
     this.lastEmitted = null;
   }
@@ -66,8 +89,8 @@ export class VerdiktSlaComposer extends LitElement {
    */
   load(text) {
     this.lastEmitted = text;
-    this.openSamples = new Set();
-    this.sampleErrors = {};
+    this.sources = {};
+    this.sourceErrors = {};
     if (!text.trim()) { this.draft = emptyDraft(); this.view = 'form'; this.jsonText = ''; this.jsonError = ''; return; }
     try {
       this.draft = draftFromText(text);
@@ -133,7 +156,8 @@ export class VerdiktSlaComposer extends LitElement {
   removeClause(index) {
     const clause = this.draft.clauses[index];
     const removed = clause.originalId && !this.draft.removed.includes(clause.originalId) ? [...this.draft.removed, clause.originalId] : this.draft.removed;
-    this.openSamples = new Set([...this.openSamples].filter((i) => i !== index).map((i) => (i > index ? i - 1 : i)));
+    this.sources = reindex(this.sources, index);
+    this.sourceErrors = reindex(this.sourceErrors, index);
     this.commit({ removed, clauses: this.draft.clauses.filter((_, i) => i !== index) });
   }
   /**
@@ -146,26 +170,52 @@ export class VerdiktSlaComposer extends LitElement {
   }
   /** Tree edits mutate the node and recommit the draft: the tree is the draft's own object graph, not a copy. */
   touch() { this.commit({ ...this.draft }); }
-  /** @param {number} index */
-  readSample(index) {
+  /**
+   * Build the tree from whichever source the clause has open. A failure
+   * leaves the current tree alone and says why beside the textarea.
+   * @param {number} index
+   */
+  readSource(index) {
     const clause = /** @type {SlaDraftSchemaClause} */ (this.draft.clauses[index]);
-    let parsed;
-    try {
-      parsed = JSON.parse(clause.sample);
-    } catch (error) {
-      this.sampleErrors = { ...this.sampleErrors, [index]: `Not JSON: ${/** @type {Error} */ (error).message}` };
-      return;
+    const mode = this.sourceMode(index, clause);
+    /** @type {SlaDraftNode|null} */
+    let root = null;
+    let error = null;
+    if (mode === 'sample') {
+      try {
+        root = inferNode(JSON.parse(clause.sample));
+      } catch (caught) {
+        error = `Not JSON: ${/** @type {Error} */ (caught).message}`;
+      }
+    } else {
+      ({ root, error } = schemaFromText(clause.schemaText));
     }
-    const rest = { ...this.sampleErrors };
-    delete rest[index];
-    this.sampleErrors = rest;
-    this.openSamples = new Set([...this.openSamples].filter((i) => i !== index));
-    this.patchClause(index, { root: inferNode(parsed) });
+    if (error !== null || root === null) { this.sourceErrors = { ...this.sourceErrors, [index]: error ?? 'Could not read the shape.' }; return; }
+    this.sourceErrors = without(this.sourceErrors, index);
+    this.sources = without(this.sources, index);
+    this.patchClause(index, { root });
+  }
+  /**
+   * @param {number} index
+   * @param {SlaDraftSchemaClause} clause
+   * @returns {'sample'|'schema'}
+   */
+  sourceMode(index, clause) { return this.sources[index] ?? (clause.schemaText.trim() && !clause.sample.trim() ? 'schema' : 'sample'); }
+  /**
+   * Open a source panel. Opening the schema panel over an existing tree
+   * prefills it from that tree, so what the provider edits is exactly what
+   * the form would publish — never a stale earlier paste.
+   * @param {number} index
+   * @param {'sample'|'schema'} mode
+   */
+  openSource(index, mode) {
+    const clause = /** @type {SlaDraftSchemaClause} */ (this.draft.clauses[index]);
+    this.sources = { ...this.sources, [index]: mode };
+    this.sourceErrors = without(this.sourceErrors, index);
+    if (mode === 'schema' && clause.root) this.patchClause(index, { schemaText: schemaToText(clause.root) });
   }
   /** @param {number} index */
-  openSample(index) { this.openSamples = new Set([...this.openSamples, index]); }
-  /** @param {number} index */
-  closeSample(index) { this.openSamples = new Set([...this.openSamples].filter((i) => i !== index)); }
+  closeSource(index) { this.sources = without(this.sources, index); this.sourceErrors = without(this.sourceErrors, index); }
   /**
    * @param {SlaDraftProblem[]} problems
    * @param {number} clause
@@ -226,17 +276,28 @@ export class VerdiktSlaComposer extends LitElement {
    * @param {SlaDraftProblem[]} problems
    */
   renderSchema(clause, index, problems) {
-    const open = !clause.root || this.openSamples.has(index);
-    const error = this.sampleErrors[index];
+    const open = !clause.root || index in this.sources;
+    const mode = this.sourceMode(index, clause);
+    const error = this.sourceErrors[index];
+    const text = mode === 'sample' ? clause.sample : clause.schemaText;
     return html`
       ${open ? html`
-        <label class="composer-label" for=${`sample-${index}`}>${clause.root ? 'Replace the sample' : 'Sample response'}</label>
-        <textarea id=${`sample-${index}`} class="sample" spellcheck="false" rows="7" placeholder='{ "current": { "temperature_2m": 12.5 } }' .value=${clause.sample} @input=${(/** @type {Event} */ e) => this.patchClause(index, { sample: valueOf(e) })}></textarea>
-        <p class="hint">Paste one real response body. Its fields become the promise; you then untick any that are not always there.</p>
-        ${error ? html`<p class="field-problem">${error}</p>` : this.problem(problems, index, 'sample')}
+        <div class="source-head">
+          <span class="composer-label">${clause.root ? 'Replace the shape from' : 'Read the shape from'}</span>
+          <div class="source-modes" role="tablist" aria-label="Shape source">
+            <button type="button" role="tab" id=${`source-sample-${index}`} class=${mode === 'sample' ? 'active' : ''} aria-selected=${mode === 'sample'} @click=${() => this.openSource(index, 'sample')}>a sample response</button>
+            <button type="button" role="tab" id=${`source-schema-${index}`} class=${mode === 'schema' ? 'active' : ''} aria-selected=${mode === 'schema'} @click=${() => this.openSource(index, 'schema')}>a JSON Schema</button>
+          </div>
+        </div>
+        ${mode === 'sample'
+          ? html`<textarea id=${`sample-${index}`} class="sample" spellcheck="false" rows="7" aria-label="Sample response" placeholder='{ "current": { "temperature_2m": 12.5 } }' .value=${clause.sample} @input=${(/** @type {Event} */ e) => this.patchClause(index, { sample: valueOf(e) })}></textarea>
+            <p class="hint">Paste one real response body. Its fields become the promise; you then untick any that are not always there.</p>`
+          : html`<textarea id=${`schema-${index}`} class="sample" spellcheck="false" rows="10" aria-label="JSON Schema" placeholder='{ "type": "object", "required": ["current"], "properties": { "current": { "type": "object" } } }' .value=${clause.schemaText} @input=${(/** @type {Event} */ e) => this.patchClause(index, { schemaText: valueOf(e) })}></textarea>
+            <p class="hint">The verifier enforces this subset and refuses anything else: <code>type</code>, <code>properties</code>, <code>required</code>, <code>additionalProperties</code>, <code>items</code>, <code>enum</code>, <code>const</code>, <code>oneOf</code>, <code>minimum</code>/<code>maximum</code>, <code>minLength</code>/<code>maxLength</code>, <code>minItems</code>/<code>maxItems</code>. No <code>pattern</code>, no <code>$ref</code>.</p>`}
+        ${error ? html`<p class="field-problem">${error}</p>` : this.problem(problems, index, 'shape')}
         <div class="composer-actions">
-          <wa-button type="button" size="s" id=${`read-sample-${index}`} ?disabled=${!clause.sample.trim()} @click=${() => this.readSample(index)}>Read fields</wa-button>
-          ${clause.root ? html`<wa-button type="button" size="s" appearance="outlined" @click=${() => this.closeSample(index)}>Keep current fields</wa-button>` : nothing}
+          <wa-button type="button" size="s" id=${`read-source-${index}`} ?disabled=${!text.trim()} @click=${() => this.readSource(index)}>${mode === 'sample' ? 'Read fields' : 'Use this schema'}</wa-button>
+          ${clause.root ? html`<wa-button type="button" size="s" appearance="outlined" @click=${() => this.closeSource(index)}>Keep current fields</wa-button>` : nothing}
         </div>` : nothing}
       ${clause.root ? html`
         <div class="scroll"><table class="tree">
@@ -244,7 +305,7 @@ export class VerdiktSlaComposer extends LitElement {
           <tbody>${this.renderNode(clause.root, 'response', '', 0, index, problems, null)}</tbody>
         </table></div>
         <p class="hint">Promised means the field must be present. An unticked field is only checked for its type when it appears; an ignored one is never mentioned.
-          ${open ? nothing : html`<button type="button" class="quiet link" @click=${() => this.openSample(index)}>Read from a different sample</button>`}</p>` : nothing}`;
+          ${open ? nothing : html`<button type="button" class="quiet link" id=${`reopen-sample-${index}`} @click=${() => this.openSource(index, 'sample')}>Read from a different sample</button> · <button type="button" class="quiet link" id=${`reopen-schema-${index}`} @click=${() => this.openSource(index, 'schema')}>Edit as JSON Schema</button>`}</p>` : nothing}`;
   }
   /**
    * @param {SlaDraftLatencyClause} clause

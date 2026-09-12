@@ -193,7 +193,7 @@ export function newClause(kind, siblings) {
     ? { ...base, kind, maxMs: '5000' }
     : kind === 'priceRange'
       ? { ...base, kind, min: '', max: '', asset: 'USDC' }
-      : { ...base, kind, sample: '', root: null };
+      : { ...base, kind, sample: '', schemaText: '', root: null };
   clause.id = uniqueId(suggestId(clause), siblings.map((sibling) => sibling.id));
   return clause;
 }
@@ -226,7 +226,7 @@ export function draftFromText(text) {
       const base = { id: clause.id, idTouched: true, originalId: clause.id, description: /** @type {{description?: string}} */ (clause).description ?? '' };
       if (clause.type === 'latency') return { ...base, kind: 'latency', maxMs: String(clause.maxMs) };
       if (clause.type === 'priceRange') return { ...base, kind: 'priceRange', min: minorUnitsToUsdc(clause.minMinorUnits), max: minorUnitsToUsdc(clause.maxMinorUnits), asset: clause.asset };
-      return { ...base, kind: 'schema', sample: '', root: schemaToNode(clause.schema) };
+      return { ...base, kind: 'schema', sample: '', schemaText: '', root: schemaToNode(clause.schema) };
     })
   };
 }
@@ -255,6 +255,33 @@ export const draftToText = (/** @type {SlaDraft} */ draft) => JSON.stringify(dra
 
 /** Pretty, for the JSON view only. */
 export const draftToPrettyText = (/** @type {SlaDraft} */ draft) => JSON.stringify(draftToDocument(draft), null, 2);
+
+/**
+ * A pasted JSON Schema as a tree, or the reason it cannot be one. Validated
+ * by wrapping it in a one-clause SLA and asking `parseSla`, so the subset the
+ * form accepts is exactly the subset the verifier enforces — an unsupported
+ * keyword is refused here with the verifier's own message, never carried
+ * along as a promise that is silently unchecked.
+ * @param {string} text
+ * @returns {{ root: SlaDraftNode, error: null } | { root: null, error: string }}
+ */
+export function schemaFromText(text) {
+  let schema;
+  try {
+    schema = JSON.parse(text);
+  } catch (error) {
+    return { root: null, error: `Not JSON: ${/** @type {Error} */ (error).message}` };
+  }
+  try {
+    parseSla(JSON.stringify({ version: 1, clauses: [{ id: 'shape', type: 'schema', schema }] }));
+  } catch (error) {
+    return { root: null, error: /** @type {Error} */ (error).message.replace('/clauses/shape/schema', 'the schema') };
+  }
+  return { root: schemaToNode(schema), error: null };
+}
+
+/** The tree as JSON Schema text a provider can edit by hand. */
+export const schemaToText = (/** @type {SlaDraftNode} */ root) => JSON.stringify(nodeToSchema(root), null, 2);
 
 /**
  * @param {SlaDraftNode} draft
@@ -303,7 +330,7 @@ export function draftProblems(draft) {
       if (min !== null && max !== null && BigInt(min) > BigInt(max)) out.push({ clause: index, field: 'max', message: 'The ceiling is below the floor.' });
     }
     if (clause.kind === 'schema') {
-      if (!clause.root) out.push({ clause: index, field: 'sample', message: 'Paste a sample response to read its fields.' });
+      if (!clause.root) out.push({ clause: index, field: 'shape', message: 'Read the shape from a sample response or a JSON Schema.' });
       else nodeProblems(clause.root, '', out, index);
     }
   });

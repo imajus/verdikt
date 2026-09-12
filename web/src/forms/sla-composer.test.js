@@ -73,7 +73,7 @@ describe('editing clauses', () => {
     const el = mount('');
     el.addClause('schema');
     el.patchClause(0, { sample: JSON.stringify(PROVIDER_RESPONSE) });
-    el.readSample(0);
+    el.readSource(0);
     const root = el.draft.clauses[0].root;
     expect(root.type).toBe('object');
     expect(root.properties.map((/** @type {any} */ p) => p.name)).toContain('current');
@@ -84,11 +84,49 @@ describe('editing clauses', () => {
     const el = mount('');
     el.addClause('schema');
     el.patchClause(0, { sample: '{"a":1}' });
-    el.readSample(0);
+    el.readSource(0);
     el.patchClause(0, { sample: '{oops' });
-    el.readSample(0);
-    expect(el.sampleErrors[0]).toMatch(/^Not JSON:/);
+    el.openSource(0, 'sample');
+    el.readSource(0);
+    expect(el.sourceErrors[0]).toMatch(/^Not JSON:/);
     expect(el.draft.clauses[0].root.properties[0].name).toBe('a');
+  });
+
+  it('takes a pasted JSON Schema as the tree when the provider chooses that source', () => {
+    const el = mount('');
+    el.addClause('schema');
+    el.openSource(0, 'schema');
+    el.patchClause(0, { schemaText: '{"type":"object","required":["id"],"properties":{"id":{"type":"string","minLength":1}}}' });
+    el.readSource(0);
+    const root = el.draft.clauses[0].root;
+    expect(root.properties[0].node.min).toBe('1');
+    expect(el.sources[0]).toBeUndefined();
+    expect(el.emitted.at(-1).value).toContain('"minLength":1');
+  });
+
+  it('refuses a schema outside the verifier subset and keeps the previous tree', () => {
+    const el = mount(SLA_TEXT.honest);
+    el.openSource(0, 'schema');
+    el.patchClause(0, { schemaText: '{"type":"string","pattern":"x"}' });
+    el.readSource(0);
+    expect(el.sourceErrors[0]).toContain('pattern');
+    expect(el.draft.clauses[0].root.type).toBe('object');
+  });
+
+  it('opens an existing clause as editable JSON Schema prefilled from its tree', () => {
+    const el = mount(SLA_TEXT.honest);
+    el.openSource(0, 'schema');
+    expect(JSON.parse(el.draft.clauses[0].schemaText)).toEqual(SLA_DOCUMENTS.honest.clauses[0].schema);
+    expect(stringify(el.render())).toContain('Use this schema');
+  });
+
+  it('shifts open source panels down when an earlier clause is removed', () => {
+    const el = mount(SLA_TEXT.honest);
+    el.openSource(0, 'schema');
+    el.addClause('schema');
+    el.openSource(3, 'sample');
+    el.removeClause(1);
+    expect(el.sources).toEqual({ 0: 'schema', 2: 'sample' });
   });
 
   it('remembers a removed published clause for the guard', () => {
@@ -186,7 +224,7 @@ describe('rendering', () => {
   it('asks for a sample on a fresh response-shape clause', () => {
     const el = mount('');
     el.addClause('schema');
-    expect(stringify(el.render())).toContain('Paste a sample response to read its fields.');
+    expect(stringify(el.render())).toContain('Read the shape from a sample response or a JSON Schema.');
   });
 
   it('is silent about a rename with no verdicts on record', () => {

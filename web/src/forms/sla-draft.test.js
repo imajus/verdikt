@@ -3,7 +3,7 @@ import { PROVIDER_RESPONSE, SLA_DOCUMENTS, SLA_TEXT } from '@verdikt/fixtures';
 import { parseSla } from '@verdikt/sla';
 import {
   citedClauseIds, draftFromText, draftProblems, draftToDocument, draftToText, emptyDraft, extraKeywords,
-  inferNode, minorUnitsToUsdc, newClause, nodeToSchema, refreshId, schemaToNode, uniqueId, usdcToMinorUnits
+  inferNode, minorUnitsToUsdc, newClause, nodeToSchema, refreshId, schemaFromText, schemaToNode, schemaToText, uniqueId, usdcToMinorUnits
 } from './sla-draft.js';
 
 describe('inferNode', () => {
@@ -92,6 +92,31 @@ describe('schemaToNode', () => {
   it('keeps a required name that has no property row', () => {
     const schema = { type: 'object', required: ['ghost'] };
     expect(nodeToSchema(schemaToNode(schema))).toEqual(schema);
+  });
+});
+
+describe('schemaFromText', () => {
+  it('reads a pasted JSON Schema into a tree', () => {
+    const { root, error } = schemaFromText(JSON.stringify(SLA_DOCUMENTS.honest.clauses[0].schema));
+    expect(error).toBeNull();
+    expect(root?.properties.map((p) => p.name)).toEqual(['latitude', 'longitude', 'current']);
+  });
+
+  it('refuses a keyword the verifier would not enforce, in the verifier’s words', () => {
+    const { root, error } = schemaFromText('{"type":"string","pattern":"^a"}');
+    expect(root).toBeNull();
+    expect(error).toContain('unsupported schema keyword "pattern"');
+    expect(error).toContain('the schema');
+  });
+
+  it('names a JSON syntax error as such', () => {
+    expect(schemaFromText('{oops').error).toMatch(/^Not JSON:/);
+  });
+
+  it('round-trips through schemaToText', () => {
+    const schema = SLA_DOCUMENTS.honest.clauses[0].schema;
+    const { root } = schemaFromText(schemaToText(schemaToNode(schema)));
+    expect(nodeToSchema(/** @type {SlaDraftNode} */ (root))).toEqual(schema);
   });
 });
 
@@ -189,7 +214,7 @@ describe('draftProblems', () => {
   it('asks for a sample when a schema clause has no tree yet', () => {
     const draft = emptyDraft();
     draft.clauses.push(newClause('schema', []));
-    expect(draftProblems(draft)).toEqual([{ clause: 0, field: 'sample', message: 'Paste a sample response to read its fields.' }]);
+    expect(draftProblems(draft)).toEqual([{ clause: 0, field: 'shape', message: 'Read the shape from a sample response or a JSON Schema.' }]);
   });
 
   it('points at a bad bound inside the tree by path', () => {

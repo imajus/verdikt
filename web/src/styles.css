@@ -781,6 +781,18 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 .composer input.num { width: 7.5rem; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .composer input.invalid, .composer textarea.invalid { border-color: var(--poor); }
 .composer textarea.sample { min-height: 150px; }
+/* The two ways to author a shape sit on one line with the label, as a pair
+   of tabs in the same underline vocabulary as the Form/JSON switch above. */
+.source-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.source-head .composer-label { margin: 0; }
+.source-modes { display: flex; gap: 14px; }
+.source-modes button {
+  background: none; border: 0; border-radius: 0; padding: 0 0 2px; margin: 0;
+  font: inherit; font-size: 14.5px; color: var(--muted); border-bottom: 1.5px solid transparent;
+}
+.source-modes button:hover:not(:disabled) { opacity: 1; color: var(--ink); }
+.source-modes button.active { color: var(--ink); border-bottom-color: var(--ink); }
+.composer .hint code { font-size: 13px; }
 .composer textarea.json { min-height: 320px; }
 .composer-label { display: block; font-size: 14.5px; color: var(--muted); margin: 0 0 6px; }
 .composer-label .muted { font-size: 13px; }

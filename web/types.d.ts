@@ -97,7 +97,10 @@ interface SlaDraftClauseBase {
 
 interface SlaDraftSchemaClause extends SlaDraftClauseBase {
   kind: 'schema';
+  /** A response body pasted to infer the tree from. */
   sample: string;
+  /** A JSON Schema pasted or edited directly, the other way to author the tree. */
+  schemaText: string;
   root: SlaDraftNode | null;
 }
 
@@ -125,7 +128,7 @@ interface SlaDraft {
 interface SlaDraftProblem {
   /** Index into `SlaDraft.clauses`. */
   clause: number;
-  /** `id`, `maxMs`, `min`, `max`, `sample`, or a `/path.min` style pointer into a schema tree. */
+  /** `id`, `maxMs`, `min`, `max`, `shape`, or a `/path.min` style pointer into a schema tree. */
   field: string;
   message: string;
 }
