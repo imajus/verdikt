@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { CONTACT_ENDPOINT, looksLikeEmail, postForm } from './submit.js';
 
 /**
@@ -81,7 +81,7 @@ export class VerdiktContact extends LitElement {
             autocomplete="email"
             placeholder="you@example.com"
             aria-invalid=${this.error && !looksLikeEmail(this.email) ? 'true' : 'false'}
-            aria-describedby=${this.error ? 'contact-error' : 'contact-hint'}
+            aria-describedby=${this.error ? 'contact-error' : 'landing-forms-note'}
             .value=${this.email}
             @input=${this.editEmail} />
         </div>
@@ -92,14 +92,14 @@ export class VerdiktContact extends LitElement {
             name="message"
             rows="3"
             placeholder="A service to list, an agent to point at one, or a hole in the mechanism."
-            aria-describedby=${this.error ? 'contact-error' : 'contact-hint'}
+            aria-describedby=${this.error ? 'contact-error' : 'landing-forms-note'}
             .value=${this.message}
             @input=${this.editMessage}></textarea>
         </div>
         <wa-button type="submit" variant="brand" ?disabled=${this.pending} ?loading=${this.pending}>Send</wa-button>
         ${this.error
           ? html`<p class="form-error" id="contact-error" role="alert">${this.error}</p>`
-          : html`<p class="form-hint" id="contact-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
+          : nothing}
       </form>`;
   }
 }

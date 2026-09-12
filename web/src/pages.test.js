@@ -43,3 +43,11 @@ describe('withdrawPrompt', () => {
     expect(html).not.toContain('<verdikt-withdraw');
   });
 });
+describe('the footer', () => {
+  it('names the six systems the loop runs on, each linked and labelled', () => {
+    const html = stringify(legalFooter(() => {}));
+    expect(html.match(/class="thanks-logo"/g)?.length).toBe(6);
+    for (const name of ['majus.org', 'Chainlink CRE', 'Arc', 'ENS', 'ETHGlobal', 'ns.com']) expect(html).toContain(`aria-label="${name}"`);
+    expect(html).toContain('/thanks/ens.svg');
+  });
+});

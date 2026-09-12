@@ -557,7 +557,7 @@ describe('the marketplace listing’s search/filter/sort controls', () => {
     const marketplace = await build();
     const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, null, { key: 'deposit', direction: 'asc' });
     expect(html).toContain('aria-sort="ascending"');
-    expect(html.match(/aria-sort="none"/g)?.length).toBe(3);
+    expect(html.match(/aria-sort="none"/g)?.length).toBe(4);
   });
 
   it('defaults the marketplace listing to the old byReputation order, now as reactive sort state', async () => {
@@ -615,7 +615,8 @@ describe('rendering', () => {
 
   it('renders a standalone service page without a DOM', async () => {
     const html = renderApp(await build(), 'demo', 'service', 'weather');
-    expect(html).toContain('responds-within-5s');
+    expect(html).toContain('What it promised');
+    expect(html).toContain('Answers within 5 s');
     expect(html).toContain('back to the marketplace');
   });
 
@@ -1213,5 +1214,69 @@ describe('the address-less provider page', () => {
   // the marketplace — the same rule the legal pages already follow.
   it('renders with no marketplace loaded at all', () => {
     expect(renderApp(null, 'live', 'provider', null, null)).toContain('No provider selected');
+  });
+});
+// The listing lost its Status column and its "not yet ranked" flag, and
+// gained the one count the chain already carries per service: how many paid
+// calls have been judged. A non-active status still shows, under the name.
+describe('the listing row after the column change', () => {
+  const build = async () =>
+    loadMarketplace(
+      deps({
+        services: [service('weather', HONEST), service('lite', FLAKY, { status: 'SUSPENDED' })],
+        verdicts: [verdict(HONEST, 'PASS', '0x01'), verdict(HONEST, 'FAIL', '0x02')],
+        records: { weather: record({ conformance: null, availability: null }), lite: record({ slug: 'lite', name: 'lite.verdikt.eth', serviceId: FLAKY }) }
+      })
+    );
+
+  it('has a Requests column counting judged calls, and no Status column', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).toContain('>Requests');
+    expect(html).not.toContain('>Status<');
+    expect(html).not.toContain('not yet ranked');
+    expect(html).toContain('state-flag');
+    expect(html).toContain('class="state suspended"');
+  });
+
+  it('sorts by requests, most-judged first', () => {
+    /** @param {string} slug @param {number} calls */
+    const listing = (slug, calls) => /** @type {Listing} */ (/** @type {unknown} */ ({ slug, history: new Array(calls).fill({}) }));
+    const ranked = sortListings([listing('quiet', 1), listing('busy', 9), listing('silent', 0)], { key: 'requests', direction: 'desc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['busy', 'quiet', 'silent']);
+  });
+});
+
+// The service page's two standing sentences moved behind help marks, the
+// verdict table dropped the three columns nobody read, and the provenance
+// block starts closed with its two caveats on the labels they are about.
+describe('the service page after the layout change', () => {
+  const build = async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], verdicts: [verdict(HONEST, 'FAIL', '0x02')], records: { weather: record({}) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('puts the call and price notes behind help marks, naming the upstream generically', async () => {
+    const html = await build();
+    expect(html).toContain('for="call-help"');
+    expect(html).toContain('origin API URL');
+    expect(html).not.toContain('class="call-note">Append');
+    expect(html).toContain('for="price-help"');
+  });
+
+  it('keeps only outcome, cause and cost in the verdict table', async () => {
+    const html = await build();
+    expect(html).not.toContain('<th>Payer</th>');
+    expect(html).not.toContain('>Request</th>');
+    expect(html).not.toContain('>Block</th>');
+  });
+
+  it('closes the record by default and drops the service id', async () => {
+    const html = await build();
+    expect(html).toContain('<details class="block record">');
+    expect(html).not.toContain('Service id');
+    expect(html).toContain('for="relay-help"');
+    expect(html).toContain('for="address-help"');
   });
 });

@@ -236,10 +236,6 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .figure .value.fail { color: var(--poor); }
 .figure .label { font-size: 14.5px; color: var(--muted); }
 .figure .sub { font-size: 14.5px; color: var(--ink-2); margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px 14px; }
-.figure .sub .pass { color: var(--good); }
-.figure .sub .fail { color: var(--poor); }
-.figure .sub .down { color: var(--down); }
-.figure .sub i.dot { margin-right: 5px; }
 
 .breakdown {
   display: flex; gap: 2px; height: 6px; margin-top: 10px; width: 100%;
@@ -249,15 +245,6 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .breakdown .seg.pass { background: var(--good); }
 .breakdown .seg.fail { background: var(--poor); }
 .breakdown .seg.down { background: var(--down); }
-
-/* Layout --------------------------------------------------------------------- */
-
-.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 40px; align-items: start; }
-@media (min-width: 1040px) {
-  .layout { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); gap: 48px; }
-  .listing { position: sticky; top: 24px; }
-}
-
 
 /* Listing --------------------------------------------------------------------- */
 
@@ -305,7 +292,7 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.4rem 5.8rem;
+  grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.4rem 5.4rem;
   gap: 10px; align-items: center; width: 100%; text-align: left;
   padding: 13px 10px 13px 14px; background: none; border: 0; border-bottom: 1px solid var(--rule);
   color: inherit; font: inherit; text-decoration: none; cursor: pointer; position: relative;
@@ -336,13 +323,25 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .sort-dir.asc { border-bottom: 5px solid currentColor; }
 .cell { min-width: 0; }
 .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
-.cell.status { text-align: right; }
 .cell.name { display: flex; flex-direction: column; gap: 1px; }
 .cell.name strong { font-weight: 500; font-size: 17.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cell.num small { font-size: 13px; color: var(--muted); }
 .cell.name small { color: var(--muted); font-family: var(--mono); font-size: 12.5px; overflow-wrap: anywhere; line-height: 1.3; }
-.cell.name .unranked { color: var(--muted); font-size: 13px; font-style: italic; }
+/* A service that is not ACTIVE says so under its name — the one place the
+   row still names a status, now that every listed row was active anyway. */
+.cell.name .state-flag .state { font-size: 13px; }
 .cell.name .contested { color: var(--poor); font-size: 13px; font-weight: 500; }
+
+/* Four figure columns never fit beside a name on a phone, so below 640px a
+   row is two lines: the name across the first, the four figures on the
+   second in equal columns — head included, so the labels still sit over
+   their figures and the reputation sort keeps its own line. */
+@media (max-width: 640px) {
+  .row { grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 8px; }
+  .cell.name { grid-column: 1 / -1; }
+  .row.head { font-size: 12px; }
+  .row.head .cell.name.sort { font-size: 14px; }
+}
 
 /* The row's own link, stretched over the whole row by a pseudo-element rather
    than by wrapping it — the subname under the slug links out to the ENS
@@ -460,6 +459,19 @@ wa-tooltip.help-tip code { color: var(--ink); }
 .block h3 small { font: 400 14.5px/1 var(--sans); color: var(--muted); }
 .block > p:last-child { margin-bottom: 0; }
 
+/* The two sections a caller decides on — how to call it, what it promised —
+   share one row above the record of what it delivered, split by the same 1px
+   vertical divider the platform figures are set with. Below 1040px the sheet
+   is one column and they stack in reading order. */
+.detail-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.detail-top > .block:first-child { padding-right: 36px; }
+.detail-top > .block + .block { padding-left: 36px; border-left: 1px solid var(--rule); }
+@media (max-width: 1040px) {
+  .detail-top { grid-template-columns: minmax(0, 1fr); }
+  .detail-top > .block:first-child { padding-right: 0; }
+  .detail-top > .block + .block { padding-left: 0; border-left: 0; }
+}
+
 /* Call it ---------------------------------------------------------------------
    The one thing a visitor takes away from this page, so it is the one thing
    set at a size you can read across a desk. The URL sits on a hairline the way
@@ -475,6 +487,7 @@ wa-tooltip.help-tip code { color: var(--ink); }
   min-width: 0; overflow-wrap: anywhere;
 }
 .endpoint.off .endpoint-url { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--rule); }
+.endpoint .help { margin-top: 0; margin-left: -6px; }
 
 .copy {
   display: inline-flex; align-items: center; gap: 7px; flex: none;
@@ -518,27 +531,23 @@ verdikt-address { display: inline-flex; min-width: 0; vertical-align: middle; }
 .price b { font-size: 26px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 .price b small { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
 .price-unit { font-size: 15.5px; color: var(--muted); margin-left: 4px; }
-.price-note { display: block; margin-top: 3px; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
+.price .help { vertical-align: middle; margin-left: 8px; margin-top: 0; }
 .call-note { color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
 .call-note code { color: var(--ink); }
 
 /* What it promised ------------------------------------------------------------
    One ruled record per clause, not a four-column table. The promise is the
-   sentence; the provider's note glosses it; the machine-readable pair — the
-   type and the id a verdict names — goes to the margin column, which is where
-   this system already keeps record keys. */
+   sentence and the provider's note glosses it; the clause id a verdict names
+   is only machinery for the link back from the ledger, so it is the row's
+   anchor and nothing the reader sees. */
 
 /* `promise`, not `clause`: the SLA composer further down owns `.clause` for
    the editable kind, and two components claiming one name is how the reading
    record ended up laid out on the editor's grid. These are the same clauses
    read rather than written, and the read side is a promise. */
 .promises { list-style: none; margin: 0; padding: 0; }
-/* Three columns, the last one empty: the record key has to sit beside the
-   prose it annotates, not against the far edge of the sheet, and the rule
-   under the record still has to run the whole width. */
 .promise {
-  display: grid; grid-template-columns: minmax(0, 64ch) minmax(0, 16rem) minmax(0, 1fr);
-  column-gap: 32px; padding: 14px 0 15px;
+  padding: 14px 0 15px;
   border-bottom: 1px solid var(--rule);
   /* Enough that the section's own heading is still on screen when a verdict
      sends you here — landing on a bare clause with no "What it promised"
@@ -549,15 +558,6 @@ verdikt-address { display: inline-flex; min-width: 0; vertical-align: middle; }
 .promise-body { min-width: 0; }
 .promise-line { margin: 0; font-size: 17.5px; font-weight: 500; letter-spacing: -0.005em; max-width: 56ch; }
 .promise-note { margin: 5px 0 0; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
-.promise-key {
-  grid-column: 2; margin: 0; align-self: start; min-width: 0;
-  padding-left: 20px; border-left: 1px solid var(--rule);
-}
-/* The clause type is vocabulary the SLA schema fixes — `priceRange`, not
-   "price range" — so this caption keeps the margin's mono weight and drops
-   the uppercasing rather than printing a term no schema declares. */
-.promise-key .note-head { display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0.04em; font-size: 12px; }
-.promise-key code { font-size: 13px; color: var(--ink-2); }
 /* A verdict's clause link lands here, and an ink rule in the margin says
    which of three records it sent you to. The rule hangs outside the measure
    — margin, padding and border cancel — so the clause it marks does not jump
@@ -572,12 +572,7 @@ verdikt-address { display: inline-flex; min-width: 0; vertical-align: middle; }
 .clause-link code { color: var(--ink-2); }
 .clause-link:hover code { color: var(--ink); }
 
-/* Below this the margin column has nowhere left to be a margin: the record
-   key drops under its clause and keeps its rule on the left, so the grammar
-   survives the stack. */
 @media (max-width: 860px) {
-  .promise { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
-  .promise-key { grid-column: 1; }
   .endpoint-url { font-size: 17.5px; }
   .copy { margin-left: 0; }
 }
@@ -602,13 +597,12 @@ table.ledger { font-family: var(--mono); font-size: 14px; }
 table.ledger code { font-size: inherit; }
 table.ledger thead th { font-family: var(--sans); }
 table.ledger td { white-space: nowrap; padding-top: 6px; padding-bottom: 6px; }
+/* Four columns on a full-width sheet: the two figures shrink to their own
+   width on the right and the clause column takes what is left, so the rows
+   read as outcome, cause, then cost — not four labels spread over a rule. */
+table.ledger th:first-child, table.ledger td:first-child { width: 8rem; }
+table.ledger th.num, table.ledger td.num { width: 1%; padding-left: 28px; }
 table.ledger td small { color: var(--muted); margin-left: 3px; }
-/* What the verdict says, then what it cost — and after the rule, where to go
-   and check it. Two groups, separated the way this system separates anything:
-   with a hairline, not a heading. */
-table.ledger .edge { border-left: 1px solid var(--rule); padding-left: 16px; }
-table.ledger tbody .edge, table.ledger tbody .edge ~ td { color: var(--muted); }
-table.ledger tbody .edge code { color: var(--ink-2); }
 .desc { color: var(--ink-2); }
 
 /* The outcome tally beside the section heading, and the strip's own axis
@@ -625,7 +619,23 @@ table.ledger tbody .edge code { color: var(--ink-2); }
 
 /* On the record ---------------------------------------------------------------
    Everything the page above stands on, gathered where a reader goes to check
-   rather than to decide. Quieter by a step than the sections it supports. */
+   rather than to decide. Quieter by a step than the sections it supports, and
+   closed until asked: a native <details>, its summary wearing the section
+   heading and a drawn disclosure mark on the heading's own rule. */
+.record summary { list-style: none; cursor: pointer; }
+.record summary::-webkit-details-marker { display: none; }
+.record summary h3 { margin-bottom: 0; }
+.record[open] summary h3 { margin-bottom: 10px; }
+.record summary h3::after {
+  content: ''; margin-left: auto; align-self: center;
+  width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent;
+  border-top: 6px solid var(--muted); transition: transform 120ms;
+}
+.record summary:hover h3::after { border-top-color: var(--ink); }
+.record[open] summary h3::after { transform: rotate(180deg); }
+.record summary:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.kv-label { display: inline-flex; align-items: center; gap: 6px; }
+.kv-label .help { margin-top: 0; }
 .record table.kv { font-size: 15px; }
 .record table.kv th { color: var(--muted); }
 .record table.kv td { color: var(--ink-2); }
@@ -658,9 +668,28 @@ table.ledger tbody .edge code { color: var(--ink-2); }
 
 footer { margin-top: 56px; padding-top: 14px; border-top: 1px solid var(--rule); color: var(--muted); font-size: 14.5px; max-width: 90ch; }
 
-footer.legal { display: flex; gap: 16px; margin-top: 40px; }
+footer.legal {
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  margin: 40px auto 0; max-width: none; text-align: center;
+}
 footer.legal a { color: var(--muted); text-decoration: none; }
 footer.legal a:hover { color: var(--ink); }
+.legal-links { margin: 0; display: flex; gap: 16px; }
+/* Six marks, each its owner's own artwork (web/public/thanks), all drawn in
+   the footer's one muted colour through a mask so they read as one line of
+   identification rather than six badges in six palettes; ink on hover, the
+   same two steps every quiet control here moves through. Each mark keeps its
+   own aspect ratio at one shared height. */
+.thanks { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px 26px; }
+.thanks-lead { font-size: 14.5px; color: var(--muted); }
+.thanks-logo { display: inline-flex; color: var(--muted); transition: color 120ms; }
+.thanks-logo:hover { color: var(--ink); }
+.thanks-logo i {
+  display: block; height: var(--h, 20px); aspect-ratio: var(--ratio, 1);
+  background: currentColor;
+  -webkit-mask: var(--logo) center / contain no-repeat;
+  mask: var(--logo) center / contain no-repeat;
+}
 footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 /* The sheet already closes on a full-width rule, so the footer's own short one
    would read as a second, broken rule under it. */
@@ -703,6 +732,10 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
   font: 600 26px/1.2 var(--display); margin: 0 0 14px; letter-spacing: -0.02em;
   color: var(--ink); max-width: 34ch; text-wrap: balance;
 }
+/* The name set in the measure with its own mark, once, where the page says
+   what Verdikt does about the gap — the nav's lockup at prose size. */
+.brand-inline { font-weight: 600; color: var(--ink); white-space: nowrap; }
+.brand-inline img { width: 1.2em; height: 1.2em; vertical-align: -0.22em; margin-right: 0.15em; }
 .entry-note {
   grid-column: 3; min-width: 0; align-self: start;
   padding-left: 20px; border-left: 1px solid var(--rule);
@@ -734,8 +767,6 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 .note-kv dt { font-family: var(--mono); font-size: 12px; color: var(--muted); }
 .note-kv dd { margin: 0; font-family: var(--mono); font-size: 12.5px; color: var(--ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .note-kv dd .outcome { font-family: var(--sans); font-size: 12.5px; }
-.note-source { margin-top: 10px; color: var(--muted); }
-.note-source code { font-size: 12px; color: var(--ink-2); }
 
 /* Entry 00. The three clauses are set as three lines on purpose: they are a
    statement of terms, and a statement of terms does not wrap wherever the
@@ -884,23 +915,22 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    arrives, so the figure lights up in the order a call actually travels. The
    trace easing is a hard out-expo — a line is visually at its arrowhead about a
    fifth of the way through its duration — so a block's --r is its line's --d
-   plus ~900ms, not plus the whole 5066. The two blocks nothing draws into (the
-   agent, which starts the call; ENS, which is only ever read) take the two ends
-   of the sequence. */
+   plus ~900ms, not plus the whole 5066. A dashed read is a step of the same
+   sequence — the proxy reading the url record, the workflow reading the sla,
+   the hourly aggregate — so each surfaces at its own --d rather than all of
+   them at the end; the agent, which starts the call, is the first block up and
+   the last one drawn into. */
 @media (prefers-reduced-motion: no-preference) {
   .diagram.drawing .dg-flow {
     stroke-dasharray: 1; stroke-dashoffset: 1;
     animation: dg-trace 5066ms cubic-bezier(0.16, 1, 0.3, 1) var(--d, 0ms) both;
   }
-  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 3466ms ease-out 5066ms both; }
+  .diagram.drawing .dg-read { opacity: 0; animation: dg-surface 1400ms ease-out var(--d, 0ms) both; }
   .diagram.drawing .dg-stage { opacity: 0.2; animation: dg-settle 700ms ease-out var(--r, 0ms) both; }
 }
 @keyframes dg-trace { to { stroke-dashoffset: 0; } }
 @keyframes dg-surface { to { opacity: 1; } }
 @keyframes dg-settle { to { opacity: 1; } }
-
-.figure-source { margin: 16px 0 0; font-size: 14.5px; color: var(--muted); max-width: 70ch; }
-.figure-source a { color: var(--link); }
 
 /* Landing forms ---------------------------------------------------------------
    A field on this page is a line you write on, not a box dropped onto a
