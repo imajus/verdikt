@@ -230,6 +230,19 @@ describe('the wizard element', () => {
     expect(html).not.toContain('View your service');
   });
 
+  // The docket states an intention before the first signature and a fact
+  // after it. Linking the subname to an explorer page for a name nobody has
+  // claimed yet would be the review screen asserting the thing it is asking
+  // the provider to authorise.
+  it('links the subname to the ENS explorer only once the claim has landed', async () => {
+    const el = mount();
+    el.deps = deps();
+    ready(el);
+    expect(stringify(el.render())).not.toContain('explorer.ens.dev');
+    await el.runStep(0);
+    expect(stringify(el.render())).toContain('https://explorer.ens.dev/weather.verdikt.eth');
+  });
+
   it('parks the cursor on a failed step and resumes from it on retry, never re-claiming', async () => {
     const claim = vi.fn(async () => '0xhash');
     let registerCalls = 0;

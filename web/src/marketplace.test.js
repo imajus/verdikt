@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SLA_TEXT } from '@verdikt/fixtures';
 import { ARC } from '@verdikt/sdk';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
-import { formatMinorUsdc, formatNativeUsdc, formatScore, formatTxError, scoreBand, shortHex } from './format.js';
+import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatTxError, scoreBand, shortHex } from './format.js';
 import { byReputation, loadMarketplace } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
 
@@ -146,6 +146,25 @@ describe('formatting the two USDC views', () => {
 
   it('truncates rather than rounding, so a bond is never overstated', () => {
     expect(formatNativeUsdc(1_999_999_999_999_999_999n, 2)).toBe('1.99 USDC');
+  });
+
+  // A refund is capped at what was paid on the x402 leg, so a real credit can
+  // be one USDC minor unit — 1e12 in the native view. The default four places
+  // rendered that as "0 USDC", which is the ledger reporting no refund on a
+  // row where the chain credited one.
+  it('never renders a credited refund as zero', () => {
+    expect(formatNativeUsdc(10n ** 12n)).toBe('0 USDC');
+    expect(formatRefundUsdc(10n ** 12n)).toBe('0.000001 USDC');
+    expect(formatRefundUsdc(10n ** 18n + 7n * 10n ** 12n)).toBe('1.000007 USDC');
+  });
+
+  it('reports a refund below its own resolution as a bound, not as nothing', () => {
+    expect(formatRefundUsdc(1n)).toBe('< 0.000001 USDC');
+    expect(formatRefundUsdc(0n)).toBe('0 USDC');
+  });
+
+  it('names the asset once across a range, so two bounds read as one band', () => {
+    expect(formatMinorRange(1000n, 10_000n)).toBe('0.001 to 0.01 USDC');
   });
 
   it('shows an unpublished score as a dash, not as zero', () => {
@@ -495,6 +514,285 @@ describe('which clause a verdict says broke', () => {
     const html = await detail([verdict(HONEST, 'PASS', '0x02')]);
     expect(html).not.toContain('status only');
     expect(html).not.toContain('edited since');
+  });
+
+  // The page's whole claim is the comparison between the promise and the
+  // delivery, and the clause id is the only thing joining the two halves.
+  // Printing it twice without connecting them leaves the reader to do it.
+  it('links a named clause to the record that declares it', async () => {
+    const html = await detail([verdict(HONEST, 'FAIL', '0x02', clauseHash('responds-within-5s'))]);
+    // `responds-within-5s` is the second clause of the honest fixture.
+    expect(html).toContain('id="clause-1"');
+    expect(html).toContain('href="#clause-1"');
+  });
+
+  // `delivery` is in no SLA by construction, and an edited-away clause is in
+  // this one no longer. Neither has a record to send a reader to.
+  it('leaves a clause the SLA does not declare unlinked', async () => {
+    const implicit = await detail([verdict(HONEST, 'DOWN', '0x02', clauseHash(DELIVERY_CLAUSE))]);
+    expect(implicit).not.toContain('href="#clause-');
+    const edited = await detail([verdict(HONEST, 'FAIL', '0x02', clauseHash('a-clause-since-removed'))]);
+    expect(edited).not.toContain('href="#clause-');
+  });
+});
+
+// The one thing an agent operator takes off this page. It used to be a
+// truncated `weather.verdikt.bond/…` in a key/value table, which is neither a
+// URL you can use nor one you can select.
+describe('the endpoint a service is called at', () => {
+  /** @param {Partial<RegisteredService>} [overrides] */
+  const detail = async (overrides = {}) => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST, overrides)], records: { weather: record({}) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('gives the whole URL, not an elided one', async () => {
+    const html = await detail();
+    expect(html).toContain('https://weather.verdikt.bond');
+    expect(html).not.toContain('verdikt.bond/…');
+  });
+
+  it('offers to copy it', async () => {
+    expect(await detail()).toContain('class="copy"');
+  });
+
+  // A retired slug answers 503, and a suspended one answers 503 until the
+  // bond is topped up. Offering to copy an address that cannot be called is
+  // the page inviting a wasted request.
+  it('withholds the copy control where the proxy will not route', async () => {
+    for (const status of /** @type {ServiceStatus[]} */ (['DEREGISTERED', 'SUSPENDED'])) {
+      const html = await detail({ status });
+      expect(html).not.toContain('class="copy"');
+      expect(html).toContain('503');
+    }
+  });
+});
+
+// Read off the ledger rather than asserted: this page never fetches a 402
+// challenge, so the only price it can honestly report is the one its own
+// verdicts recorded.
+describe('what the page says a call costs', () => {
+  /** @param {bigint[]} paid */
+  const detail = async (paid) => {
+    const { services } = await loadMarketplace(
+      deps({
+        services: [service('weather', HONEST)],
+        verdicts: paid.map((paidAmount, index) => ({
+          ...verdict(HONEST, 'PASS', `0x0${index}`),
+          paidAmount
+        })),
+        records: { weather: record({}) }
+      })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('reports the one figure every recorded call paid', async () => {
+    const html = await detail([2500n, 2500n]);
+    expect(html).toContain('0.0025');
+    expect(html).toContain('What all 2 recorded calls paid');
+  });
+
+  it('reports a range when they differ, rather than picking one', async () => {
+    const html = await detail([1n, 2_500_000n]);
+    // The asset is set apart from the figure, so the range reads as far as its
+              // upper bound — the split that used to drop everything after "0.000001".
+              expect(html).toContain('0.000001 to 2.5');
+    expect(html).toContain('The range across 2 recorded calls');
+  });
+
+  // The honest fixture's price clause promises 1 to 10000 minor units. A
+  // ledger running outside that is exactly what the FAIL below it records,
+  // and the page must not talk over its own table.
+  it('claims the price sits inside the declared band only when it does', async () => {
+    expect(await detail([2500n])).toContain('Inside the');
+    expect(await detail([2_500_000n])).not.toContain('Inside the');
+  });
+
+  it('reports no price at all before the first call, rather than guessing one', async () => {
+    const html = await detail([]);
+    expect(html).toContain('Nothing has been called yet');
+    expect(html).not.toContain('class="price"');
+  });
+});
+
+// One Arc read feeds four pages, and every one of them used to wait behind it
+// showing the marketplace's own skeleton: a Marketplace title and a grid of
+// six rows, then a wholesale replacement by a page of another shape. A
+// skeleton that is not the shape of its page is worse than no skeleton.
+describe('what a page shows while the chain is still answering', () => {
+  /**
+   * @param {'marketplace'|'service'|'provider'|'how'} view
+   * @param {string|null} [slug]
+   * @param {string|null} [address]
+   */
+  const loading = (view, slug = null, address = null) => renderApp(null, 'live', view, slug, address);
+
+  it('stands in for the service page, with the slug the URL already gave it', () => {
+    const html = loading('service', 'weather');
+    expect(html).toContain('Call it');
+    expect(html).toContain('What it promised');
+    expect(html).toContain('>weather<');
+    // The listing grid is the marketplace skeleton's own shape; the word
+    // itself is in the nav on every page.
+    expect(html).not.toContain('class="listing flush"');
+    // SSR splits the interpolated slug into its own part, so the live
+            // region's text is asserted either side of it.
+            expect(html).toContain('role="status"');
+            expect(html).toContain('Loading ');
+  });
+
+  it('stands in for a provider console, with the address the URL already gave it', () => {
+    const html = loading('provider', null, PROVIDER);
+    expect(html).toContain(PROVIDER);
+    expect(html).toContain('>bonded<');
+    expect(html).not.toContain('class="listing flush"');
+  });
+
+  it('still stands in for the marketplace on the marketplace', () => {
+    const html = loading('marketplace');
+    expect(html).toContain('class="listing flush"');
+    expect(html).toContain('Loading the marketplace');
+  });
+
+  // /how is prose about the mechanism and reads neither chain, so waiting
+  // behind the marketplace only bought it a skeleton of a page it is not.
+  it('does not make /how wait for a chain it never reads', () => {
+    const html = loading('how');
+    expect(html).toContain('Two chains, each for one reason');
+    expect(html).not.toContain('class="bar"');
+  });
+
+  // The name cell carries the slug over its subname. A single bar left every
+  // row a line short — a hundred pixels of listing moving on arrival.
+  it('redacts a listing row at the height of a real one', () => {
+    const html = loading('marketplace');
+    expect(html.match(/<span class="cell name"><strong>/g)?.length).toBe(6);
+    expect(html.match(/<small>/g)?.length).toBe(6);
+  });
+});
+
+// Two rules that are true of every service on every reading — how a refund is
+// sized, which window the published ratios cover — used to stand as
+// paragraphs between the reader and the figures they came for. They are
+// footnotes now: asked, not read past.
+describe('the standing rules behind the figures', () => {
+  /** @param {VerdictRecord[]} [verdicts] @param {Partial<ServiceRecord>} [rec] */
+  const detail = async (verdicts = [], rec = {}) => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], verdicts, records: { weather: record(rec) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('puts the refund rule in a tooltip anchored to the delivered heading', async () => {
+    const html = await detail([verdict(HONEST, 'FAIL', '0x02')]);
+    expect(html).toContain('id="delivered-help"');
+    expect(html).toContain('for="delivered-help"');
+    expect(html).toContain('capped at what they actually paid');
+    expect(html).not.toContain('class="aside">A FAIL or DOWN');
+  });
+
+  it('puts the window and the bond’s job in a tooltip anchored to the figures', async () => {
+    const html = await detail();
+    expect(html).toContain('id="scores-help"');
+    expect(html).toContain('for="scores-help"');
+    expect(html).toContain('trailing');
+    expect(html).not.toContain('class="provenance"');
+  });
+
+  // Nothing to explain about a ledger with no rows, and the reason the
+  // figures are blank is a standing note rather than a footnote — a reader
+  // looking at a dash is already asking the question.
+  it('offers no refund footnote before the first verdict', async () => {
+    expect(await detail()).not.toContain('delivered-help');
+  });
+
+  it('offers no figures footnote where the scores are unpublished', async () => {
+    const html = await detail([], { conformance: null, availability: null });
+    expect(html).not.toContain('scores-help');
+    expect(html).toContain('No scores published yet');
+  });
+
+  // Hover alone strands every touch device on a page whose explanations it
+  // cannot reach.
+  it('opens on click and on keyboard focus, not on hover alone', async () => {
+    expect(await detail()).toContain('trigger="hover focus click"');
+  });
+});
+
+// The explorer reads the same Sepolia records this app does and shows who
+// wrote each one, so it is the independent check on the ENS half of what
+// every one of these pages claims.
+describe('the subname’s link out to the ENS explorer', () => {
+  const EXPLORER = 'https://explorer.ens.dev/weather.verdikt.eth';
+  const build = () =>
+    loadMarketplace(deps({ services: [service('weather', HONEST)], records: { weather: record({}) } }));
+
+  it('is on the service page', async () => {
+    const { services } = await build();
+    expect(renderDetail(services[0])).toContain(EXPLORER);
+  });
+
+  it('is on the marketplace listing', async () => {
+    expect(renderApp(await build(), 'demo', 'marketplace', null)).toContain(EXPLORER);
+  });
+
+  it('is on a provider console', async () => {
+    expect(renderApp(await build(), 'demo', 'provider', null, PROVIDER)).toContain(EXPLORER);
+  });
+
+  // An anchor inside an anchor is not markup a browser keeps: the row's link
+  // to the service page would swallow this one, or the parser would split the
+  // row. The row is a div with a stretched link inside it instead.
+  it('is not nested inside the listing row’s own link', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).not.toContain('<a class="row"');
+    expect(html).toContain('href="/services/weather"');
+  });
+
+  it('leaves the site, so it opens where it will not lose the page behind it', async () => {
+    const { services } = await build();
+    const html = renderDetail(services[0]);
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('target="_blank"');
+  });
+});
+
+// Two records that were at the top of the page and should not have been: the
+// upstream URL an agent never types, and the ENS `address` record, which
+// issue #37 took out of the request path and which "Pays to" claimed was
+// where the money lands.
+describe('the provenance block', () => {
+  const build = async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('keeps the upstream and the address record below the promise and the record', async () => {
+    const html = await build();
+    expect(html).toContain('On the record');
+    expect(html.indexOf('What it delivered')).toBeLessThan(html.indexOf('On the record'));
+    expect(html.indexOf('Relays to')).toBeGreaterThan(html.indexOf('What it delivered'));
+  });
+
+  it('does not call the address record a payout, because nothing checks it', async () => {
+    const html = await build();
+    expect(html).toContain('Address record');
+    expect(html).not.toContain('Pays to');
+    expect(html).toContain('not checked against the 402 challenge');
+  });
+
+  it('names the registry it read only where a chain was actually read', async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    expect(renderApp({ services, stats: /** @type {any} */ ({ windowSeconds: 86400 }) }, 'live', 'service', 'weather')).toContain(ARC.registry);
+    expect(renderApp({ services, stats: /** @type {any} */ ({ windowSeconds: 86400 }) }, 'demo', 'service', 'weather')).not.toContain(ARC.registry);
   });
 });
 

@@ -47,6 +47,7 @@ vi.mock('@awesome.me/webawesome/dist/components/dropdown/dropdown.js', () => ({}
 vi.mock('@awesome.me/webawesome/dist/components/divider/divider.js', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/components/input/input.js', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/components/textarea/textarea.js', () => ({}));
+vi.mock('@awesome.me/webawesome/dist/components/tooltip/tooltip.js', () => ({}));
 
 /** @type {any} */ let app;
 /** @type {Record<string, any>} */ let controls;

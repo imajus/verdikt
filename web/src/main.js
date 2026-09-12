@@ -15,6 +15,7 @@ import '@awesome.me/webawesome/dist/components/dropdown/dropdown.js';
 import '@awesome.me/webawesome/dist/components/divider/divider.js';
 import '@awesome.me/webawesome/dist/components/input/input.js';
 import '@awesome.me/webawesome/dist/components/textarea/textarea.js';
+import '@awesome.me/webawesome/dist/components/tooltip/tooltip.js';
 import './forms/sla-editor.js';
 import './forms/bond.js';
 import './forms/wizard.js';
