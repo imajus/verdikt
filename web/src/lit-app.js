@@ -9,6 +9,8 @@ import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, WITHDRAW_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms, withdrawPrompt } from './pages.js';
 import { amount, landing } from './landing.js';
+import { copyButton } from './copy.js';
+import './address-view.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -244,41 +246,6 @@ const helpButton = (id, label) => html`<button type="button" class="help" id=${i
 /** @param {string} id @param {string} placement @param {unknown} content */
 const helpTip = (id, placement, content) => html`<wa-tooltip class="help-tip" for=${id} placement=${placement} trigger="hover focus click">${content}</wa-tooltip>`;
 
-const copyIcon = () => html`<svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-9A1.5 1.5 0 0 0 3 5.5v9A1.5 1.5 0 0 0 4.5 16"/></svg>`;
-const checkIcon = () => html`<svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12.5 5.5 5.5L20 6"/></svg>`;
-
-/**
- * Writes `value` to the clipboard and reports back on the button itself.
- *
- * The label is set directly rather than through a re-render: `detailTemplate`
- * is a pure function of the listing, and nothing about the listing changed.
- * A later render of the same template resets the button to its idle label,
- * which is the state it should be in by then anyway.
- *
- * @param {string} value
- */
-const copyOnClick = (value) => async (/** @type {Event} */ event) => {
-  const button = /** @type {HTMLButtonElement} */ (event.currentTarget);
-  const label = button.querySelector('.copy-label');
-  if (!label) return;
-  // A failure here means no clipboard permission, or no clipboard at all over
-  // plain http. Say so rather than claiming a copy that did not happen — the
-  // URL beside the button is selectable, so there is still a way through.
-  let copied;
-  try {
-    await navigator.clipboard.writeText(value);
-    copied = true;
-  } catch {
-    copied = false;
-  }
-  button.dataset.state = copied ? 'copied' : 'failed';
-  label.textContent = copied ? 'Copied' : 'Select it';
-  window.setTimeout(() => {
-    button.dataset.state = 'idle';
-    label.textContent = 'Copy';
-  }, 2000);
-};
-
 /**
  * A formatted amount with its asset quieted, for a figure that may be a range.
  *
@@ -291,12 +258,6 @@ const figure = (text) => {
   const cut = text.lastIndexOf(' ');
   return cut === -1 ? html`${text}` : html`${text.slice(0, cut)}<small>${text.slice(cut + 1)}</small>`;
 };
-
-/** @param {string} value */
-const copyButton = (value) => html`
-  <button type="button" class="copy" data-state="idle" aria-label="Copy ${value}" @click=${copyOnClick(value)}>
-    ${copyIcon()}${checkIcon()}<span class="copy-label" aria-live="polite">Copy</span>
-  </button>`;
 
 /**
  * Why the proxy will not route this slug, or `null` when it will.
@@ -400,8 +361,8 @@ const promisedSection = (listing, clauses, anchors) => html`
         </ol>`}
   </section>`;
 
-/** @param {Listing} listing @param {Map<string, string>} anchors */
-const deliveredSection = (listing, anchors) => {
+/** @param {Listing} listing @param {Map<string, string>} anchors @param {'live'|'demo'} mode */
+const deliveredSection = (listing, anchors, mode) => {
   const counts = { PASS: 0, FAIL: 0, DOWN: 0 };
   for (const verdict of listing.history) counts[verdict.outcome] += 1;
   const tally = /** @type {SlaOutcome[]} */ (['PASS', 'FAIL', 'DOWN'])
@@ -420,7 +381,7 @@ const deliveredSection = (listing, anchors) => {
             <span class="strip-note">oldest first</span>
           </p>
           <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th><th class="edge">Request</th><th>Payer</th><th class="num">Block</th></tr></thead><tbody>
-            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td><td class="edge"><code title=${verdict.requestId}>${shortHex(verdict.requestId)}</code></td><td><code title=${verdict.payer}>${shortHex(verdict.payer)}</code></td><td class="num muted">${verdict.blockNumber ?? '—'}</td></tr>`)}
+            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td><td class="edge"><code title=${verdict.requestId}>${shortHex(verdict.requestId)}</code></td><td><verdikt-address address=${verdict.payer} .resolve=${mode === 'live'}></verdikt-address></td><td class="num muted">${verdict.blockNumber ?? '—'}</td></tr>`)}
           </tbody></table></div>`}
     </section>`;
 };
@@ -442,8 +403,8 @@ const recordSection = (listing, mode, go) => {
       <table class="kv">
         <tr><th>Relays to</th><td>${listing.endpoint ? html`<code>${listing.endpoint}</code>` : html`<span class="muted">no <code>url</code> record published</span>`}</td></tr>
         <tr><th>Subname</th><td><code>${ensLink(listing.name)}</code> <span class="muted">on Ethereum Sepolia</span></td></tr>
-        <tr><th>Address record</th><td>${listing.payTo ? html`<code>${listing.payTo}</code>` : html`<span class="muted">none published</span>`}</td></tr>
-        <tr><th>Provider</th><td><a href=${consolePath} @click=${navigateOnClick(go, consolePath)}><code>${listing.provider}</code></a></td></tr>
+        <tr><th>Address record</th><td>${listing.payTo ? html`<verdikt-address address=${listing.payTo} copy .resolve=${mode === 'live'}></verdikt-address>` : html`<span class="muted">none published</span>`}</td></tr>
+        <tr><th>Provider</th><td><a href=${consolePath} @click=${navigateOnClick(go, consolePath)}><verdikt-address address=${listing.provider} .resolve=${mode === 'live'}></verdikt-address></a></td></tr>
         <tr><th>Service id</th><td><code>${listing.serviceId}</code></td></tr>
         ${mode === 'live' ? html`<tr><th>Registry</th><td><code>${ARC.registry}</code> <span class="muted">on Arc Testnet</span></td></tr>` : nothing}
       </table>
@@ -486,7 +447,7 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
         : nothing}
     ${callSection(listing, clauses)}
     ${promisedSection(listing, clauses, anchors)}
-    ${deliveredSection(listing, anchors)}
+    ${deliveredSection(listing, anchors, mode)}
     ${recordSection(listing, mode, go)}`;
 };
 
@@ -506,8 +467,8 @@ export const nav = (view, mode, theme, account, go, connect, disconnect, changeT
   const wallet = mode === 'live'
     ? account
       ? html`<wa-dropdown class="wallet-menu" placement="bottom-end" size="s" @wa-select=${selectWalletAction}>
-          <wa-button slot="trigger" class="nav-account" appearance="outlined" size="s" with-caret title=${account} aria-label="Wallet menu for ${account}">${account.slice(0, 6)}…${account.slice(-4)}</wa-button>
-          <div class="wallet-menu-heading"><span>Connected wallet</span><code>${account}</code></div>
+          <wa-button slot="trigger" class="nav-account" appearance="outlined" size="s" with-caret title=${account} aria-label="Wallet menu for ${account}"><verdikt-address address=${account}></verdikt-address></wa-button>
+          <div class="wallet-menu-heading"><span>Connected wallet</span><verdikt-address address=${account} copy></verdikt-address></div>
           <wa-divider></wa-divider>
           <wa-dropdown-item value="change"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 7h16m-4-4 4 4-4 4M20 17H4m4-4-4 4 4 4"/></svg>Change wallet</wa-dropdown-item>
           <wa-dropdown-item value="disconnect" variant="danger"><svg slot="icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M9 4H4v16h5m5-13 5 5-5 5M9 12h10"/></svg>Disconnect</wa-dropdown-item>
@@ -696,7 +657,7 @@ export class VerdiktApp extends LitElement {
     const bonded = owned.reduce((total, listing) => total + listing.deposit, 0n);
     const refunded = owned.reduce((total, listing) => total + listing.history.reduce((sum, verdict) => sum + verdict.refunded, 0n), 0n);
     const verdicts = owned.reduce((total, listing) => total + listing.history.length, 0);
-    return html`<header class="page-head"><div><p class="tagline">Provider <code>${provider}</code> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><div class="head-actions"><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p>${auth.signedIn ? html`<wa-button size="s" href=${REGISTER_PATH} @click=${navigateOnClick(go, REGISTER_PATH)}>Add a service</wa-button>` : nothing}</div></header>
+    return html`<header class="page-head"><div><p class="tagline">Provider <verdikt-address address=${provider} copy .resolve=${this.mode === 'live'}></verdikt-address> · <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>back to the marketplace</a></p></div><div class="head-actions"><p class="source">${owned.length} service${owned.length === 1 ? '' : 's'}</p>${auth.signedIn ? html`<wa-button size="s" href=${REGISTER_PATH} @click=${navigateOnClick(go, REGISTER_PATH)}>Add a service</wa-button>` : nothing}</div></header>
       ${auth.ownPage && (!auth.signedIn || !auth.supported) ? html`<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage your services.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">${auth.ownPage ? 'refunded from your bonds' : 'refunded from these bonds'}</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, go))}</section>`}`;
