@@ -64,7 +64,10 @@
     />
     <script>
       try {
-        const theme = localStorage.getItem('verdikt-theme') === 'dark' ? 'dark' : 'light';
+        const stored = localStorage.getItem('verdikt-theme');
+        const theme = stored === 'dark' || stored === 'light'
+          ? stored
+          : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
         document.documentElement.dataset.theme = theme;
         document.documentElement.classList.add(`wa-${theme}`);
       } catch {}

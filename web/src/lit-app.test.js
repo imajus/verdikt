@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render as renderToIterable } from '@lit-labs/ssr';
-import { detailTemplate } from './lit-app.js';
+import { detailTemplate, nav } from './lit-app.js';
 
 // SSR interleaves `<!--lit-part-->` markers around every binding, which splits
 // a rendered sentence mid-phrase. Strip them so an assertion can read the copy
@@ -74,5 +74,25 @@ describe('a service with verdicts', () => {
     );
     expect(html).toContain('95.8%');
     expect(html).not.toContain('N/A');
+  });
+});
+
+const noop = () => {};
+
+describe('the nav theme toggle', () => {
+  it('shows a monitor icon and offers Light next when following the system preference', () => {
+    const markup = stringify(nav('landing', 'demo', 'system', null, noop, noop, noop, noop));
+    expect(markup).toContain('aria-label="Switch to light mode"');
+    expect(markup).toContain('x="3" y="4" width="18" height="13"');
+  });
+  it('shows a sun icon and offers Dark next in light mode', () => {
+    const markup = stringify(nav('landing', 'demo', 'light', null, noop, noop, noop, noop));
+    expect(markup).toContain('aria-label="Switch to dark mode"');
+    expect(markup).toContain('cx="12" cy="12" r="4"');
+  });
+  it('shows a moon icon and offers System next in dark mode', () => {
+    const markup = stringify(nav('landing', 'demo', 'dark', null, noop, noop, noop, noop));
+    expect(markup).toContain('aria-label="Switch to system theme"');
+    expect(markup).toContain('M21 12.79A9 9');
   });
 });
