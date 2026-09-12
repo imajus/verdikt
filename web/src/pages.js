@@ -9,6 +9,7 @@
 
 import { html, nothing } from 'lit';
 import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick, providerUrl } from './router.js';
+import './address-view.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Every response is judged against the SLA its provider published; a broken promise refunds the caller from the provider’s bond.';
 
@@ -37,7 +38,7 @@ export const providerPrompt = (mode, account, rejected, connect, go) => html`
   <section class="block">
     ${account
       ? html`
-        <p>Connected as <code>${account}</code>.</p>
+        <p>Connected as <verdikt-address address=${account} copy .resolve=${mode === 'live'}></verdikt-address>.</p>
         <p><a href=${providerUrl(account)} @click=${navigateOnClick(go, providerUrl(account))}>Open your console →</a></p>`
       : html`
         <p>No provider selected.${mode === 'live' ? ' Connect a wallet to open your own console, or reach one from a service in the marketplace.' : ' Provider consoles read Arc Testnet; this build is showing seeded demo data.'}</p>

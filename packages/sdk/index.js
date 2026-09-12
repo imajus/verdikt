@@ -6,8 +6,11 @@
 
 export {
   DEFAULT_PARENT_NAME,
+  DEFAULT_SEPOLIA_RPC,
   ENS_BACKEND,
+  clearAddressNameCache,
   clearServiceRecordCache,
+  resolveAddressName,
   resolveServiceRecord,
   serviceName,
   setTextCalldata,

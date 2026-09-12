@@ -491,6 +491,26 @@ wa-tooltip.help-tip code { color: var(--ink); }
 .copy[data-state='failed'] { color: var(--muted); }
 .copy-label { min-width: 3.8em; text-align: left; }
 
+/* The one address display — a provider, a payer, the connected wallet
+   (issue #69). `verdikt-address` renders light DOM, so its `<code>` and its
+   optional copy button are ordinary descendants here: no shadow boundary to
+   pierce, just a compact inline row wherever the element appears. */
+verdikt-address { display: inline-flex; min-width: 0; vertical-align: middle; }
+.address-view { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.address-view code { overflow: hidden; text-overflow: ellipsis; }
+/* Icon-only and borderless, unlike the endpoint's own copy button: this one
+   sits beside a dozen words of prose or inside a table cell, not alone under
+   a heading, so a bordered button with a text label reads as loud as the
+   address it is next to. The label stays in the DOM — copyOnClick still
+   writes "Copied"/"Select it" into it, and `aria-live` still announces that
+   change — just visually hidden, so the icon-swap (copy → check) carries the
+   sighted feedback instead. */
+.address-view .copy { padding: 3px; gap: 0; border: none; width: 22px; height: 22px; justify-content: center; }
+.address-view .copy-label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
 /* The figure over its explanation, the way a score sits over its meter — not
    beside it, which left the sentence wrapping in a column of its own while
    half the sheet stood empty. */

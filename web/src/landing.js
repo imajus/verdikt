@@ -19,11 +19,12 @@
 
 import { html, nothing } from 'lit';
 import { ARC } from '@verdikt/sdk';
-import { formatMinorUsdc, formatNativeUsdc, shortHex } from './format.js';
+import { formatMinorUsdc, formatNativeUsdc } from './format.js';
 import { HOW_PATH, MARKETPLACE_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
 import './diagram.js';
 import './demo-chat.js';
+import './address-view.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -122,7 +123,7 @@ const verdictNote = (marketplace, mode, error) => {
       <dt>refunded</dt><dd>${verdict.refunded > 0n ? formatNativeUsdc(verdict.refunded, 2) : html`<span class="muted">none owed</span>`}</dd>
     </dl>
     ${mode === 'live' && ARC.registry
-      ? html`<p class="note-line note-source">read from <code title=${ARC.registry}>${shortHex(ARC.registry)}</code> on Arc Testnet</p>`
+      ? html`<p class="note-line note-source">read from <verdikt-address address=${ARC.registry}></verdikt-address> on Arc Testnet</p>`
       : nothing}`;
 };
 

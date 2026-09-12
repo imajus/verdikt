@@ -2,15 +2,19 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   decodeFunctionData,
   encodeAbiParameters,
+  encodeErrorResult,
   encodeFunctionResult,
+  parseAbi,
   parseAbiParameters,
   toHex
 } from 'viem';
 import {
   DEFAULT_PARENT_NAME,
   ENS_BACKEND,
+  clearAddressNameCache,
   clearServiceRecordCache,
   dnsEncode,
+  resolveAddressName,
   resolveServiceRecord,
   resolverRecordsAbi,
   serviceName,
@@ -103,7 +107,113 @@ function mockRpc(records) {
 
 afterEach(() => {
   clearServiceRecordCache();
+  clearAddressNameCache();
   vi.unstubAllGlobals();
+});
+
+// The Universal Resolver's own custom errors (mirrored from viem's internal
+// `universalResolverErrors`, which viem does not export publicly) plus the
+// `reverseWithGateways` function `getEnsName` calls. `ReverseAddressMismatch`
+// is one of the ENS-specific "no name" causes viem's own non-strict mode
+// reads as null; `AnUnrelatedError` stands in for the spike's control case —
+// a revert that is not one of those causes and must propagate.
+const reverseWithGatewaysAbi = parseAbi([
+  'error ReverseAddressMismatch(string primary, bytes primaryAddress)',
+  'error AnUnrelatedError(uint256 code)',
+  'function reverseWithGateways(bytes reverseName, uint256 coinType, string[] gateways) view returns (string, address, address)'
+]);
+
+/**
+ * Stands in for the Sepolia RPC's answer to `reverseWithGateways` — the call
+ * `getEnsName` makes against the Universal Resolver. `name: null` answers
+ * with the empty name viem reads as "no primary name set"; `revertError`
+ * answers with one of the ABI's own custom-error reverts.
+ *
+ * @param {{ name?: string|null, revertError?: 'ReverseAddressMismatch'|'AnUnrelatedError' }} outcome
+ */
+function mockReverseRpc(outcome) {
+  return vi.fn(async (_url, init) => {
+    const body = JSON.parse(String(init.body));
+    const one = (/** @type {{ id: number, params: unknown[] }} */ request) => {
+      if (outcome.revertError === 'ReverseAddressMismatch') {
+        const data = encodeErrorResult({ abi: reverseWithGatewaysAbi, errorName: 'ReverseAddressMismatch', args: ['name.eth', '0x'] });
+        return { jsonrpc: '2.0', id: request.id, error: { code: 3, message: 'execution reverted', data } };
+      }
+      if (outcome.revertError === 'AnUnrelatedError') {
+        const data = encodeErrorResult({ abi: reverseWithGatewaysAbi, errorName: 'AnUnrelatedError', args: [1n] });
+        return { jsonrpc: '2.0', id: request.id, error: { code: 3, message: 'execution reverted', data } };
+      }
+      const result = encodeFunctionResult({
+        abi: reverseWithGatewaysAbi,
+        functionName: 'reverseWithGateways',
+        result: [outcome.name ?? '', '0x0000000000000000000000000000000000000000', '0x0000000000000000000000000000000000000000']
+      });
+      return { jsonrpc: '2.0', id: request.id, result };
+    };
+    const payload = Array.isArray(body) ? body.map(one) : one(body);
+    return new Response(JSON.stringify(payload), { headers: { 'content-type': 'application/json' } });
+  });
+}
+
+describe('resolveAddressName', () => {
+  const address = '0x1111111111111111111111111111111111111111';
+
+  it('resolves an address with a primary name set', async () => {
+    vi.stubGlobal('fetch', mockReverseRpc({ name: 'alice.eth' }));
+    expect(await resolveAddressName(address, { rpcUrl: RPC })).toBe('alice.eth');
+  });
+
+  it('reports no primary name as null rather than throwing', async () => {
+    vi.stubGlobal('fetch', mockReverseRpc({ name: null }));
+    expect(await resolveAddressName(address, { rpcUrl: RPC })).toBeNull();
+  });
+
+  it('treats a name that no longer reverse-resolves back to the address as null, the same as no name', async () => {
+    // ReverseAddressMismatch() — viem's own non-strict handling of this ENS-
+    // specific revert reads it as "no name", not as an error to propagate.
+    vi.stubGlobal('fetch', mockReverseRpc({ revertError: 'ReverseAddressMismatch' }));
+    expect(await resolveAddressName(address, { rpcUrl: RPC })).toBeNull();
+  });
+
+  it('throws on a revert that is not one of ENS reverse resolution\'s own "no name" causes', async () => {
+    // The spike's control case: pointed at a contract that is not this
+    // Universal Resolver, the call reverted distinctly rather than also
+    // reading as "no name" — proof the null cases above are genuine resolver
+    // answers, not a masked failure.
+    vi.stubGlobal('fetch', mockReverseRpc({ revertError: 'AnUnrelatedError' }));
+    await expect(resolveAddressName(address, { rpcUrl: RPC })).rejects.toThrow();
+  });
+
+  it('throws when Sepolia is unreachable', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        throw new Error('ECONNREFUSED');
+      })
+    );
+    await expect(resolveAddressName(address, { rpcUrl: RPC })).rejects.toThrow();
+  });
+
+  it('serves a cached name within its TTL and refetches after it', async () => {
+    const fetchMock = mockReverseRpc({ name: 'alice.eth' });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await resolveAddressName(address, { rpcUrl: RPC, cacheTtlMs: 60_000 });
+    await resolveAddressName(address, { rpcUrl: RPC, cacheTtlMs: 60_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    clearAddressNameCache();
+    await resolveAddressName(address, { rpcUrl: RPC, cacheTtlMs: 60_000 });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not cache when no TTL is asked for', async () => {
+    const fetchMock = mockReverseRpc({ name: 'alice.eth' });
+    vi.stubGlobal('fetch', fetchMock);
+    await resolveAddressName(address, { rpcUrl: RPC });
+    await resolveAddressName(address, { rpcUrl: RPC });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
 });
 
 describe('name derivation', () => {

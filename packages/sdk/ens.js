@@ -45,7 +45,7 @@ import {
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
-import { packetToBytes } from 'viem/ens';
+import { getEnsName, packetToBytes } from 'viem/ens';
 import { SERVICE_RECORD } from '@verdikt/fixtures';
 import { SEPOLIA } from './deployments.js';
 import { env } from './env.js';
@@ -123,6 +123,53 @@ const cache = new Map();
 /** Drops every cached resolution. Tests and long-lived processes only. */
 export function clearServiceRecordCache() {
   cache.clear();
+}
+
+/** @type {Map<string, { name: string|null, expiresAt: number }>} */
+const addressNameCache = new Map();
+
+/** Drops every cached reverse resolution. Tests and long-lived processes only. */
+export function clearAddressNameCache() {
+  addressNameCache.clear();
+}
+
+/**
+ * Reverse-resolve an address to its ENS primary name, for display only.
+ *
+ * "Display only" is load-bearing: this is a courtesy label, never an identity
+ * check. Verdikt's own trust anchor stays the forward `<slug>.verdikt.eth`
+ * record matched by ownership (`resolveServiceRecord`) — nothing reads this
+ * function's result to authorize anything, and it must stay that way.
+ *
+ * Uses viem's `getEnsName`, which calls `reverseWithGateways` on the same
+ * `SEPOLIA_UNIVERSAL_RESOLVER` the forward path reads through. Confirmed live
+ * on-chain that this beta deployment answers ENSIP-19 reverse lookups: two
+ * real Sepolia addresses with no primary name came back a clean `null`, and
+ * pointing the same call at an unrelated contract reverted distinctly rather
+ * than also reading as "no name" — so a `null` here is a genuine resolver
+ * answer, not a masked failure. viem's own non-strict mode keeps that
+ * distinction: the ENS-specific "no name" causes resolve to `null`, anything
+ * else propagates, same as every other read in this file.
+ *
+ * @param {string} address
+ * @param {{ rpcUrl?: string, cacheTtlMs?: number }} [options]
+ * @returns {Promise<string|null>}
+ */
+export async function resolveAddressName(address, options = {}) {
+  const rpcUrl = options.rpcUrl ?? env('SEPOLIA_RPC_URL') ?? DEFAULT_SEPOLIA_RPC;
+  const cacheKey = `${rpcUrl}|${address.toLowerCase()}`;
+  const cached = addressNameCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return cached.name;
+
+  const client = clientFor(rpcUrl);
+  const name = await getEnsName(client, {
+    address: /** @type {`0x${string}`} */ (address),
+    universalResolverAddress: SEPOLIA_UNIVERSAL_RESOLVER
+  });
+
+  const ttl = options.cacheTtlMs ?? 0;
+  if (ttl > 0) addressNameCache.set(cacheKey, { name, expiresAt: Date.now() + ttl });
+  return name;
 }
 
 /**

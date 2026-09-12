@@ -739,11 +739,13 @@ describe('the endpoint a service is called at', () => {
 
   // A retired slug answers 503, and a suspended one answers 503 until the
   // bond is topped up. Offering to copy an address that cannot be called is
-  // the page inviting a wasted request.
+  // the page inviting a wasted request. Scoped to the endpoint's own control
+  // by its aria-label: the page's other copy buttons (an address record, a
+  // provider) copy something that is never gated on routing.
   it('withholds the copy control where the proxy will not route', async () => {
     for (const status of /** @type {ServiceStatus[]} */ (['DEREGISTERED', 'SUSPENDED'])) {
       const html = await detail({ status });
-      expect(html).not.toContain('class="copy"');
+      expect(html).not.toContain('aria-label="Copy https://weather.verdikt.bond"');
       expect(html).toContain('503');
     }
   });
