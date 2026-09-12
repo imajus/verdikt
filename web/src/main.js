@@ -19,6 +19,7 @@ import '@awesome.me/webawesome/dist/components/tooltip/tooltip.js';
 import './forms/sla-editor.js';
 import './forms/bond.js';
 import './forms/wizard.js';
+import './forms/withdraw.js';
 import './forms/subscribe.js';
 import './forms/contact.js';
 import './lit-app.js';
@@ -100,6 +101,11 @@ function draw(options = {}) {
   app.mode = mode;
   syncTheme();
   app.route = route;
+  // /withdraw acts on the connected wallet's own balance, read straight off
+  // the registry — unlike the provider console's controls below, it needs no
+  // marketplace listing, so it is wired independently of marketplaceCache.
+  if (mode === 'live' && route.view === 'withdraw') app.updateComplete.then(mountWithdraw);
+  else clearWithdrawMount();
   if (!marketplaceCache) return;
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
   const managesControls = mode === 'live' && (route.view === 'manage' || route.view === 'register');
@@ -119,6 +125,32 @@ function draw(options = {}) {
   // History navigation owns restoration for popstate. Only a newly pushed
   // route starts at its heading, and only once Lit has put that heading in DOM.
   if (options.scrollToTop) app.updateComplete.then(() => window.scrollTo(0, 0));
+}
+
+function clearWithdrawMount() {
+  const mount = /** @type {import('./forms/withdraw.js').VerdiktWithdraw|null} */ (app.querySelector('#withdraw-mount'));
+  mount?.clear();
+}
+
+/**
+ * Wires `#withdraw-mount` to the connected wallet. No session, no ownership
+ * check — unlike the provider console's controls, the wallet authenticates
+ * itself by signing the `withdraw()` transaction, so there is nothing here
+ * for `providerAuthorization` to gate.
+ */
+function mountWithdraw() {
+  const mount = /** @type {import('./forms/withdraw.js').VerdiktWithdraw|null} */ (app.querySelector('#withdraw-mount'));
+  if (!mount) return;
+  const account = getConnectedAccount();
+  if (!account) { mount.clear(); return; }
+  mount.account = account.address;
+  mount.deps = {
+    walletClientFor: () => walletClientFor(ARC_CHAIN_CONFIG),
+    registryAddress: /** @type {string} */ (ARC.registry),
+    ensureArc: () => ensureChain(ARC.chainId, ARC_CHAIN_CONFIG),
+    getOwed: (address) => /** @type {any} */ (deps.registry).getOwed(address),
+    formatNativeUsdc
+  };
 }
 
 function clearProviderControls(reset = true) {
@@ -285,11 +317,16 @@ watchSystemTheme(() => {
 app.addEventListener('wallet-connect', async () => {
   try {
     const account = await connectWallet();
-    // Connecting a wallet in this dashboard has no purpose today other than
-    // provider self-management, so an explicit connect always lands there —
-    // unlike the silent auto-reconnect below, which never fires this handler.
-    const targetPath = providerUrl(account.address);
-    if (targetPath !== location.pathname + location.search) history.pushState(null, '', targetPath);
+    // An explicit connect from most pages has no purpose here other than
+    // provider self-management, so it lands on that wallet's console — unlike
+    // the silent auto-reconnect below, which never fires this handler. /withdraw
+    // is the one page a connect is already for: staying put is what lets it
+    // read that wallet's own balance without an extra click back.
+    const route = parseRoute(new URL(location.href));
+    if (route.view !== 'withdraw') {
+      const targetPath = providerUrl(account.address);
+      if (targetPath !== location.pathname + location.search) history.pushState(null, '', targetPath);
+    }
     draw();
   } catch (error) {
     console.error('connection failed:', /** @type {Error} */ (error).message);

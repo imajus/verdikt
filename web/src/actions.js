@@ -18,7 +18,8 @@ import { setTextCalldata } from '@verdikt/sdk';
 export const registryWriteAbi = parseAbi([
   'function register(string calldata slug) external payable returns (bytes32 serviceId)',
   'function topUp(bytes32 serviceId) external payable',
-  'function deregister(bytes32 serviceId) external'
+  'function deregister(bytes32 serviceId) external',
+  'function withdraw() external returns (uint256 amount)'
 ]);
 
 /** VerdiktSubnameRegistrar's one entrypoint. */
@@ -74,6 +75,23 @@ export async function retireService({ walletClient, registryAddress, serviceId }
     abi: registryWriteAbi,
     functionName: 'deregister',
     args: [serviceId]
+  });
+  return { hash };
+}
+
+/**
+ * The pull-payment path: the connected wallet claims its own credited
+ * refund. There is no argument beyond the wallet itself — `withdraw()`
+ * pays whatever is booked under `msg.sender` (CLAUDE.md: pull payments).
+ *
+ * @param {{ walletClient: { writeContract: Function }, registryAddress: string }} params
+ */
+export async function withdrawRefund({ walletClient, registryAddress }) {
+  const hash = await walletClient.writeContract({
+    address: registryAddress,
+    abi: registryWriteAbi,
+    functionName: 'withdraw',
+    args: []
   });
   return { hash };
 }

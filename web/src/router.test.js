@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETPLACE_PATH, PROVIDER_PATH, parseRoute, providerUrl, serviceUrl, titleFor } from './router.js';
+import { MARKETPLACE_PATH, PROVIDER_PATH, WITHDRAW_PATH, parseRoute, providerUrl, serviceUrl, titleFor } from './router.js';
 
 const OWNER = '0xA11ce00000000000000000000000000000000001';
 
@@ -46,6 +46,9 @@ describe('parseRoute', () => {
   });
   it('reads the register path', () => {
     expect(parseRoute(new URL('https://verdikt.example/register'))).toEqual({ view: 'register', slug: null, address: null, rejected: null, canonicalPath: '/register' });
+  });
+  it('reads the withdraw path', () => {
+    expect(parseRoute(new URL('https://verdikt.example/withdraw'))).toEqual({ view: 'withdraw', slug: null, address: null, rejected: null, canonicalPath: WITHDRAW_PATH });
   });
   it('tolerates a trailing slash', () => {
     expect(parseRoute(new URL('https://verdikt.example/marketplace/')).view).toBe('marketplace');
@@ -95,5 +98,8 @@ describe('titleFor', () => {
   });
   it('titles the register page', () => {
     expect(titleFor(parseRoute(new URL('https://verdikt.example/register')))).toBe('List a service — Verdikt');
+  });
+  it('titles the withdraw page', () => {
+    expect(titleFor(parseRoute(new URL('https://verdikt.example/withdraw')))).toBe('Withdraw — Verdikt');
   });
 });

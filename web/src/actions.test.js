@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { claimSubname, publishSla, publishUrl, registerService, retireService, topUpBond } from './actions.js';
+import { claimSubname, publishSla, publishUrl, registerService, retireService, topUpBond, withdrawRefund } from './actions.js';
 
 /** @param {Record<string, unknown>} [overrides] */
 function fakeWalletClient(overrides = {}) {
@@ -60,6 +60,18 @@ describe('retireService', () => {
     expect(result.hash).toBe('0xhash');
     expect(walletClient.writeContract).toHaveBeenCalledWith(
       expect.objectContaining({ address: registryAddress, functionName: 'deregister', args: [serviceId] })
+    );
+  });
+});
+
+describe('withdrawRefund', () => {
+  it('calls withdraw with no arguments, taking the payer from the wallet itself', async () => {
+    const walletClient = fakeWalletClient();
+    const registryAddress = '0xREGISTRY000000000000000000000000000000';
+    const result = await withdrawRefund({ walletClient, registryAddress });
+    expect(result.hash).toBe('0xhash');
+    expect(walletClient.writeContract).toHaveBeenCalledWith(
+      expect.objectContaining({ address: registryAddress, functionName: 'withdraw', args: [] })
     );
   });
 });

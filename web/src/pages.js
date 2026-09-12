@@ -46,6 +46,28 @@ export const providerPrompt = (mode, account, rejected, connect, go) => html`
       <a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>Browse the marketplace</a>.</p>
   </section>`;
 
+/**
+ * `/withdraw`: the connected wallet's own credited balance, collected with
+ * `withdraw()`. No pasted-address lookup — only the connected wallet's own
+ * balance, which is what keeps this from becoming a general balance-lookup
+ * surface for any address (issue #58). Reads no marketplace data, just the
+ * registry's `getOwed`, so — like providerPrompt — it renders and survives a
+ * dead RPC before any listing has loaded.
+ * @param {'live'|'demo'} mode @param {string|null} account @param {() => void} connect
+ */
+export const withdrawPrompt = (mode, account, connect) => html`
+  ${pageHead('Withdraw', 'Collect a refund credited to your wallet by a FAIL or DOWN verdict.')}
+  <section class="block">
+    ${mode !== 'live'
+      ? html`<p class="aside warn">Withdrawing needs a live chain. This build is showing seeded demo data.</p>`
+      : account
+        ? html`<verdikt-withdraw id="withdraw-mount"></verdikt-withdraw>`
+        : html`
+          <p>Connect the wallet a refund was credited to — this reads only its own balance, never one you paste in.</p>
+          <wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`}
+    <p class="aside">A refund is credited to the address the verification workflow recovered from your x402 payment. See <a href=${HOW_PATH}>how it works</a>.</p>
+  </section>`;
+
 export const terms = () => html`
   ${pageHead('Terms of Service', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
   <section class="block">

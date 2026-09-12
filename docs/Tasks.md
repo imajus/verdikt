@@ -859,6 +859,20 @@ day saved in Phase 4 here.
 > different rule. It then shows the `setText` transaction to sign rather than
 > submitting it — Verdikt holds no key of the provider's, which is the whole
 > reason the SLA lives on ENS and not on Arc.
+- [x] Payer withdraw page — `/withdraw`, a dedicated route rather than a
+      `?view=` param. Connects the wallet a refund was credited to, reads its
+      balance with `getOwed` and calls `withdraw()` to collect it. Only the
+      connected wallet's own balance — no pasted-address lookup — reachable
+      from the navbar (live mode only) and linked from How it works
+      ([#58](https://github.com/imajus/verdikt/issues/58))
+
+> **`withdrawWithAuthorization`'s relay path is not offered here yet.** The
+> page reads only the direct `withdraw()` case: a payer that can transact on
+> Arc itself. A payer that can't — Circle's Gateway backing EOA, or one that
+> only ever signed on another chain — needs the signature-relay path #61
+> added to the contract, and the live registry predates it (2.4). Settling
+> who signs and who relays on this same page is worth doing once a
+> redeployment actually reaches a chain, not before.
 - [~] Machine-facing discovery API — `proxy/src/discovery.js` and the
       `/services`, `/services/:slug` routes, with filters on published
       conformance and availability, promised latency, price (integer minor

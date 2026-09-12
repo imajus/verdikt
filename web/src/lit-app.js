@@ -6,8 +6,8 @@ import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { DEFAULT_MARKETPLACE_FILTERS, DEFAULT_MARKETPLACE_SORT, isListed, matchesFilters, sortListings } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
-import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, WITHDRAW_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
+import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms, withdrawPrompt } from './pages.js';
 import { amount, landing } from './landing.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -490,7 +490,7 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
     ${recordSection(listing, mode, go)}`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
+/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
 export const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
@@ -518,7 +518,7 @@ export const nav = (view, mode, theme, account, go, connect, disconnect, changeT
   // bare path renders a prompt, not somebody's data, so leaving it static
   // would cost a connected provider a second click for nothing.
   const providerPath = account ? providerUrl(account) : PROVIDER_PATH;
-  return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
+  return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${mode === 'live' ? item(WITHDRAW_PATH, 'Withdraw', 'withdraw') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
 };
 
 /** @param {string} width @param {string} [height] when a redaction stands in for something that is not a line of text */
@@ -638,7 +638,7 @@ const how = () => html`
        stats.windowSeconds and needs no edit. -->
   ${pageHead('How it works', 'How the verification loop works, end to end.')}
   <section class="block"><h3>Two chains, each for one reason</h3><p><strong>Arc</strong> holds the registry, the escrow, the verdicts and the refunds — and the x402 payment itself. USDC is Arc's native gas token, so value moves as <code>msg.value</code>, not an ERC-20 transfer: no <code>approve</code>/<code>transferFrom</code>, no token address. Payment, bond and refund are the same asset on the same chain, which removes any cross-chain correlation between payment and refund.</p><p><strong>Ethereum Sepolia</strong> holds ENS. The SLA lives only as the <code>sla</code> text record on <code>&lt;slug&gt;.verdikt.eth</code>. A per-key access list scopes the provider to <code>sla</code> and <code>url</code>, and the CRE signer to <code>conformance</code> and <code>availability</code>.</p></section>
-  <section class="block"><h3>What happens on a paid call</h3><p>A proxy sits between the paying agent and the provider's x402 endpoint. Without a payment header, it checks that the challenge's payout address matches ENS. With payment attached, the call is replayed inside a Chainlink CRE Confidential Workflow and evaluated against the provider's published SLA without exposing the raw response outside the enclave.</p><p>The workflow writes PASS, FAIL or DOWN on Arc. A FAIL or DOWN credits the payer from the service's bond, capped at <code>min(fixed refund, what was actually paid, what remains of the bond)</code>.</p></section>
+  <section class="block"><h3>What happens on a paid call</h3><p>A proxy sits between the paying agent and the provider's x402 endpoint. Without a payment header, it checks that the challenge's payout address matches ENS. With payment attached, the call is replayed inside a Chainlink CRE Confidential Workflow and evaluated against the provider's published SLA without exposing the raw response outside the enclave.</p><p>The workflow writes PASS, FAIL or DOWN on Arc. A FAIL or DOWN credits the payer from the service's bond, capped at <code>min(fixed refund, what was actually paid, what remains of the bond)</code> — booked, not sent. The payer collects it by connecting the credited wallet on <a href=${WITHDRAW_PATH}>the withdraw page</a>.</p></section>
   <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing one-day scores remain public on Arc and ENS.</p></section>`;
 
 export class VerdiktApp extends LitElement {
@@ -651,7 +651,7 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'system'|'light'|'dark'} */ this.theme = 'system';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
     /** @type {MarketplaceFilters} */ this.marketFilters = { ...DEFAULT_MARKETPLACE_FILTERS };
     /** @type {MarketplaceSort} */ this.marketSort = { ...DEFAULT_MARKETPLACE_SORT };
@@ -792,6 +792,11 @@ export class VerdiktApp extends LitElement {
     // it must survive a dead RPC or a marketplace still in flight.
     if (this.route.view === 'register') {
       return html`${navBar}${this.renderRegister(go)}${legalFooter(go)}`;
+    }
+    // /withdraw acts on the connected wallet's own credited balance, read
+    // straight off the registry — it needs no marketplace listing either.
+    if (this.route.view === 'withdraw') {
+      return html`${navBar}${withdrawPrompt(this.mode, account, () => this.connect())}${legalFooter(go)}`;
     }
     // /how is prose about the mechanism and reads nothing off either chain, so
     // it belongs with them: waiting behind the marketplace only bought it a

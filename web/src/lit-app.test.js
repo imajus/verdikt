@@ -79,6 +79,18 @@ describe('a service with verdicts', () => {
 
 const noop = () => {};
 
+describe('the nav withdraw link', () => {
+  it('shows a Withdraw link in live mode', () => {
+    const markup = stringify(nav('marketplace', 'live', 'system', null, noop, noop, noop, noop));
+    expect(markup).toContain('href="/withdraw"');
+    expect(markup).toContain('>Withdraw<');
+  });
+  it('hides the Withdraw link in demo mode', () => {
+    const markup = stringify(nav('marketplace', 'demo', 'system', null, noop, noop, noop, noop));
+    expect(markup).not.toContain('href="/withdraw"');
+  });
+});
+
 describe('the nav theme toggle', () => {
   it('shows a monitor icon and offers Light next when following the system preference', () => {
     const markup = stringify(nav('landing', 'demo', 'system', null, noop, noop, noop, noop));
