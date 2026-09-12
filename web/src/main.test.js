@@ -25,7 +25,7 @@ vi.mock('./wallet.js', () => ({
   walletClientFor: vi.fn(() => ({}))
 }));
 vi.mock('./session.js', () => ({ getSession: () => state.session, signIn: state.signIn }));
-vi.mock('./source.js', () => ({ createSource: () => ({ mode: 'live', deps: { registry: { client: { readContract: async () => 1n } } } }) }));
+vi.mock('./source.js', () => ({ createSource: () => ({ mode: 'live', deps: { registry: { client: { readContract: async () => 1n }, getOwed: async () => 5n } } }) }));
 vi.mock('./marketplace.js', () => ({
   byReputation: () => 0,
   loadMarketplace: async () => ({
@@ -47,6 +47,7 @@ vi.mock('./lit-app.js', () => ({}));
 vi.mock('./forms/sla-editor.js', () => ({}));
 vi.mock('./forms/bond.js', () => ({}));
 vi.mock('./forms/wizard.js', () => ({}));
+vi.mock('./forms/withdraw.js', () => ({}));
 vi.mock('./forms/subscribe.js', () => ({}));
 vi.mock('./forms/contact.js', () => ({}));
 vi.mock('@awesome.me/webawesome/dist/styles/themes/default.css', () => ({}));
@@ -93,7 +94,7 @@ beforeEach(async () => {
   state.restoreWallet.mockResolvedValue(undefined);
   state.disconnectWallet.mockImplementation(async () => change(''));
   state.ensureChain.mockImplementation(async chainId => change(OWNER, chainId, false));
-  controls = Object.fromEntries(['sla-editor-mount', 'bond-controls-mount', 'wizard-mount'].map(id => [id, {
+  controls = Object.fromEntries(['sla-editor-mount', 'bond-controls-mount', 'wizard-mount', 'withdraw-mount'].map(id => [id, {
     deps: null, listing: null, draft: 'draft', step: 2, restoreStep: vi.fn(),
     clear() { this.deps = null; this.listing = null; this.draft = ''; this.step = 1; }
   }]));
@@ -144,6 +145,25 @@ it('mounts nothing on the provider console, a valid address or none', async () =
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   await go('/provider');
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
+});
+it('mounts the withdraw control for the connected wallet on /withdraw, and nothing else', async () => {
+  await go('/withdraw');
+  expect(controls['withdraw-mount'].account).toBe(OWNER);
+  expect(controls['withdraw-mount'].deps.registryAddress).toBe('registry');
+  expect(await controls['withdraw-mount'].deps.getOwed(OWNER)).toBe(5n);
+  for (const id of ['sla-editor-mount', 'bond-controls-mount', 'wizard-mount']) expect(controls[id].deps).toBeNull();
+});
+it('clears the withdraw control once navigation leaves /withdraw', async () => {
+  await go('/withdraw');
+  await go('/marketplace');
+  expect(controls['withdraw-mount'].deps).toBeNull();
+});
+it('stays on /withdraw after an explicit wallet connect there, unlike every other page', async () => {
+  await go('/withdraw');
+  pushState.mockClear();
+  await events.get('wallet-connect')?.(); await settle();
+  expect(pushState).not.toHaveBeenCalled();
+  expect(controls['withdraw-mount'].account).toBe(OWNER);
 });
 it('starts wallet restoration on load without requesting connection or sign-in', () => {
   expect(state.restoreWallet).toHaveBeenCalledOnce();

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render as renderToIterable } from '@lit-labs/ssr';
-import { legalFooter, privacy, terms } from './pages.js';
+import { legalFooter, privacy, terms, withdrawPrompt } from './pages.js';
 
 /** @param {unknown} template */
 const stringify = (template) => Array.from(renderToIterable(template)).join('');
@@ -22,5 +22,24 @@ describe('static pages', () => {
     const html = stringify(privacy());
     expect(html).toContain('third-party form service');
     expect(html).toContain('deletion request');
+  });
+});
+
+describe('withdrawPrompt', () => {
+  const OWNER = '0xA11ce00000000000000000000000000000000001';
+  it('prompts a connect, with no address input, when no wallet is connected', () => {
+    const html = stringify(withdrawPrompt('live', null, () => {}));
+    expect(html).toContain('Connect the wallet');
+    expect(html).not.toContain('<input');
+  });
+  it('mounts the withdraw control once a wallet is connected', () => {
+    const html = stringify(withdrawPrompt('live', OWNER, () => {}));
+    expect(html).toContain('<verdikt-withdraw');
+    expect(html).not.toContain('Connect the wallet');
+  });
+  it('says a live chain is needed in demo mode, even with a wallet connected', () => {
+    const html = stringify(withdrawPrompt('demo', OWNER, () => {}));
+    expect(html).toContain('needs a live chain');
+    expect(html).not.toContain('<verdikt-withdraw');
   });
 });
