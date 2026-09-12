@@ -169,14 +169,6 @@ describe('landing page', () => {
     expect(stringify(landing(() => {}, services, 'demo'))).not.toContain('list a service of your own');
   });
 
-  it('points a payer CTA at the withdraw page, only in live mode', () => {
-    const services = marketplace([listing('weather', [verdict({})])]);
-    const live = stringify(landing(() => {}, services, 'live'));
-    expect(live).toContain('withdraw a credited refund');
-    expect(live).toContain('href="/withdraw"');
-    expect(stringify(landing(() => {}, services, 'demo'))).not.toContain('withdraw a credited refund');
-  });
-
   it('says a service nobody has called is presumed healthy rather than showing a zero', () => {
     const html = stringify(landing(() => {}, marketplace([listing('weather', [])])));
     expect(html).toContain('presumed healthy');

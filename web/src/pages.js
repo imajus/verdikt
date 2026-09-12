@@ -65,7 +65,7 @@ export const withdrawPrompt = (mode, account, connect) => html`
         : html`
           <p>Connect the wallet a refund was credited to — this reads only its own balance, never one you paste in.</p>
           <wa-button type="button" appearance="outlined" size="s" @click=${connect}>Connect wallet</wa-button>`}
-    <p class="aside">A refund is credited to the address the verification workflow recovered from your x402 payment. If that wallet cannot itself send an Arc transaction — under Circle's Gateway, say, or if it only ever signed on another chain — it can't collect here yet: a relayable, signature-authorised claim is landing separately. See <a href=${HOW_PATH}>how it works</a>.</p>
+    <p class="aside">A refund is credited to the address the verification workflow recovered from your x402 payment. See <a href=${HOW_PATH}>how it works</a>.</p>
   </section>`;
 
 export const terms = () => html`

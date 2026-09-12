@@ -862,8 +862,8 @@ day saved in Phase 4 here.
 - [x] Payer withdraw page — `/withdraw`, a dedicated route rather than a
       `?view=` param. Connects the wallet a refund was credited to, reads its
       balance with `getOwed` and calls `withdraw()` to collect it. Only the
-      connected wallet's own balance — no pasted-address lookup — linked from
-      the landing page and How it works
+      connected wallet's own balance — no pasted-address lookup — reachable
+      from the navbar (live mode only) and linked from How it works
       ([#58](https://github.com/imajus/verdikt/issues/58))
 
 > **`withdrawWithAuthorization`'s relay path is not offered here yet.** The
