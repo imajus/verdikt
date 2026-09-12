@@ -1,4 +1,4 @@
-// The scripted "try it" chat on /try (issue #66). Every claim it makes links
+// The scripted "try it" chat embedded on the landing page (issue #66). Every claim it makes links
 // out to a real, already-mined transaction or a real contract, taken verbatim
 // from docs/evidence/ rather than a live RPC call — so the demo can't go
 // stale or break during judging, and needs no wallet or gas from whoever is

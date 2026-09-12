@@ -9,7 +9,6 @@ import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, WITHDRAW_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms, withdrawPrompt } from './pages.js';
 import { amount, landing } from './landing.js';
-import { tryPage } from './try.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -491,7 +490,7 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
     ${recordSection(listing, mode, go)}`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'try'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
+/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
 export const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
@@ -652,7 +651,7 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'system'|'light'|'dark'} */ this.theme = 'system';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'try'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
     /** @type {MarketplaceFilters} */ this.marketFilters = { ...DEFAULT_MARKETPLACE_FILTERS };
     /** @type {MarketplaceSort} */ this.marketSort = { ...DEFAULT_MARKETPLACE_SORT };
@@ -803,10 +802,6 @@ export class VerdiktApp extends LitElement {
     // it belongs with them: waiting behind the marketplace only bought it a
     // skeleton of a page it is not.
     if (this.route.view === 'how') return html`${navBar}${how()}${legalFooter(go)}`;
-    // /try is the scripted click-through demo (issue #66). Hardcoded content
-    // with no chain read behind it — same reasoning as /how — so it must
-    // survive a dead RPC or a marketplace still loading.
-    if (this.route.view === 'try') return html`${navBar}${tryPage(go)}${legalFooter(go)}`;
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
     if (!this.marketplace) return html`${navBar}${skeleton(this.route, go)}${legalFooter(go)}`;
     const { services, stats } = this.marketplace;

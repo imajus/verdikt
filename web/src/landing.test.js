@@ -72,6 +72,7 @@ describe('landing page', () => {
     const html = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])])));
     const order = [
       'No arbitration',
+      'verdikt-demo-chat',
       'class="figures"',
       'The payment is verifiable',
       'The request path',
@@ -123,11 +124,19 @@ describe('landing page', () => {
     expect(html).toContain('0.1 USDC');
   });
 
+  // Scoped to the figures/verdict margin onward: the try-it chat's own
+  // disclosure names Arc Testnet unconditionally above it, because that
+  // evidence is real regardless of whether this dashboard has a live RPC
+  // configured — the mode-dependent claim being tested here belongs to the
+  // platform's own figures, not to that hardcoded history.
   it('flags seeded data as seeded and never as a live chain', () => {
-    const demo = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'demo'));
+    const services = marketplace([listing('weather', [verdict({})])]);
+    const demoFull = stringify(landing(() => {}, services, 'demo'));
+    const demo = demoFull.slice(demoFull.indexOf('class="figures"'));
     expect(demo).toContain('seeded');
     expect(demo).not.toContain('Arc Testnet');
-    const live = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'live'));
+    const liveFull = stringify(landing(() => {}, services, 'live'));
+    const live = liveFull.slice(liveFull.indexOf('class="figures"'));
     expect(live).toContain('Arc Testnet');
     expect(live).not.toContain('seeded');
   });
@@ -149,7 +158,16 @@ describe('landing page', () => {
   it('puts the latest verdict beside the figures, not beside the hero', () => {
     const html = stringify(landing(() => {}, marketplace([listing('quotes', [verdict({ blockNumber: 220n })])]), 'live'));
     expect(html.indexOf('Latest verdict')).toBeGreaterThan(html.indexOf('class="figures"'));
-    expect(html.match(/class="entry-note"/g)?.length).toBe(3);
+    expect(html.match(/class="entry-note"/g)?.length).toBe(4);
+  });
+
+  it('embeds the try-it chat right after the hero, as its own anchorable entry', () => {
+    const html = stringify(landing(() => {}));
+    expect(html).toContain('id="try-it"');
+    expect(html).toContain('<verdikt-demo-chat');
+    expect(html.indexOf('id="try-it"')).toBeGreaterThan(html.indexOf('No arbitration'));
+    expect(html.indexOf('id="try-it"')).toBeLessThan(html.indexOf('class="figures"'));
+    expect(html).toContain('href="#try-it"');
   });
 
   // The split entry's two halves ask for different things and must not collapse
