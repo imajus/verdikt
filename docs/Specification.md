@@ -210,6 +210,20 @@ non-confidential logic in the TEE.
   to hold a spotless conformance ratio while failing real calls. Booking a credit
   decouples recording a verdict from paying anyone, and removes the reentrancy
   surface an external call inside the verdict path would open.
+- **…and a second pull path, by signature** — the payer recovered from an x402
+  payment is reliably *identified* but not reliably *drivable* on Arc: under
+  Circle's Gateway it is the agent wallet's backing EOA, and a payer that
+  signed on another chain would need Arc USDC before it could claim anything.
+  So `withdrawWithAuthorization` recovers the payer from an EIP-712 signature
+  instead of trusting `msg.sender`, and anyone may relay it. The recipient and
+  the amount are named in that signature, so they are the payer's decision and
+  not the relayer's, and a single-use nonce stops the authorization being
+  replayed. `withdraw()` remains the cheaper path for a payer that can transact
+  on Arc. Two details the signature is only as good as: the amount is in Arc's
+  18-decimal native view, the units `getOwed` reports and *not* the 6-decimal
+  minor units x402 carries; and a claim of nothing is refused outright, because
+  zero is the one amount no owed balance can be short of, which would otherwise
+  make a forged signature settle as readily as a real one.
 - **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
   penalty on top. With no dispute layer, a refund larger than the payment would
   make induced failure profitable; capping at the payment makes griefing

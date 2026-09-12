@@ -21,6 +21,12 @@ import {ReportReceiver} from "./ReportReceiver.sol";
 ///         hold a spotless conformance ratio while failing real calls.
 ///      3. **A provider cannot walk away from an obligation.** `deregister`
 ///         reverts while SUSPENDED.
+///      4. **A claim's recipient and amount are the payer's alone to name.**
+///         `withdrawWithAuthorization` recovers the payer from a signature
+///         rather than trusting `msg.sender`, so a payer that cannot itself
+///         send an Arc transaction can still be paid, relayed by anyone.
+///         Neither field survives being changed after signing, which is what
+///         leaves the relayer paying gas and gaining nothing.
 contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     /// @notice Bond and refund, in Arc's 18-decimal native view (`msg.value`).
     uint256 public immutable DEPOSIT_AMOUNT;
@@ -48,6 +54,28 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     mapping(bytes32 serviceId => Service) private _services;
     mapping(bytes32 requestId => Verdict) private _verdicts;
     mapping(address payer => uint256) private _owed;
+    mapping(address payer => mapping(bytes32 nonce => bool used)) private _usedAuthorizations;
+
+    /// @notice EIP-712 domain separator for `withdrawWithAuthorization`.
+    /// @dev Fixed at construction from `block.chainid`, not recomputed per
+    ///      call — a post-deploy chain fork is out of scope for a testnet
+    ///      registry, and recomputing would cost every claim an extra read.
+    bytes32 public immutable DOMAIN_SEPARATOR;
+
+    bytes32 private constant EIP712_DOMAIN_TYPEHASH =
+        keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
+
+    /// @dev Echoes ERC-3009's `TransferWithAuthorization` — the shape a payer
+    ///      already signed once to *pay* — minus `validAfter`, which a claim
+    ///      has no use for, and `from`, which is the recovered signer here
+    ///      rather than a field.
+    bytes32 private constant WITHDRAW_AUTHORIZATION_TYPEHASH =
+        keccak256("WithdrawAuthorization(address recipient,uint256 amount,uint256 validBefore,bytes32 nonce)");
+
+    /// @dev A signature with `s` above this is the malleable twin of one below
+    ///      it — same signer, same message, different bytes — so rejecting it
+    ///      leaves each authorization exactly one valid encoding.
+    uint256 private constant SECP256K1_HALF_ORDER = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     uint256 private _lock = 1;
 
@@ -81,6 +109,15 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
         require(fixedRefund <= depositAmount, "refund>deposit");
         DEPOSIT_AMOUNT = depositAmount;
         FIXED_REFUND = fixedRefund;
+        DOMAIN_SEPARATOR = keccak256(
+            abi.encode(
+                EIP712_DOMAIN_TYPEHASH,
+                keccak256(bytes("VerdiktRegistry")),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(this)
+            )
+        );
     }
 
     // --------------------------------------------------------- provider writes
@@ -241,6 +278,43 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
         _send(msg.sender, amount);
     }
 
+    /// @inheritdoc IVerdiktRegistry
+    function withdrawWithAuthorization(
+        address recipient,
+        uint256 amount,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant returns (uint256 claimed) {
+        if (block.timestamp >= validBefore) revert AuthorizationExpired(validBefore);
+        if (recipient == address(0)) revert ZeroRecipient();
+        // Before the recovery, because a zero claim is the one amount that
+        // clears `amount > available` for every address, including the
+        // arbitrary one any forged signature recovers to.
+        if (amount == 0) revert ZeroClaim();
+
+        bytes32 structHash =
+            keccak256(abi.encode(WITHDRAW_AUTHORIZATION_TYPEHASH, recipient, amount, validBefore, nonce));
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
+        address payer = _recoverSigner(digest, v, r, s);
+
+        if (_usedAuthorizations[payer][nonce]) revert AuthorizationAlreadyUsed(payer, nonce);
+        uint256 available = _owed[payer];
+        if (amount > available) revert InsufficientOwed(payer, amount, available);
+
+        // Effects before interaction, same discipline as `withdraw()`: a
+        // reentrant call finds this nonce already spent and nothing left to
+        // draw against.
+        _usedAuthorizations[payer][nonce] = true;
+        _owed[payer] = available - amount;
+        claimed = amount;
+
+        emit RefundClaimed(payer, recipient, claimed, nonce);
+        _send(recipient, claimed);
+    }
+
     // ------------------------------------------------------------------- views
 
     /// @inheritdoc IVerdiktRegistry
@@ -272,12 +346,27 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
         return _owed[payer];
     }
 
+    /// @inheritdoc IVerdiktRegistry
+    function isAuthorizationUsed(address payer, bytes32 nonce) external view returns (bool) {
+        return _usedAuthorizations[payer][nonce];
+    }
+
     // ---------------------------------------------------------------- internal
 
     function _send(address to, uint256 amount) private {
         if (amount == 0) return;
         (bool ok,) = to.call{value: amount}("");
         if (!ok) revert TransferFailed(to, amount);
+    }
+
+    /// @dev Reverts rather than letting `ecrecover`'s `address(0)` on failure
+    ///      fall through as a payer — an account nobody can sign for, and so
+    ///      one a bad signature would otherwise quietly draw against.
+    function _recoverSigner(bytes32 digest, uint8 v, bytes32 r, bytes32 s) private pure returns (address signer) {
+        if (uint256(s) > SECP256K1_HALF_ORDER) revert InvalidSignature();
+        if (v != 27 && v != 28) revert InvalidSignature();
+        signer = ecrecover(digest, v, r, s);
+        if (signer == address(0)) revert InvalidSignature();
     }
 
     /// @dev One slug is three identifiers — the Arc serviceId, the

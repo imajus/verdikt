@@ -108,6 +108,7 @@ interface IVerdiktRegistry {
     event RefundCredited(bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount);
 
     event RefundWithdrawn(address indexed payer, uint256 amount);
+    event RefundClaimed(address indexed payer, address indexed recipient, uint256 amount, bytes32 nonce);
     event ServiceSuspended(bytes32 indexed serviceId);
     event ServiceReinstated(bytes32 indexed serviceId, uint256 deposit);
     event ServiceDeregistered(bytes32 indexed serviceId, address indexed provider, uint256 returnedDeposit);
@@ -128,6 +129,19 @@ interface IVerdiktRegistry {
     error NothingOwed(address payer);
     error TransferFailed(address to, uint256 amount);
     error Reentrancy();
+
+    // -- `withdrawWithAuthorization` signature and authorization validity.
+    error AuthorizationExpired(uint256 validBefore);
+    error AuthorizationAlreadyUsed(address payer, bytes32 nonce);
+    error InvalidSignature();
+    error ZeroRecipient();
+    /// @dev A claim of nothing pays nothing but still spends its nonce, and
+    ///      succeeds for *any* signature at all — `ecrecover` on random bytes
+    ///      names some address, and zero is never more than that address is
+    ///      owed. Refusing it keeps the path authenticated and mirrors
+    ///      `withdraw()`, which refuses to pay nothing too.
+    error ZeroClaim();
+    error InsufficientOwed(address payer, uint256 requested, uint256 available);
 
     // -- report payload validity. The forwarder/workflow-owner checks live in
     // `ReportReceiver`, shared with VerdiktScoreWriter on Sepolia.
@@ -157,6 +171,27 @@ interface IVerdiktRegistry {
     /// @notice Pull payment: the agent collects refunds credited to it.
     function withdraw() external returns (uint256 amount);
 
+    /// @notice The same pull payment, relayable by anyone, for a payer that
+    ///         cannot itself send an Arc transaction (Specification.md §3).
+    /// @dev There is no `payer` parameter: it is recovered from an EIP-712
+    ///      signature over the other four, so the recipient and the amount are
+    ///      the signer's to name and a relayer can only pass them on verbatim.
+    ///      `nonce` is single-use per payer.
+    /// @param amount in Arc's 18-decimal native view, the same units
+    ///        `getOwed` reports — **not** the 6-decimal minor units x402 and
+    ///        the SLA's price clause carry. They differ by
+    ///        `NATIVE_PER_MINOR_UNIT`, so signing a minor-unit figure claims a
+    ///        millionth of a millionth of it and spends the nonce doing so.
+    function withdrawWithAuthorization(
+        address recipient,
+        uint256 amount,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 claimed);
+
     // ------------------------------------------------------------------- views
 
     /// @dev Canonical slug → serviceId derivation. `packages/sdk/registry.js`
@@ -169,7 +204,9 @@ interface IVerdiktRegistry {
     function getStatus(bytes32 serviceId) external view returns (Status);
     function getProvider(bytes32 serviceId) external view returns (address);
     function getOwed(address payer) external view returns (uint256);
+    function isAuthorizationUsed(address payer, bytes32 nonce) external view returns (bool);
 
     function DEPOSIT_AMOUNT() external view returns (uint256);
     function FIXED_REFUND() external view returns (uint256);
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
 }

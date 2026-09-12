@@ -377,11 +377,16 @@ Registrar and escrow in one contract for MVP.
       and pays nothing
 - [x] Auto-suspend when the deposit hits zero
 - [x] `withdraw()` — agent collects credited refunds
+- [x] `withdrawWithAuthorization(...)` — anyone relays a claim the payer
+      signed. The payer is recovered from that signature rather than passed
+      as an argument, so the recipient and amount it names are not the
+      relayer's to change
+      ([#61](https://github.com/imajus/verdikt/issues/61))
 - [x] Events: `ServiceRegistered`, `VerdictWritten` (carrying `outcome`),
-      `VerdictRejected`, `RefundCredited`, `RefundWithdrawn`,
+      `VerdictRejected`, `RefundCredited`, `RefundWithdrawn`, `RefundClaimed`,
       `ServiceSuspended`, `ServiceReinstated`, `ServiceDeregistered`
 - [x] Views: `getVerdict`, `getService`, `getDeposit`, `getStatus`,
-      `getProvider`, `getOwed`
+      `getProvider`, `getOwed`, `isAuthorizationUsed`
 
 > **Decision — the verdict entry point is `onReport`, not `setVerdict`.**
 > Absorbed from Spike B (CRE-2). A CRE workflow holds no key and sends no
@@ -417,11 +422,14 @@ Registrar and escrow in one contract for MVP.
 ### 2.2 Payout safety — pull payments
 
 The verdict path books `owed[payer] += amount` and sends nothing. The agent
-calls `withdraw()` to collect.
+calls `withdraw()` to collect, or signs an authorization for anyone to relay
+on its behalf.
 
 - [x] No external call anywhere in the verdict path
 - [x] `withdraw()` zeroes the balance before transferring (checks-effects-
       interactions); a guard is then belt-and-braces
+- [x] `withdrawWithAuthorization` spends the nonce and debits the credit
+      before transferring, under that same guard, and rejects a malleable `s`
 
 Rationale: pushing value while recording a verdict would let a payer address
 that rejects transfers revert the whole transaction and erase its own FAIL
@@ -452,9 +460,26 @@ State machine, table-driven:
 - [x] Reverting payer → verdict still written, credit still booked
 - [x] Reentrant `withdraw` → no double payout
 - [x] `withdraw` with nothing owed → reverts, never underflows
+- [x] `withdrawWithAuthorization` → pays the recipient the signer named,
+      relayed by a third party that gains nothing
+- [x] Replayed nonce, expired authorization, zero recipient, zero amount,
+      amount above what is owed → revert. Zero is the one amount that clears
+      every owed balance, so without its own guard a *forged* signature would
+      settle: `ecrecover` on arbitrary bytes names some address, and nothing
+      is never more than that address is owed
+- [x] A tampered signed field, or a signature made against another
+      deployment's domain → recovers an unrelated signer, which is owed
+      nothing; out-of-range `v` or malleable `s` → revert
+- [x] Recipient that reverts, or re-enters → the claim fails with the credit
+      and the nonce untouched; no double payout. The re-entering attacker is
+      credited a refund of its own first, or its inner `withdraw()` would
+      revert `NothingOwed` and the test would pass with the guard deleted
+- [x] Fuzz: a claim pays exactly the signed amount or reverts, never more
+      than is owed
 - [x] Fuzz: credit is simultaneously ≤ `paidAmount`, ≤ `FIXED_REFUND` and
       ≤ the remaining deposit, for every outcome
-- [x] Solvency: contract balance always equals bonds plus credits
+- [x] Solvency: contract balance always equals bonds plus credits, across both
+      pull paths
 - [x] `serviceIdOf` agrees with `packages/sdk/registry.js` on shared vectors —
       both sides assert the same two hashes
 
@@ -486,6 +511,10 @@ State machine, table-driven:
       bounds every log scan
 - [x] `VerdiktScoreWriter` deployed to Sepolia and recorded in
       `deployments/sepolia.json`
+- [ ] The live Arc registry predates `withdrawWithAuthorization` and pins its
+      forwarder and workflow owner immutably, so the signature claim path
+      needs a redeploy to reach a chain. Worth batching with whatever other
+      contract change lands next rather than spending a deploy on its own
 - [x] Confirm the `ReportMetadata` offsets against a real forwarder delivery —
       **and they were wrong.** A traced `simulate --broadcast` delivery reverted
       `MalformedReportMetadata(64)`: a receiver is handed 64 bytes, not the 109
