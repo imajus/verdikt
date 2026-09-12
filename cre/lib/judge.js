@@ -21,6 +21,24 @@ export const JUDGEMENT_MODE = Object.freeze({
 });
 
 /**
+ * The provider's own statement that it was not paid.
+ *
+ * Not a status like any other: every other response is the provider answering a
+ * call it was paid for, which is the only thing this system judges. A 402 says
+ * the payment leg failed, so there is no delivered call to hold anyone to.
+ */
+const PAYMENT_REFUSED = 402;
+
+/**
+ * Whether an `sla` record is there to be applied at all. Only used to report
+ * which mode a declined verdict would have been judged under, so the response
+ * header does not claim a fallback that never happened.
+ *
+ * @param {string|null} slaText
+ */
+const usableSla = (slaText) => typeof slaText === 'string' && slaText.length > 0;
+
+/**
  * Judge one paid call.
  *
  * The fallback is the conservative half of this function, and it leans that way
@@ -40,6 +58,25 @@ export const JUDGEMENT_MODE = Object.freeze({
  * @returns {Judgement}
  */
 export function judge(slaText, observation) {
+  // Checked ahead of both modes, because it is not a judgement about delivery
+  // at all. A refused payment scored as a provider failure is a refund farm:
+  // an authorization that cannot settle (correct `payTo`, empty account) costs
+  // an attacker nothing, and a FAIL would credit it out of the bond. The
+  // status-only fallback already declined this as a 4xx; `evaluate` did not,
+  // since a 402 clears the delivery clause and then breaks whatever schema
+  // clause the provider declared against the error body.
+  //
+  // This is also what makes the payer's signed recipient safe to leave
+  // unchecked (`decodePayment`): a payment the provider does not accept earns
+  // no verdict, so paying the wrong address — or nobody — earns nothing.
+  if (observation.status === PAYMENT_REFUSED) {
+    return {
+      mode: usableSla(slaText) ? JUDGEMENT_MODE.SLA : JUDGEMENT_MODE.STATUS_ONLY,
+      outcome: null,
+      clauses: [],
+      fallbackReason: 'provider refused the payment (402); nothing was delivered to judge'
+    };
+  }
   if (typeof slaText === 'string' && slaText.length > 0) {
     try {
       const result = evaluate(parseSla(slaText), observation);

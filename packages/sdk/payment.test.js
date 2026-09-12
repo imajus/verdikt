@@ -259,13 +259,25 @@ describe('decodePayment — the eip3009 path, which is an open standard end to e
   });
 
   /**
-   * A valid signature over the wrong payment. Crediting it would let an agent
-   * pay somebody else and claim a refund on a call this provider never got.
+   * The recipient is deliberately NOT checked against the challenge's `payTo`.
+   *
+   * That check used to live here, to stop an agent paying itself and claiming a
+   * refund on a call the provider never got. It never stopped that: signing to
+   * the *correct* `payTo` from an account holding nothing satisfies it, the
+   * payment then fails to settle, and the provider's 402 was scored as its own
+   * failure. The real guard is at the verdict layer — a 402 on the replay writes
+   * no verdict at all (`judge`, cre/lib/judge.js) — so a refund can only exist
+   * on a call the provider accepted payment for.
+   *
+   * Removing it is also what makes a seller that mints a single-use `payTo` per
+   * challenge payable at all: the proxy re-probes for `accepts`, so the address
+   * it sees is never the one the payer signed.
    */
-  it('rejects a payment validly signed to a different recipient', async () => {
+  it('decodes a payment whose recipient is not the one this challenge names', async () => {
     const elsewhere = { ...AUTHORIZATION, to: '0x00000000000000000000000000000000deadbeef' };
-    const signed = await signedHeader({ authorization: elsewhere });
-    await expect(decodePayment(signed, { accepts: ACCEPTS })).rejects.toThrow(/is paid at/);
+    const payment = await decodePayment(await signedHeader({ authorization: elsewhere }), { accepts: ACCEPTS });
+    expect(payment.payer).toBe(PAYER.address);
+    expect(payment.amount).toBe(2500n);
   });
 
   // The domain is taken from the challenge, never from the header. A payer that
@@ -412,8 +424,8 @@ describe('decodePayment — a smart-contract account as the payer (ERC-1271)', (
   // The account's answer is the authority, so it is asked over `ethCall` rather
   // than guessed at locally. A "yes-man" contract that validates anything buys
   // an attacker nothing it could not already do by signing properly from an
-  // address it controls — what stops a fabricated payment is `payTo` plus the
-  // provider's own acceptance of it, not this check.
+  // address it controls — what stops a fabricated payment is the provider's own
+  // acceptance of it, not this check.
   const SMART_ACCOUNT = '0xacc0000000000000000000000000000000000001';
   const OWNER = OTHER;
   const ERC1271_MAGIC_WORD = `0x1626ba7e${'00'.repeat(28)}`;

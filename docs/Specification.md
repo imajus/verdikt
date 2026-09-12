@@ -42,6 +42,23 @@ model with one graduated aggregate follows Rana et al.'s violation-type taxonomy
 and ZK/TEE-attested compliance proofs[^5] are cited for reference; Verdikt uses
 the WSLA-predicate-plus-tiered-credit stack above.
 
+### A payment the provider refuses
+
+A **402 on the enclave's replay writes no verdict at all**, in either mode. It is
+not a delivery failure: the provider is stating it was not paid, so there is no
+delivered call to hold it to. Scoring it would be a refund farm — an
+authorization that cannot settle (correct `payTo`, empty account) costs an
+attacker nothing, and a `FAIL` would credit `min(FIXED_REFUND, paidAmount,
+deposit)` out of a bond for a call nobody paid for.
+
+This is what anchors the payer's side of a payment, and it is why the payment
+header's signed recipient is **not** compared against the challenge's `payTo`:
+a refund can only ever exist on a call the provider accepted payment for, which
+is a stronger guarantee than any address comparison the proxy can make — and the
+only one available against a provider that mints a single-use payout address per
+challenge, where a re-probed challenge never names the address the payer signed.
+The narrower challenge-level payTo check was retired for the same reason (#39).
+
 ### Fallback when the SLA can't be read
 
 If the `sla` record is unreachable or won't parse, the workflow does not skip

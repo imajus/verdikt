@@ -88,7 +88,7 @@ One slug is reused as three identifiers: the Arc `serviceId` (`keccak256`), the 
 
 ### Request path
 
-The proxy branches on `X-PAYMENT`. Without it, plain passthrough: the provider returns its 402 challenge, and the proxy compares the challenge's `payTo` against the ENS address record, blocking on mismatch so the agent never signs against a spoofed address. This check runs *outside* the enclave — a 402 challenge is public, so it needs no attestation.
+The proxy branches on `X-PAYMENT`. Without it, plain passthrough: the provider returns its own 402 challenge unchanged, and the proxy verifies nothing about it. It used to compare the challenge's `payTo` against the ENS `address` record; that was removed as security theater (issue #39), because the trust anchor is the service's registered `url` — bound to the slug's bond via `checkOwnership` — and an upstream that authors the challenge can declare whatever `payTo` it likes regardless of what ENS pins. It also produced false positives on any provider whose payout address legitimately rotates.
 
 With `X-PAYMENT` present, the confidential workflow replays the payment from inside the enclave, evaluates the response, writes the verdict to Arc, and returns the payload for the proxy to relay.
 
@@ -107,6 +107,7 @@ A verdict is final with no dispute layer, so these are correctness, not style:
 - **Refund is capped at `min(FIXED_REFUND, paidAmount, remaining deposit)`** — never a penalty on top. A refund larger than the payment makes induced-failure griefing profitable with no arbitration to fall back on.
 - **`setVerdict` books `owed[payer]`, sends nothing.** Pushing value would let a payer address that rejects transfers revert the transaction and erase its own FAIL verdict — a provider farming its own service through a reverting contract could hold a spotless conformance ratio while failing real calls.
 - **A 4xx in the status-only fallback writes no verdict at all.** A 4xx is usually the provider correctly rejecting a malformed request; scoring it as failure lets an agent farm refunds with deliberate garbage.
+- **A 402 on the replay writes no verdict in *either* mode.** The provider is saying it was not paid, so there is no delivered call to judge. This is the anchor for the payer's side, and the reason `decodePayment` does **not** compare the signed recipient against the challenge's `payTo`: that comparison never stopped the attack it looked like it stopped (sign to the right `payTo` from an empty account, let settlement fail, collect on the 402), and it makes a provider that mints a single-use payout address per challenge unpayable. A refund can only exist on a call the provider took payment for.
 - **An empty aggregation window yields 1000, not 0.** A service with no traffic is presumed healthy. Getting this backwards brands every new listing as broken.
 - **`evaluate` is pure.** No I/O, no clock, no network, no floating point. Latency is an input, never measured inside. Price comparison in integer minor units.
 - **Outcome ordinals are mirrored** in `IVerdiktRegistry.Outcome` and `OUTCOME_ORDINAL` in `packages/sdk/registry.js`. Changing one without the other silently reclassifies a FAIL as a PASS.

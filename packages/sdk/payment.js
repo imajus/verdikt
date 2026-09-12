@@ -320,24 +320,25 @@ async function verifyExact(envelope, option, ethCall) {
     }
   }
 
-  // `payTo` is checked because the signature binds `to` as tightly as `from`.
+  // WHY `payTo` IS NOT CHECKED HERE (and used to be).
   //
-  // NOTE (rotating payout addresses): a seller that mints a single-use `payTo`
-  // per challenge fails here, because the option this is checked against comes
-  // from a *fresh* probe rather than from the challenge the payer answered.
-  // Seen live on a Stripe-custody seller: three probes, three addresses. The
-  // guard is not the bug — it is what stops an agent paying itself and
-  // collecting a refund on a call the provider never got — so supporting those
-  // sellers needs a different anchor, not a weaker check.
-  // A payment signed to somebody else's address is a valid signature over the
-  // wrong payment, and crediting it here would let an agent claim a refund on
-  // a call this provider was never paid for.
-  if (getAddress(option.payTo) !== message.to) {
-    throw new Error(
-      `decodePayment: payment is authorized to ${message.to}, but this service is paid at ${getAddress(option.payTo)}`
-    );
-  }
-
+  // This compared the signed `to` against the matched option's `payTo`, to stop
+  // an agent paying itself and claiming a refund on a call the provider never
+  // got. It never actually stopped that: the same attack satisfies it. Sign a
+  // valid authorization to the *correct* `payTo` from an account holding
+  // nothing — the signature verifies, the address matches, `value` is whatever
+  // is claimed — and the payment simply fails to settle, the provider answers
+  // 402, and a FAIL verdict credits the attacker out of the bond. The recipient
+  // was never the load-bearing part.
+  //
+  // What closes that path is the verdict layer: a 402 on the replay writes no
+  // verdict at all (`judge`, cre/lib/judge.js). A refund can therefore only
+  // exist on a call the provider accepted payment for, which is a stronger
+  // anchor than any address comparison the proxy can make — and the *only* one
+  // available against a seller that mints a single-use `payTo` per challenge
+  // (seen live: three probes, three addresses), where a re-probed challenge can
+  // never match what the payer signed. Same rotation problem that retired the
+  // challenge-level payTo check as security theater (issue #39), one layer down.
   return { payer: message.from, amount: message.value };
 }
 
@@ -348,7 +349,8 @@ async function verifyExact(envelope, option, ethCall) {
  * the chain rather than inferred. This does not weaken the payer binding: a
  * contract that validates anything gains an attacker nothing it could not do
  * already by signing properly from an address it controls — what stops a
- * fabricated payment is `payTo` plus the provider's own acceptance of it.
+ * fabricated payment is the provider's own acceptance of it, since a payment it
+ * refuses earns no verdict at all (`judge`, cre/lib/judge.js).
  *
  * Any failure — no code at that address, a reverted call, a short or unexpected
  * return — is "did not validate", never an exception. A bogus payer address
