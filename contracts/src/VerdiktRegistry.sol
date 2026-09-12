@@ -22,13 +22,11 @@ import {ReportReceiver} from "./ReportReceiver.sol";
 ///      3. **A provider cannot walk away from an obligation.** `deregister`
 ///         reverts while SUSPENDED.
 ///      4. **A claim's recipient and amount are the payer's alone to name.**
-///         `withdrawWithAuthorization` recovers the payer from an EIP-712
-///         signature over `(recipient, amount, validBefore, nonce)` instead
-///         of trusting `msg.sender`, so an account whose backing key cannot
-///         itself send an Arc transaction — Circle's Gateway wallets, or any
-///         payer that only ever signed on another chain — can still be paid,
-///         relayed by anyone. Neither field can change after signing, so a
-///         relayer pays gas and gains nothing (issue #61).
+///         `withdrawWithAuthorization` recovers the payer from a signature
+///         rather than trusting `msg.sender`, so a payer that cannot itself
+///         send an Arc transaction can still be paid, relayed by anyone.
+///         Neither field survives being changed after signing, which is what
+///         leaves the relayer paying gas and gaining nothing.
 contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     /// @notice Bond and refund, in Arc's 18-decimal native view (`msg.value`).
     uint256 public immutable DEPOSIT_AMOUNT;
@@ -67,19 +65,16 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     bytes32 private constant EIP712_DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)");
 
-    /// @dev Field order deliberately echoes ERC-3009's own
-    ///      `TransferWithAuthorization(from,to,value,validAfter,validBefore,nonce)`
-    ///      — the shape a payer already signed once to *pay* — minus
-    ///      `validAfter`, which a refund claim has no use for, and `from`,
-    ///      which this signs over as the recovered signer rather than a
-    ///      field (see `withdrawWithAuthorization`).
+    /// @dev Echoes ERC-3009's `TransferWithAuthorization` — the shape a payer
+    ///      already signed once to *pay* — minus `validAfter`, which a claim
+    ///      has no use for, and `from`, which is the recovered signer here
+    ///      rather than a field.
     bytes32 private constant WITHDRAW_AUTHORIZATION_TYPEHASH =
         keccak256("WithdrawAuthorization(address recipient,uint256 amount,uint256 validBefore,bytes32 nonce)");
 
-    /// @dev The upper half of secp256k1's order. A signature with `s` above
-    ///      this is the malleable twin of one below it — same signer, same
-    ///      message, different bytes — so rejecting it makes each
-    ///      authorization have exactly one valid encoding rather than two.
+    /// @dev A signature with `s` above this is the malleable twin of one below
+    ///      it — same signer, same message, different bytes — so rejecting it
+    ///      leaves each authorization exactly one valid encoding.
     uint256 private constant SECP256K1_HALF_ORDER = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     uint256 private _lock = 1;
@@ -299,8 +294,6 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
         bytes32 structHash =
             keccak256(abi.encode(WITHDRAW_AUTHORIZATION_TYPEHASH, recipient, amount, validBefore, nonce));
         bytes32 digest = keccak256(abi.encodePacked("\x19\x01", DOMAIN_SEPARATOR, structHash));
-        // The payer is whoever signed, never a caller-supplied address — see
-        // the contract-level note (4).
         address payer = _recoverSigner(digest, v, r, s);
 
         if (_usedAuthorizations[payer][nonce]) revert AuthorizationAlreadyUsed(payer, nonce);
@@ -362,10 +355,9 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
         if (!ok) revert TransferFailed(to, amount);
     }
 
-    /// @dev Rejects a malformed or malleable signature outright rather than
-    ///      letting `ecrecover`'s `address(0)` on failure fall through to
-    ///      `_usedAuthorizations[address(0)]` — a nonce bucket nobody signed
-    ///      into but that a bad signature would otherwise silently probe.
+    /// @dev Reverts rather than letting `ecrecover`'s `address(0)` on failure
+    ///      fall through as a payer — an account nobody can sign for, and so
+    ///      one a bad signature would otherwise quietly draw against.
     function _recoverSigner(bytes32 digest, uint8 v, bytes32 r, bytes32 s) private pure returns (address signer) {
         if (uint256(s) > SECP256K1_HALF_ORDER) revert InvalidSignature();
         if (v != 27 && v != 28) revert InvalidSignature();

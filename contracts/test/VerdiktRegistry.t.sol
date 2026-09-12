@@ -56,11 +56,9 @@ contract VerdiktRegistryTest is Test {
     uint256 internal payerKey;
     address internal stranger = makeAddr("stranger");
 
-    /// @dev `WithdrawAuthorization`'s own EIP-712 typehash — reimplemented
-    ///      here rather than read off the contract, so a test signs the same
-    ///      way an independent off-chain signer would (Specification.md's
-    ///      own convention: `test_serviceIdOfMatchesTheSharedVector` pins a
-    ///      literal vector rather than trusting the contract's own formula).
+    /// @dev Restated here rather than read off the contract, so these tests
+    ///      sign the way an independent off-chain signer would. Taking the
+    ///      hash from the contract would make it agree with itself.
     bytes32 internal constant WITHDRAW_AUTHORIZATION_TYPEHASH =
         keccak256("WithdrawAuthorization(address recipient,uint256 amount,uint256 validBefore,bytes32 nonce)");
 
