@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { connectWallet, disconnectWallet, ensureChain, getConnectedAccount, onAccountChange, resetWalletStateForTests, restoreWallet, walletClientFor } from './wallet.js';
+import { track } from './analytics.js';
 import { getSession } from './session.js';
 
 const mock = vi.hoisted(() => ({ init: vi.fn(), injected: vi.fn(() => ({})) }));
 vi.mock('@web3-onboard/core', () => ({ default: mock.init }));
 vi.mock('@web3-onboard/injected-wallets', () => ({ default: mock.injected }));
+vi.mock('./analytics.js', () => ({ track: vi.fn() }));
 const ADDRESS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 const ARC = { chainId: 5042002, name: 'Arc Testnet', rpcUrl: 'https://rpc.testnet.arc.network', nativeCurrency: { name: 'USD Coin', symbol: 'USDC', decimals: 18 } };
@@ -71,11 +73,13 @@ describe('Onboard connection state', () => {
       expect.objectContaining({ id: '0x4cef52', token: 'USDC' }),
       expect.objectContaining({ id: '0xaa36a7', token: 'ETH' })
     ]));
+    expect(track).toHaveBeenCalledWith('Wallet Connect');
   });
   it('handles cancelled selection without creating a connection', async () => {
     wallets = [];
     await expect(connectWallet()).rejects.toThrow('no wallet selected');
     expect(getConnectedAccount()).toBeNull();
+    expect(track).not.toHaveBeenCalled();
   });
   it('updates accounts and invalidates SIWE before notifying the UI', async () => {
     await connectWallet(); signedIn();
@@ -141,7 +145,9 @@ describe('Onboard connection state', () => {
   it('disconnects through Onboard and removes listeners on reset', async () => {
     await connectWallet(); signedIn();
     const listener = vi.fn(); const stop = onAccountChange(listener);
+    vi.mocked(track).mockClear();
     await disconnectWallet();
+    expect(track).toHaveBeenCalledWith('Wallet Disconnect');
     expect(api.disconnectWallet).toHaveBeenCalledWith({ label: 'Injected wallet' });
     expect(listener).toHaveBeenCalledWith(null, true);
     expect(getConnectedAccount()).toBeNull();

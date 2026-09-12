@@ -2,6 +2,7 @@
 // use viem over the selected EIP-1193 provider.
 import { createWalletClient, custom } from 'viem';
 import { arcTestnet, sepolia } from 'viem/chains';
+import { track } from './analytics.js';
 import { clearSession, getSession } from './session.js';
 
 /** @type {{ address: string, chainId: number } | null} */
@@ -85,6 +86,7 @@ export async function connectWallet() {
   const api = await onboard();
   syncWallets(await api.connectWallet());
   if (!connected) throw new Error('no wallet selected');
+  track('Wallet Connect');
   return connected;
 }
 
@@ -100,6 +102,7 @@ export async function disconnectWallet() {
   const api = await onboard();
   await api.disconnectWallet({ label: activeWallet.label });
   syncWallets(api.state.get().wallets);
+  track('Wallet Disconnect');
 }
 
 export function getConnectedAccount() { return connected; }

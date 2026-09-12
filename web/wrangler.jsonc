@@ -10,6 +10,10 @@
   // and Production (see web/.env.example for what each one does):
   //   VITE_ARC_RPC_URL
   //   VITE_SEPOLIA_RPC_URL
+  //   VITE_NEWSLETTER_ENDPOINT
+  //   VITE_CONTACT_ENDPOINT
+  //   VITE_PLAUSIBLE_ENDPOINT
+  //   VITE_PLAUSIBLE_DOMAIN
   "name": "verdikt-web",
   "compatibility_date": "2026-09-07",
   "assets": {

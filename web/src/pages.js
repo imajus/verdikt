@@ -84,10 +84,14 @@ export const terms = () => html`
   </section>`;
 
 export const privacy = () => html`
-  ${pageHead('Privacy Policy', 'Last updated 2026-09-11. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
+  ${pageHead('Privacy Policy', 'Last updated 2026-09-12. This is a hackathon demo — the text below is a plain description of what the app does, not reviewed legal advice.')}
   <section class="block">
     <h3>What we collect</h3>
-    <p>Nothing, unless you fill in one of the two forms on the landing page. There is no Verdikt server behind this page — it is a static site that reads Arc Testnet and Ethereum Sepolia over public RPC endpoints straight from your browser. No account is ever created, and browsing, connecting a wallet or reading a service costs you no personal data at all.</p>
+    <p>Nothing beyond aggregate analytics (see below), unless you fill in one of the two forms on the landing page. There is no Verdikt server behind this page — it is a static site that reads Arc Testnet and Ethereum Sepolia over public RPC endpoints straight from your browser. No account is ever created, and browsing, connecting a wallet or reading a service costs you no personal data at all.</p>
+  </section>
+  <section class="block">
+    <h3>Analytics</h3>
+    <p>A build of this app may send page views and a handful of engagement events — connecting or disconnecting a wallet, completing sign-in, and each step of listing a new service — to Plausible Analytics, self-hosted on our own infrastructure rather than a third-party SaaS. Plausible is cookieless: it sets no persistent identifier and collects no personal data, only aggregate counts of what happened and when. If this build has no analytics endpoint configured, none of this happens at all.</p>
   </section>
   <section class="block">
     <h3>The two forms on the landing page</h3>

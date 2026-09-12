@@ -54,14 +54,24 @@
         "description": "A marketplace of x402 API services whose delivery is verified per call, with refunds enforced on-chain."
       }
     </script>
-    <!-- The only external request the page makes. Every face has a system
-         fallback in styles.css, so offline the page is plainer, not broken. -->
+    <!-- The font stylesheet below is the only external request declared in
+         this file. Every face has a system fallback in styles.css, so offline
+         the page is plainer, not broken. Self-hosted Plausible analytics
+         (web/src/analytics.js) is a bundled dependency, not a script declared
+         here — where a build configures it, it sends its own request to the
+         self-hosted instance's event API, and stays a no-op when unset. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;1,400&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,600;12..96,700&display=swap"
     />
+    <!-- web/public/_headers pins this exact script's sha256 hash in its CSP
+         script-src, instead of 'unsafe-inline'. Edit so much as a
+         character here and that hash goes stale: the theme silently stops
+         applying, no error page, just a CSP violation in the browser
+         console — which conveniently names the exact new hash to paste
+         into _headers, so recovery is a copy-paste, not a rebuild. -->
     <script>
       try {
         const stored = localStorage.getItem('verdikt-theme');

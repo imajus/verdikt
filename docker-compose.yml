@@ -6,6 +6,8 @@ services:
       args:
         VITE_ARC_RPC_URL: ${VITE_ARC_RPC_URL:-}
         VITE_SEPOLIA_RPC_URL: ${VITE_SEPOLIA_RPC_URL:-}
+        VITE_PLAUSIBLE_ENDPOINT: ${VITE_PLAUSIBLE_ENDPOINT:-}
+        VITE_PLAUSIBLE_DOMAIN: ${VITE_PLAUSIBLE_DOMAIN:-}
     ports:
       - "8080:80"
     restart: unless-stopped
