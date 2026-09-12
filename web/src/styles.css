@@ -313,7 +313,13 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .back wa-button { margin-top: 0; }
 .back a { color: var(--link); text-decoration: none; }
 .back a:hover { text-decoration: underline; }
-.detail-head { display: flex; flex-wrap: wrap; gap: 20px 32px; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+/* The head closes on the strong rule the way every other page head does. The
+   rule belongs to the sheet, so it spans it — the provenance line under it
+   keeps a measure without dragging the rule in with it. */
+.detail-head {
+  display: flex; flex-wrap: wrap; gap: 20px 32px; justify-content: space-between; align-items: flex-end;
+  padding-bottom: 14px; margin-bottom: 12px; border-bottom: 1.5px solid var(--rule-strong);
+}
 .detail-head h2 { font: 600 37.5px/1 var(--display); margin: 0 0 8px; letter-spacing: -0.025em; }
 .detail-head .sub { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; color: var(--muted); }
 .detail-head .sub code { font-size: 14.5px; color: var(--ink-2); }
@@ -323,15 +329,118 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .scores dd { margin: 0; font-size: 24px; font-weight: 500; letter-spacing: -0.01em; }
 .scores dd .score { min-width: 0; }
 .scores dd small { font-size: 14.5px; font-weight: 400; color: var(--muted); margin-left: 4px; }
+/* Where the three figures came from, said once under all of them rather than
+   three times inside them. Sits on the rule that opens the sheet. */
+.scores dd.score-note { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+.provenance { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 78ch; }
+.provenance code { color: var(--ink-2); }
 
 .block { margin-top: 30px; }
 .block h3 {
   font: 600 20px/1.2 var(--display); margin: 0 0 10px; letter-spacing: -0.01em;
   padding-bottom: 6px; border-bottom: 1px solid var(--rule);
-  display: flex; align-items: baseline; gap: 12px;
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px;
 }
 .block h3 small { font: 400 14.5px/1 var(--sans); color: var(--muted); }
 .block > p:last-child { margin-bottom: 0; }
+
+/* Call it ---------------------------------------------------------------------
+   The one thing a visitor takes away from this page, so it is the one thing
+   set at a size you can read across a desk. The URL sits on a hairline the way
+   a landing form's field does — the value is the surface, not a box around it. */
+
+.endpoint {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px;
+  margin: 14px 0 16px; padding-bottom: 10px;
+  border-bottom: 1.5px solid var(--rule);
+}
+.endpoint-url {
+  font-size: 20px; color: var(--ink); letter-spacing: -0.01em;
+  min-width: 0; overflow-wrap: anywhere;
+}
+.endpoint.off .endpoint-url { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--rule); }
+
+.copy {
+  display: inline-flex; align-items: center; gap: 7px; flex: none;
+  padding: 6px 12px;
+  background: none; color: var(--ink); border: 1px solid var(--rule-strong); border-radius: 2px;
+  font: 500 14px/1 var(--sans); cursor: pointer;
+  transition: background-color 120ms, color 120ms, border-color 120ms;
+}
+.copy:hover { background: var(--paper-2); }
+.copy .icon-check { display: none; }
+.copy[data-state='copied'] { color: var(--good); border-color: var(--good); }
+.copy[data-state='copied'] .icon-copy { display: none; }
+.copy[data-state='copied'] .icon-check { display: block; }
+.copy[data-state='failed'] { color: var(--muted); }
+.copy-label { min-width: 3.8em; text-align: left; }
+
+/* The figure over its explanation, the way a score sits over its meter — not
+   beside it, which left the sentence wrapping in a column of its own while
+   half the sheet stood empty. */
+.price { margin: 0 0 12px; }
+.price b { font-size: 26px; font-weight: 500; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+.price b small { font-size: 15px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-left: 4px; }
+.price-unit { font-size: 15.5px; color: var(--muted); margin-left: 4px; }
+.price-note { display: block; margin-top: 3px; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
+.call-note { color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
+.call-note code { color: var(--ink); }
+
+/* What it promised ------------------------------------------------------------
+   One ruled record per clause, not a four-column table. The promise is the
+   sentence; the provider's note glosses it; the machine-readable pair — the
+   type and the id a verdict names — goes to the margin column, which is where
+   this system already keeps record keys. */
+
+.clauses { list-style: none; margin: 0; padding: 0; }
+/* Three columns, the last one empty: the record key has to sit beside the
+   prose it annotates, not against the far edge of the sheet, and the rule
+   under the clause still has to run the whole width. */
+.clause {
+  display: grid; grid-template-columns: minmax(0, 64ch) minmax(0, 16rem) minmax(0, 1fr);
+  column-gap: 32px; padding: 14px 0 15px;
+  border-bottom: 1px solid var(--rule);
+  /* Enough that the section's own heading is still on screen when a verdict
+     sends you here — landing on a bare clause with no "What it promised"
+     above it is landing nowhere. */
+  scroll-margin-top: 64px;
+}
+.clause:last-child { border-bottom: 0; }
+.clause-body { min-width: 0; }
+.clause-promise { margin: 0; font-size: 17.5px; font-weight: 500; letter-spacing: -0.005em; max-width: 56ch; }
+.clause-note { margin: 5px 0 0; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
+.clause-key {
+  grid-column: 2; margin: 0; align-self: start; min-width: 0;
+  padding-left: 20px; border-left: 1px solid var(--rule);
+}
+/* The clause type is vocabulary the SLA schema fixes — `priceRange`, not
+   "price range" — so this caption keeps the margin's mono weight and drops
+   the uppercasing rather than printing a term no schema declares. */
+.clause-key .note-head { display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0.04em; font-size: 12px; }
+.clause-key code { font-size: 13px; color: var(--ink-2); }
+/* A verdict's clause link lands here, and an ink rule in the margin says
+   which of three records it sent you to. The rule hangs outside the measure
+   — margin, padding and border cancel — so the clause it marks does not jump
+   sideways at the moment the reader is looking straight at it. */
+.clause:target {
+  margin-left: -14px; padding-left: 12px;
+  border-left: 2px solid var(--rule-strong);
+}
+
+.clause-link { color: inherit; text-decoration: none; border-bottom: 1px solid var(--rule); }
+.clause-link:hover { border-bottom-color: var(--ink); }
+.clause-link code { color: var(--ink-2); }
+.clause-link:hover code { color: var(--ink); }
+
+/* Below this the margin column has nowhere left to be a margin: the record
+   key drops under its clause and keeps its rule on the left, so the grammar
+   survives the stack. */
+@media (max-width: 860px) {
+  .clause { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+  .clause-key { grid-column: 1; }
+  .endpoint-url { font-size: 17.5px; }
+  .copy { margin-left: 0; }
+}
 
 /* Tables --------------------------------------------------------------------- */
 
@@ -353,9 +462,35 @@ table.ledger { font-family: var(--mono); font-size: 14px; }
 table.ledger code { font-size: inherit; }
 table.ledger thead th { font-family: var(--sans); }
 table.ledger td { white-space: nowrap; padding-top: 6px; padding-bottom: 6px; }
-table.clauses td { line-height: 1.45; }
-table.clauses td:first-child { white-space: nowrap; }
+table.ledger td small { color: var(--muted); margin-left: 3px; }
+/* What the verdict says, then what it cost — and after the rule, where to go
+   and check it. Two groups, separated the way this system separates anything:
+   with a hairline, not a heading. */
+table.ledger .edge { border-left: 1px solid var(--rule); padding-left: 16px; }
+table.ledger tbody .edge, table.ledger tbody .edge ~ td { color: var(--muted); }
+table.ledger tbody .edge code { color: var(--ink-2); }
 .desc { color: var(--ink-2); }
+
+/* The outcome tally beside the section heading, and the strip's own axis
+   label — the marks run oldest first while the table runs newest first, and
+   an unlabelled row of marks gives a reader no way to know that. */
+.tally { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
+.tally span { font-variant-numeric: tabular-nums; }
+.tally i.dot { margin-right: 5px; }
+.tally .pass { color: var(--good); }
+.tally .fail { color: var(--poor); }
+.tally .down { color: var(--down); }
+.strip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; margin: 4px 0 14px; }
+.strip-note { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+
+/* On the record ---------------------------------------------------------------
+   Everything the page above stands on, gathered where a reader goes to check
+   rather than to decide. Quieter by a step than the sections it supports. */
+.record table.kv { font-size: 15px; }
+.record table.kv th { color: var(--muted); }
+.record table.kv td { color: var(--ink-2); }
+.record table.kv code { color: var(--ink-2); }
+.record table.kv a code { color: inherit; }
 
 .outcome { display: inline-flex; align-items: center; gap: 7px; font-weight: 500; letter-spacing: 0.02em; }
 .outcome.pass { color: var(--good); }

@@ -40,11 +40,41 @@ function formatUnits(value, decimals, places) {
 export const formatNativeUsdc = (value, places = 4) => `${formatUnits(value, NATIVE_DECIMALS, places)} USDC`;
 
 /**
+ * A refund credited on Arc, which moved in the 18-decimal native view but is
+ * capped at what was paid on the 6-decimal x402 leg.
+ *
+ * Six places, not the default four, and a floor rather than a round-down: a
+ * real credit here can be a single USDC minor unit (0.000001), and truncating
+ * one of those to `0 USDC` had the ledger reporting no refund on a row where
+ * the chain credited one — the opposite of the fact the column exists to
+ * carry. Truncation is still the direction of travel for everything larger,
+ * so a refund is never shown as more than it was.
+ *
+ * @param {bigint} value
+ */
+export const formatRefundUsdc = (value) => {
+  const shown = formatNativeUsdc(value, 6);
+  return value > 0n && shown === '0 USDC' ? '< 0.000001 USDC' : shown;
+};
+
+/**
  * What an agent paid on the x402 leg, and any SLA price bound.
  * @param {bigint} value
  * @param {number} [places]
  */
 export const formatMinorUsdc = (value, places = 6) => `${formatUnits(value, MINOR_DECIMALS, places)} USDC`;
+
+/**
+ * Two bounds on the same x402 leg, with the asset named once. Naming it twice
+ * ("0.001 USDC to 0.01 USDC") reads as two separate amounts rather than one
+ * band, and a band is what a price clause declares.
+ *
+ * @param {bigint} low
+ * @param {bigint} high
+ * @param {number} [places]
+ */
+export const formatMinorRange = (low, high, places = 6) =>
+  `${formatUnits(low, MINOR_DECIMALS, places)} to ${formatMinorUsdc(high, places)}`;
 
 /**
  * A 0–1000 score as a percentage.
