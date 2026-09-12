@@ -259,6 +259,25 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
       });
     });
 
+    // An RPC behind bot management answers a challenge page, not JSON. Live,
+    // `mainnet.base.org` did exactly this to the deployed Worker: the parse
+    // error became "the account did not validate", and the paid call failed
+    // with a message blaming the payer's signature. The status and the body
+    // have to reach the message, or the next one is just as invisible.
+    it('names the status and the body when an RPC answers something that is not JSON', async () => {
+      const { deps, decodePayment, upstreamFetch } = harness({ config: withRpc });
+      upstreamFetch.mockImplementation(async (/** @type {URL|string} */ url) =>
+        String(url) === 'https://base.example/rpc'
+          ? new Response('<!DOCTYPE html><title>Just a moment...</title>', { status: 403 })
+          : new Response(JSON.stringify({ accepts: CHALLENGE_ACCEPTS }), { status: 402 })
+      );
+      await paidCall(deps);
+      const ethCall = /** @type {EthCall} */ (decodePayment.mock.lastCall?.[1]?.ethCall);
+      await expect(ethCall({ chainId: 8453, to: '0xacc0', data: '0x' })).rejects.toThrow(
+        /answered 403 with non-JSON: <!DOCTYPE html>/
+      );
+    });
+
     // Refusing beats guessing: an unconfigured chain means Verdikt cannot check
     // who authorized the payment, and `decodePayment` treats the throw as "did
     // not validate" rather than crediting an unverified payer.

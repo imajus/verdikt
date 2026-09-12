@@ -67,15 +67,36 @@ const paymentHeaderOf = (headers) => {
 const chainReader = (config, doFetch) => async ({ chainId, to, data }) => {
   const rpcUrl = config.paymentRpcUrls[chainId];
   if (!rpcUrl) throw new Error(`no RPC configured for chain ${chainId}`);
-  const response = await doFetch(rpcUrl, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
-    signal: AbortSignal.timeout(config.upstreamTimeoutMs)
-  });
-  const body = /** @type {{ result?: string, error?: { message?: string } }} */ (await response.json());
-  if (body.error) throw new Error(body.error.message ?? 'eth_call failed');
-  return body.result ?? '0x';
+  try {
+    const response = await doFetch(rpcUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_call', params: [{ to, data }, 'latest'] }),
+      signal: AbortSignal.timeout(config.upstreamTimeoutMs)
+    });
+    // Read as text first: an RPC that answers a bot-challenge page or an error
+    // page fails `.json()` with a parse error naming neither the endpoint nor
+    // the status, which is exactly the shape that is impossible to diagnose
+    // from a log line.
+    const text = await response.text();
+    /** @type {{ result?: string, error?: { message?: string } }} */
+    let body;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      throw new Error(`answered ${response.status} with non-JSON: ${text.slice(0, 120)}`);
+    }
+    if (body.error) throw new Error(body.error.message ?? 'eth_call failed');
+    return body.result ?? '0x';
+  } catch (error) {
+    // Deliberately loud. `decodePayment` treats a throw here as "the account
+    // did not validate" so that an RPC hiccup cannot 500 a call the agent has
+    // already paid for — which means the *reason* has no other way out. Left
+    // silent, an unreachable RPC is indistinguishable from a forged signature,
+    // and the paid call fails with a message blaming the payer.
+    console.warn(`payment chain read failed (chain ${chainId}, ${rpcUrl}): ${/** @type {Error} */ (error).message}`);
+    throw error;
+  }
 };
 
 /** @param {unknown} body @param {number} [status] @param {Record<string,string>} [headers] */

@@ -32,9 +32,16 @@
     // named by their own 402. Read only to ask a smart-contract account whether
     // it authorized a payment (ERC-1271) — a Circle agent wallet is one, so
     // without this its payments are refused as unverifiable. Public endpoints
-    // with no embedded credential, same rationale as ARC_RPC_URL above; swap in
-    // keyed ones if the rate limit ever bites.
-    "PAYMENT_RPC_URLS": "8453=https://mainnet.base.org,137=https://polygon-rpc.com"
+    // with no embedded credential, same rationale as ARC_RPC_URL above.
+    //
+    // NOT `mainnet.base.org`: that endpoint sits behind Cloudflare bot
+    // management, and a request from a Worker carries no browser fingerprint,
+    // so it is answered with a challenge page rather than JSON — which this
+    // reader can only read as "the account did not validate". publicnode
+    // answers a Worker the same way it answers anything else. The Alchemy key
+    // used above is not an option here until BASE_MAINNET is enabled for that
+    // app, which is a dashboard change, not a code one.
+    "PAYMENT_RPC_URLS": "8453=https://base-rpc.publicnode.com,137=https://polygon-bor-rpc.publicnode.com"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every
