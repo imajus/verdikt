@@ -69,7 +69,7 @@ export class VerdiktWithdraw extends LitElement {
   render() {
     if (!this.account || !this.deps) return nothing;
     return html`
-      <p>Credited to <verdikt-address address=${this.account} copy></verdikt-address>: <b>${this.owed === null ? 'reading…' : this.deps.formatNativeUsdc(this.owed)}</b></p>
+      <p>Credited to <verdikt-address address=${this.account}></verdikt-address>: <b>${this.owed === null ? 'reading…' : this.deps.formatNativeUsdc(this.owed)}</b></p>
       <wa-button type="button" id="withdraw-send" ?disabled=${!this.owed || this.pending} ?loading=${this.pending} @click=${this.withdraw}>Withdraw</wa-button>
       ${this.status ? html`<p class="form-status" id="withdraw-status">${this.status}</p>` : nothing}`;
   }
