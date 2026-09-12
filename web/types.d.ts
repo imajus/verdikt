@@ -65,6 +65,34 @@ interface Marketplace {
   stats: PlatformStats;
 }
 
+/** What a click on a marketplace column header sorts by (issue #64). */
+type MarketplaceSortKey = 'reputation' | 'conformance' | 'availability' | 'deposit';
+
+interface MarketplaceSort {
+  key: MarketplaceSortKey;
+  /** Every column's own best-first order is `desc`; a second click on the same column flips it. */
+  direction: 'asc' | 'desc';
+}
+
+/**
+ * The marketplace's client-side search/filter state (issue #64). The whole
+ * list is already in `marketplaceCache.services`, so every field here just
+ * re-filters that array — none of it triggers a new RPC call.
+ */
+interface MarketplaceFilters {
+  /** Matched against slug and name, case-insensitively. */
+  query: string;
+  /** 0-1000, the same scale as `Listing.published.conformance`. */
+  minConformance: number;
+  minAvailability: number;
+  /** Decimal USDC as typed, e.g. `"0.01"`. `''` means no cap. */
+  maxPriceUsdc: string;
+  /** Milliseconds as typed. `''` means no cap. */
+  maxLatencyMs: string;
+  /** Show SUSPENDED and contested listings, both hidden by default. */
+  showHidden: boolean;
+}
+
 /** The SLA composer's model (forms/sla-draft.js). */
 type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange';
 

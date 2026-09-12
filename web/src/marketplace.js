@@ -163,3 +163,96 @@ export const byReputation = (a, b) => {
   if (a.deposit !== b.deposit) return a.deposit > b.deposit ? -1 : 1;
   return a.slug.localeCompare(b.slug, 'en');
 };
+
+/**
+ * A decimal USDC string ("0.0025") to minor units, or `null` when it does not
+ * parse. Mirrors `usdcToMinorUnits` in `forms/sla-draft.js` rather than
+ * importing that UI-layer file into this one — this module has to stay
+ * something `loadMarketplace`'s own tests can drive without pulling in the
+ * composer.
+ * @param {string} text
+ */
+function usdcTextToMinorUnits(text) {
+  const match = /^(\d+)(?:\.(\d{1,6}))?$/.exec(text.trim());
+  if (!match) return null;
+  const [, whole, fraction = ''] = match;
+  return BigInt(whole) * 1_000_000n + BigInt(fraction.padEnd(6, '0'));
+}
+
+/**
+ * Whether `listing` matches the marketplace's search box and filter controls
+ * (issue #64). Pure and synchronous: the whole list is already in memory, so
+ * every keystroke or toggle just re-filters it — no new RPC call.
+ *
+ * A cap named against a bound the listing has not declared — no `priceRange`
+ * clause, no `latency` clause — passes rather than being excluded: the filter
+ * is a claim about a declared bound, and a service that made no claim has not
+ * failed to meet it. The same reasoning applies to `minConformance` and
+ * `minAvailability` against a listing with nothing published yet (`null`):
+ * excluding it would punish "not yet ranked" as if it had measured badly.
+ *
+ * @param {Listing} listing
+ * @param {MarketplaceFilters} filters
+ */
+export function matchesFilters(listing, filters) {
+  if (!filters.showHidden && (listing.status === 'SUSPENDED' || listing.contested)) return false;
+  const query = filters.query.trim().toLowerCase();
+  if (query && !listing.slug.toLowerCase().includes(query) && !listing.name.toLowerCase().includes(query)) return false;
+  if (listing.published.conformance !== null && listing.published.conformance < filters.minConformance) return false;
+  if (listing.published.availability !== null && listing.published.availability < filters.minAvailability) return false;
+  if (filters.maxPriceUsdc) {
+    const cap = usdcTextToMinorUnits(filters.maxPriceUsdc);
+    const clause = /** @type {SlaPriceRangeClause|undefined} */ (listing.sla?.clauses.find((c) => c.type === 'priceRange'));
+    if (cap !== null && clause && BigInt(clause.minMinorUnits) > cap) return false;
+  }
+  if (filters.maxLatencyMs) {
+    const cap = Number(filters.maxLatencyMs);
+    const clause = /** @type {SlaLatencyClause|undefined} */ (listing.sla?.clauses.find((c) => c.type === 'latency'));
+    if (Number.isFinite(cap) && clause && clause.maxMs > cap) return false;
+  }
+  return true;
+}
+
+/** @param {number|null} a @param {number|null} b */
+const rankNullLast = (a, b) => {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  return b - a;
+};
+
+/** @param {Listing} a @param {Listing} b */
+const byConformance = (a, b) => rankNullLast(a.published.conformance, b.published.conformance);
+/** @param {Listing} a @param {Listing} b */
+const byAvailability = (a, b) => rankNullLast(a.published.availability, b.published.availability);
+/** @param {Listing} a @param {Listing} b */
+const byDeposit = (a, b) => (a.deposit === b.deposit ? 0 : a.deposit > b.deposit ? -1 : 1);
+
+/** @type {Record<MarketplaceSortKey, (a: Listing, b: Listing) => number>} */
+const SORTERS = { reputation: byReputation, conformance: byConformance, availability: byAvailability, deposit: byDeposit };
+
+/**
+ * `listings`, ranked by `sort`. Every comparator above ranks best-first; a
+ * `direction` of `desc` (the default a clicked column starts at) keeps that
+ * order, `asc` reverses it.
+ *
+ * @param {Listing[]} listings
+ * @param {MarketplaceSort} sort
+ */
+export function sortListings(listings, sort) {
+  const ranked = [...listings].sort(SORTERS[sort.key]);
+  return sort.direction === 'asc' ? ranked.reverse() : ranked;
+}
+
+/** @type {MarketplaceSort} */
+export const DEFAULT_MARKETPLACE_SORT = { key: 'reputation', direction: 'desc' };
+
+/** @type {MarketplaceFilters} */
+export const DEFAULT_MARKETPLACE_FILTERS = {
+  query: '',
+  minConformance: 0,
+  minAvailability: 0,
+  maxPriceUsdc: '',
+  maxLatencyMs: '',
+  showHidden: false
+};

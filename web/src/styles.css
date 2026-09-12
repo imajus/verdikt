@@ -267,6 +267,39 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
    without this, the two rules sit a few pixels apart and read as one doubled
    line. */
 .listing.flush { border-top: 0; }
+
+/* Marketplace search/filter controls (issue #64). All client-side over the
+   already-fetched list, so this is a plain toolbar, not a form with a submit
+   step. */
+.market-controls {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px 18px;
+  margin: 0 0 16px; padding: 0 0 16px; border-bottom: 1px solid var(--rule);
+}
+.market-search {
+  flex: 1 1 220px; min-width: 160px; padding: 8px 10px; margin: 0;
+  background: var(--paper-2); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 2px;
+  font-family: var(--sans); font-size: 14.5px;
+}
+.market-search:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
+.market-filter { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); margin: 0; }
+.market-filter-value { display: flex; align-items: center; gap: 5px; }
+.market-filter input {
+  width: 5rem; padding: 7px 8px; margin: 0;
+  background: var(--paper-2); color: var(--ink);
+  border: 1px solid var(--rule); border-radius: 2px;
+  font-family: var(--mono); font-size: 14px; font-variant-numeric: tabular-nums;
+}
+.market-filter input:focus { outline: 1.5px solid var(--ink); outline-offset: -1px; }
+.market-filter .unit { font-size: 12px; color: var(--muted); }
+.market-filter.toggle { flex-direction: row; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-2); }
+.market-filter.toggle input { width: auto; }
+.market-reset {
+  background: none; border: 1px solid var(--rule); color: var(--ink-2); border-radius: 2px;
+  padding: 7px 12px; font-size: 13.5px;
+}
+.market-reset:hover { border-color: var(--ink); color: var(--ink); opacity: 1; }
+
 .row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 5.4rem 5.4rem 5.4rem 5.8rem;
@@ -276,6 +309,23 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 }
 .row.head { cursor: default; padding: 8px 10px 8px 14px; font-size: 14px; color: var(--muted); }
 .row:not(.head):hover { background: var(--paper-2); }
+/* A column header doubling as a sort control (issue #64), styled back down
+   from the site's default solid button to read as the plain label it used
+   to be — with a hover/active tint and a direction mark to show it works. */
+.row.head button.cell.sort {
+  background: none; border: 0; border-radius: 0; padding: 0; margin: 0;
+  font: inherit; color: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 5px; width: 100%;
+}
+.row.head .cell.name.sort { justify-content: flex-start; }
+.row.head .cell.num.sort { justify-content: flex-end; }
+.row.head button.cell.sort:hover, .row.head button.cell.sort[aria-sort]:not([aria-sort="none"]) { color: var(--ink); }
+.sort-dir {
+  display: inline-block; width: 0; height: 0; flex: none;
+  border-left: 4px solid transparent; border-right: 4px solid transparent;
+}
+.sort-dir.desc { border-top: 5px solid currentColor; }
+.sort-dir.asc { border-bottom: 5px solid currentColor; }
 .cell { min-width: 0; }
 .cell.num { text-align: right; font-variant-numeric: tabular-nums; }
 .cell.status { text-align: right; }

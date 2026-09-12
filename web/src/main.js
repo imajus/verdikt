@@ -1,5 +1,5 @@
 import { ARC, SEPOLIA, registryAbi } from '@verdikt/sdk';
-import { byReputation, loadMarketplace } from './marketplace.js';
+import { loadMarketplace } from './marketplace.js';
 import { formatNativeUsdc } from './format.js';
 import { parseRoute, providerUrl, titleFor } from './router.js';
 import { createSource } from './source.js';
@@ -69,7 +69,11 @@ async function main() {
   app.marketplace = null;
   try {
     marketplaceCache = await loadMarketplace(deps);
-    marketplaceCache.services.sort(byReputation);
+    // Sorting used to happen once here, before the view ever saw the list.
+    // It is now reactive view state (VerdiktApp.marketSort in lit-app.js) so
+    // the marketplace's sort/filter controls can actually change the
+    // displayed order (issue #64) — the array `loadMarketplace` returned is
+    // kept in whatever order the registry read it in.
     if (mode === 'live') {
       depositAmountCache = await /** @type {any} */ (deps.registry).client.readContract({
         address: /** @type {any} */ (deps.registry).address,

@@ -20,12 +20,16 @@ export function renderDetail(listing) {
  * @param {string|null} selectedSlug
  * @param {string|null} [address]
  * @param {string|null} [rejected]
+ * @param {Partial<MarketplaceFilters>|null} [marketFilters]
+ * @param {MarketplaceSort|null} [marketSort]
  */
-export function renderApp(marketplace, mode, view, selectedSlug, address = null, rejected = null) {
+export function renderApp(marketplace, mode, view, selectedSlug, address = null, rejected = null, marketFilters = null, marketSort = null) {
   const app = new VerdiktApp();
   app.marketplace = marketplace;
   app.mode = mode;
   app.route = { view, slug: selectedSlug, address, rejected };
+  if (marketFilters) app.marketFilters = { ...app.marketFilters, ...marketFilters };
+  if (marketSort) app.marketSort = marketSort;
   return stringify(app.render());
 }
 
