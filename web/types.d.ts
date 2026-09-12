@@ -64,3 +64,68 @@ interface Marketplace {
   services: Listing[];
   stats: PlatformStats;
 }
+
+/** The SLA composer's model (forms/sla-draft.js). */
+type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange';
+
+/** `any` is a schema node with no single named `type`; its constraints ride in `extra`. */
+type SlaDraftNodeType = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'any';
+
+interface SlaDraftNode {
+  type: SlaDraftNodeType;
+  /** Whether the parent object lists this field in `required`. Unused on the root. */
+  required: boolean;
+  /** Lower bound as typed: `minimum`, `minLength` or `minItems` by type. Empty means none. */
+  min: string;
+  max: string;
+  /** Object members in the order the sample or schema listed them. */
+  properties: Array<{ name: string; node: SlaDraftNode; ignored: boolean }>;
+  items: SlaDraftNode | null;
+  /** Keywords the tree has no control for, re-emitted verbatim. */
+  extra: Record<string, unknown>;
+}
+
+interface SlaDraftClauseBase {
+  kind: SlaDraftClauseKind;
+  id: string;
+  /** Once the provider edits the id it is never re-suggested. */
+  idTouched: boolean;
+  /** The id this clause carried in the published record, for the rename guard. */
+  originalId: string | null;
+  description: string;
+}
+
+interface SlaDraftSchemaClause extends SlaDraftClauseBase {
+  kind: 'schema';
+  sample: string;
+  root: SlaDraftNode | null;
+}
+
+interface SlaDraftLatencyClause extends SlaDraftClauseBase {
+  kind: 'latency';
+  maxMs: string;
+}
+
+interface SlaDraftPriceClause extends SlaDraftClauseBase {
+  kind: 'priceRange';
+  /** In USDC as typed, e.g. `0.0025`; converted to minor units on serialization. */
+  min: string;
+  max: string;
+  asset: string;
+}
+
+type SlaDraftClause = SlaDraftSchemaClause | SlaDraftLatencyClause | SlaDraftPriceClause;
+
+interface SlaDraft {
+  clauses: SlaDraftClause[];
+  /** Original ids of published clauses the provider has removed this session. */
+  removed: string[];
+}
+
+interface SlaDraftProblem {
+  /** Index into `SlaDraft.clauses`. */
+  clause: number;
+  /** `id`, `maxMs`, `min`, `max`, `sample`, or a `/path.min` style pointer into a schema tree. */
+  field: string;
+  message: string;
+}

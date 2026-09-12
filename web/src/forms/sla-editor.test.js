@@ -15,11 +15,11 @@ describe('describeSlaValidity', () => {
     expect(result.message).not.toContain('Valid.');
   });
 
-  it('asks for an SLA when the draft is empty', () => {
-    expect(describeSlaValidity('')).toEqual({ ok: false, message: 'Paste an SLA to validate it.' });
+  it('asks for a clause when the draft is empty', () => {
+    expect(describeSlaValidity('')).toEqual({ ok: false, message: 'An SLA needs at least one clause.' });
   });
 
-  it('asks for an SLA when the draft is only whitespace', () => {
-    expect(describeSlaValidity('   \n  ')).toEqual({ ok: false, message: 'Paste an SLA to validate it.' });
+  it('asks for a clause when the draft is only whitespace', () => {
+    expect(describeSlaValidity('   \n  ')).toEqual({ ok: false, message: 'An SLA needs at least one clause.' });
   });
 });
