@@ -45,6 +45,11 @@ export function serviceUrl(slug) {
   return `/services/${encodeURIComponent(slug)}`;
 }
 
+/** The owner's console for one service: SLA and bond. Public, like the service page; what renders on it is authorization's call. */
+export function manageUrl(/** @type {string} */ slug) {
+  return `${serviceUrl(slug)}/manage`;
+}
+
 /** @param {string} address */
 export function providerUrl(address) {
   return `${PROVIDER_PATH}/${address}`;
@@ -74,7 +79,7 @@ function normalize(pathname) {
 /**
  * @param {URL} url
  * @returns {{
- *   view: 'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy',
+ *   view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy',
  *   slug: string|null,
  *   address: string|null,
  *   rejected: string|null,
@@ -96,11 +101,11 @@ export function parseRoute(url) {
   const staticView = STATIC_VIEWS[path];
   if (staticView) return { view: /** @type {any} */ (staticView), slug: null, address: null, rejected: null, canonicalPath: path };
 
-  const service = path.match(/^\/services\/([^/]+)$/);
+  const service = path.match(/^\/services\/([^/]+)(\/manage)?$/);
   if (service) {
     try {
       const slug = decodeURIComponent(service[1]);
-      return { view: 'service', slug, address: null, rejected: null, canonicalPath: path };
+      return { view: service[2] ? 'manage' : 'service', slug, address: null, rejected: null, canonicalPath: path };
     } catch (e) {
       if (e instanceof URIError) {
         return { view: 'marketplace', slug: null, address: null, rejected: null, canonicalPath: MARKETPLACE_PATH };
@@ -137,5 +142,6 @@ const TITLES = /** @type {Record<string, string>} */ ({
 /** @param {ReturnType<typeof parseRoute>} route */
 export function titleFor(route) {
   if (route.view === 'service') return `${route.slug} — Verdikt`;
+  if (route.view === 'manage') return `Manage ${route.slug} — Verdikt`;
   return TITLES[route.view] ?? 'Verdikt';
 }

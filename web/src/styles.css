@@ -307,6 +307,10 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 
 .detail { border-top: 1.5px solid var(--rule-strong); padding-top: 18px; }
 .back { margin: 0 0 18px; }
+/* The owner's one way in sits on the back line, top right, so the header
+   below keeps its title-and-scores composition for every other reader. */
+.back.with-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.back wa-button { margin-top: 0; }
 .back a { color: var(--link); text-decoration: none; }
 .back a:hover { text-decoration: underline; }
 .detail-head { display: flex; flex-wrap: wrap; gap: 20px 32px; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }

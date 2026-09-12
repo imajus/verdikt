@@ -12,6 +12,8 @@ describe('parseRoute', () => {
   });
   it('reads a service path', () => {
     expect(parseRoute(new URL('https://verdikt.example/services/weather'))).toEqual({ view: 'service', slug: 'weather', address: null, rejected: null, canonicalPath: '/services/weather' });
+    expect(parseRoute(new URL('https://verdikt.example/services/weather/manage'))).toEqual({ view: 'manage', slug: 'weather', address: null, rejected: null, canonicalPath: '/services/weather/manage' });
+    expect(parseRoute(new URL('https://verdikt.example/services/weather/other')).view).toBe('marketplace');
   });
   it('decodes an encoded slug', () => {
     expect(parseRoute(new URL('https://verdikt.example/services/weather%20api')).slug).toBe('weather api');
@@ -85,6 +87,7 @@ describe('titleFor', () => {
   });
   it('titles a service page with its slug', () => {
     expect(titleFor(parseRoute(new URL('https://verdikt.example/services/weather')))).toBe('weather — Verdikt');
+    expect(titleFor(parseRoute(new URL('https://verdikt.example/services/weather/manage')))).toBe('Manage weather — Verdikt');
   });
   it('titles both provider states the same', () => {
     expect(titleFor(parseRoute(new URL('https://verdikt.example/provider')))).toBe('Provider — Verdikt');
