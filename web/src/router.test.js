@@ -44,6 +44,9 @@ describe('parseRoute', () => {
     expect(parseRoute(new URL('https://verdikt.example/terms')).view).toBe('terms');
     expect(parseRoute(new URL('https://verdikt.example/privacy')).view).toBe('privacy');
   });
+  it('sends the retired /try path to the marketplace, like any other unrecognized path', () => {
+    expect(parseRoute(new URL('https://verdikt.example/try'))).toEqual({ view: 'marketplace', slug: null, address: null, rejected: null, canonicalPath: MARKETPLACE_PATH });
+  });
   it('reads the register path', () => {
     expect(parseRoute(new URL('https://verdikt.example/register'))).toEqual({ view: 'register', slug: null, address: null, rejected: null, canonicalPath: '/register' });
   });

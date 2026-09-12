@@ -25,14 +25,77 @@ The Privacy page gains a line because an email now leaves the page.
 The architecture section is a drawn request-path schematic with short labels;
 `/how` keeps the prose and the section links to it. No prose duplication.
 
-The sheet runs five entries, 00–04, and three margin notes — on 01, 02 and 03.
+The sheet runs six entries, 00–05, and four margin notes — on 01, 02, 03 and 04.
 The copy budget is the rule that keeps the page scannable: an entry states its
 point once and lets the drawing, the form, or `/how` carry the rest. Anything
 the schematic already labels does not get a paragraph above it, and anything a
 form's own label or placeholder says does not get restated in the prose that
 introduces it.
 
-Entry 04 closes the sheet and carries both asks, side by side above 1040px and
+Entry 01, `#try-it`, is the guided demo chat (issue #66 / #67, corrected
+several times over): one click, then it plays itself, terse throughout. Three
+registers, not a single turn-taking chat: the visitor's own message ("Get
+weather for today in New York.") is a bubble leaning right; between it and
+the reply, the calling agent's own status log is a plain mono trail down one
+continuous left hairline — the aside's own idiom, and not a bubble, because
+it is not something either party said, it is what happened. It carries no
+speaker caption either: the log is the register nobody spoke, and a second
+"AGENT" above the agent's own reply labelled the wrong thing twice. Each log
+line is one fact, hung on a 1.4em indent so a line that wraps on a phone is
+read as a continuation rather than as the next fact, and where a line has
+evidence behind it the link opens the line rather than trailing under it
+("Payment received ↗ — accepted by Base Sepolia's USDC contract", "On-chain
+verdict ↗ is FAIL — response is missing the advertised data", "Refund booked
+↗ — 0.0025 USDC"), in the system's own Ledger Blue, because three
+transactions a visitor can open are worth more than the sentences around
+them. Three figures run through the log (price `0.0025 USDC`, `87 ms` to
+answer, `0.0025 USDC` refunded) — all the same Arc verdict record in
+`docs/evidence/clause-detail-live.log`; the Base Sepolia signature is a
+separate leg for a different amount, so no money figure ever attaches to
+that line. Each is named by its own token in `DEMO_SCRIPT` (`{paid}`,
+`{latency}`, `{refunded}`) rather than interpolated, which is what lets the
+renderer set a chain value apart from the words around it — mono inside the
+reply's sans prose, ink inside a log line that is already mono. The agent's
+reply — "something went wrong… I'll try a different service", naming the
+*weather service*, never the hostname or provider, because a person doesn't
+read wiring — states only the charge and that it was refunded; the proxy
+route itself (`{host}`, underlined wherever it is named) appears only in the
+log, which is the agent's own record of what it dialed.
+
+Under the exchange is a composer, which is what makes the entry read as a
+chat at rest rather than as a button with no object: the message sits on its
+own ledger line with `Send` at the end of it. Deliberately not a field — the
+script is fixed, so it takes no caret, no placeholder and none of a hairline
+field's focus weight — and it clears once sent, the way a real composer does,
+while holding its height so nothing moves. That control is one element for
+the whole script (Send, disabled while it plays, then Replay), painted in the
+page's own ink through the same `::part(button)` rules the hero's CTAs use
+and one size rank below them; when it comes back enabled, focus goes back to
+it, because disabling a focused control blurs it and the visitor who pressed
+Enter on Send would otherwise land back at the top of the document. A visitor
+who has asked for no motion gets the same script revealed in one frame
+instead of a slower version of the same wait.
+
+The whole component sits on the entry's own 70ch measure, so the
+right-leaning bubble ends exactly where the paragraph above it ends. The
+closing step is link-only — no editorial "on the record" prose, just
+`weather-lite's full verdict history →` back to the record — rendered as a
+block, not the flex column every other turn is, so the link's own underline
+doesn't stretch into a full-width rule, and carrying no rule of its own,
+because the composer's is a few lines below and two hairlines that close
+together stripe the end of the exchange instead of ending it. None of it
+borrows a bubble shape or shadow the flat system doesn't already own (2px
+control radius, paper-2 tonal fill, the aside's left rule for the log). No
+hero CTA points at it any more — it is the entry right after the hero, so a
+visitor reaches it on the same scroll that carries them past "Verified per
+call." It is not a `wide` entry — its margin sits in the ordinary right
+column, matching entries 02 and 03, rather than the bottom caption a wide
+entry gets. Its angle is onboarding, not disclosure: nothing to integrate (an
+agent already paying x402 uses Verdikt's proxy API endpoint instead of the
+provider's own — same challenge) — generic on purpose, unlike the log, which
+is free to name this one demo's actual `weather-lite.verdikt.bond`.
+
+Entry 05 closes the sheet and carries both asks, side by side above 1040px and
 stacked below it (`.entry-split`). Left, **Tell us what you are building** and
 the contact form; right, **Be informed about our progress** — the forward look,
 the newsletter, and under it the muted `star` / `follow` row as the quietest
@@ -72,25 +135,32 @@ STORY: A provider or agent operator understands within one viewport that
 delivery here is judged per call against a published SLA and that failure
 refunds without arbitration; believes it because the figures and the latest
 verdict beside them were read off Arc in their own browser; then browses the
-marketplace, reads the path, or leaves an address. They get there by reading
-five entries, not by reading an essay: entry 02 states the gap in two
-paragraphs and hands the answer to the drawing below it.
+marketplace, reads the path, or leaves an address. Before any of that, they can
+just try it: click through one real, already-recorded failure and its refund
+without connecting a wallet. They get there by reading six entries, not an
+essay: entry 03 states the gap in two paragraphs and hands the answer to the
+drawing below it.
 
-FIRST VIEWPORT: Nav, then entries 00 and 01. The index rail runs down the far
-left in mono at 13px. `00` sits in it, level with a display line at 60px/1.02
-across an 8-column measure: "Verified per call. Refunded on failure. No
-arbitration." The tagline follows at 19px, then two actions on one baseline — a
-filled `Browse the marketplace` and a ruled `How the loop works`. Entry 00 takes
-no margin: the hero states the terms and leaves its outer column empty, which is
-the page's one piece of air.
+FIRST VIEWPORT: Nav, then entry 00 — the index rail runs down the far left in
+mono at 13px, `00` sits in it level with a display line at 60px/1.02 across an
+8-column measure: "Verified per call. Refunded on failure. No arbitration." The
+tagline follows at 19px, then two actions on one baseline — a filled `Browse
+the marketplace` and a ruled `How the loop works`. No third CTA to the chat:
+entry 01 is the very next thing on the page, one scroll away with its own
+`Send`, so a hero button pointing at it had nothing to do a plain scroll
+doesn't already do. Entry 00 takes no margin: the hero states the terms and
+leaves its outer column empty, which is the page's one piece of air.
 
-Entry 01 follows inside the same viewport and carries all of the chain evidence:
-the four platform figures on the measure, and in the outer margin, right of a
-hairline, the latest real verdict in mono — outcome, service, block, paid,
-refunded, and the registry address it was read from. The figures are the totals
-and the verdict is the newest line behind them, so they belong level with each
-other. That margin column is the page's only claim about provenance: it names a
-chain address in live mode and flags `seeded` in amber in demo mode, and it must
+Entry 01, immediately below the hero, is the try-it chat (see above); its
+`#try-it` anchor id stays in case anything outside the page still links to
+it, but nothing on the page itself does any more. Entry 02 carries the chain
+evidence proper — the four
+platform figures on the measure, and in the outer margin, right of a hairline,
+the latest real verdict in mono — outcome, service, block, paid, refunded, and
+the registry address it was read from. The figures are the totals and the
+verdict is the newest line behind them, so they belong level with each other.
+That margin column is the page's only claim about provenance: it names a chain
+address in live mode and flags `seeded` in amber in demo mode, and it must
 never do both or neither.
 
 FORM: The Running Ledger — candidate 3 of my seven ordered structures, dealt by

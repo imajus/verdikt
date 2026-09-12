@@ -23,6 +23,7 @@ import { formatMinorUsdc, formatNativeUsdc, shortHex } from './format.js';
 import { HOW_PATH, MARKETPLACE_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
 import './diagram.js';
+import './demo-chat.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -81,10 +82,10 @@ export function newestVerdict(marketplace) {
  * its annotation in the outer margin. The index is decorative for a screen
  * reader — nothing on the page refers to an entry by number — so the headings
  * carry the structure on their own.
- * @param {string} index @param {unknown} body @param {unknown} [note] @param {boolean} [wide]
+ * @param {string} index @param {unknown} body @param {unknown} [note] @param {boolean} [wide] @param {unknown} [id]
  */
-const entry = (index, body, note = nothing, wide = false) => html`
-  <section class="entry ${wide ? 'entry-wide' : ''}">
+const entry = (index, body, note = nothing, wide = false, id = nothing) => html`
+  <section class="entry ${wide ? 'entry-wide' : ''}" id=${id}>
     <p class="entry-index" aria-hidden="true">${index}</p>
     <div class="entry-body">${body}</div>
     ${note === nothing ? nothing : html`<aside class="entry-note">${note}</aside>`}
@@ -155,17 +156,24 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       </p>`)}
 
     ${entry('01', html`
+      <h2>Try it — no wallet needed</h2>
+      <p>One real failure, paid and refunded end to end. Every link below is a transaction or contract that actually exists on a public testnet — click Send to walk through it, about 30 seconds, nothing to sign.</p>
+      <verdikt-demo-chat .go=${go}></verdikt-demo-chat>`, html`
+      <p class="note-head">Nothing new to integrate</p>
+      <p class="note-line">An agent already paying x402 services uses Verdikt’s proxy API endpoint instead of the provider’s own — same challenge, same payment.</p>`, false, 'try-it')}
+
+    ${entry('02', html`
       <h2>The record so far</h2>
       ${figuresFor(marketplace, error)}`, verdictNote(marketplace, mode, error))}
 
-    ${entry('02', html`
+    ${entry('03', html`
       <h2>The payment is verifiable. The delivery is not.</h2>
       <p>x402 proves a call was paid for. Nothing proves it was answered. The promise lives in a README, the record of whether it was kept lives nowhere, and an arbitration queue would cost more than the call it was arguing about — so reliability stays whatever the provider says it is.</p>
       <p>Verdikt deletes the claim.</p>`, html`
       <p class="note-head">Why no dispute layer</p>
       <p class="note-line">A refund is money back, never a penalty: it cannot exceed what the call cost, or what is left of the provider’s bond. Breaking a call on purpose earns nothing, so there is nothing to appeal.</p>`)}
 
-    ${entry('03', html`
+    ${entry('04', html`
       <h2>The request path</h2>
       <p>Two chains, one reason each. USDC is Arc’s native gas token, so the payment, the bond and the refund are all the same asset on the same chain.</p>
       <verdikt-diagram class="diagram"></verdikt-diagram>
@@ -173,7 +181,7 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p class="note-head">What never leaves</p>
       <p class="note-line">The observed value stays off the chain. It is a slice of a response the agent paid for, so it comes back to that agent on its own response as <code>x-verdikt-expected</code> and <code>x-verdikt-actual</code>, and to nobody else.</p>`, true)}
 
-    ${entry('04', html`
+    ${entry('05', html`
       <div class="entry-split">
         <div class="split-col">
           <h2>Tell us what you are building</h2>
