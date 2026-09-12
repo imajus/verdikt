@@ -26,6 +26,26 @@ const scoreCell = (score) => html`
     ${score === null ? nothing : html`<span class="meter"><span style="width:${score / 10}%"></span></span>`}
   </span>`;
 
+// An empty window scores 1000 on both ratios, because absence of evidence is
+// not evidence of failure (packages/sla/aggregate.js). That presumption is
+// defensible for conformance, which is about the quality of responses that
+// arrived; it is not something to render as a measurement for availability,
+// which is only about whether calls were answered at all — precisely what
+// nobody has tested yet. So availability reads N/A until the first verdict
+// lands. This is a display decision and nothing else: the published number is
+// still 1000, and `byReputation` still ranks on it.
+const NO_TRAFFIC_TITLE =
+  'No paid calls have been tracked for this service yet, so whether it answers has not been measured.';
+
+/** @param {Listing} listing */
+const untracked = (listing) => listing.history.length === 0;
+
+/** @param {Listing} listing */
+const availabilityCell = (listing) =>
+  untracked(listing)
+    ? html`<span class="score unknown" title=${NO_TRAFFIC_TITLE}><b>N/A</b></span>`
+    : scoreCell(listing.published.availability);
+
 /** @param {ServiceStatus} status */
 const statusMark = (status) => html`
   <span class="state ${status.toLowerCase()}"><i class="dot"></i>${status.charAt(0)}${status.slice(1).toLowerCase()}</span>`;
@@ -72,7 +92,7 @@ const listingRow = (listing, go) => {
         ${unranked ? html`<span class="unranked">not yet ranked</span>` : nothing}
       </span>
       <span class="cell num">${scoreCell(listing.published.conformance)}</span>
-      <span class="cell num">${scoreCell(listing.published.availability)}</span>
+      <span class="cell num">${availabilityCell(listing)}</span>
       <span class="cell num">${amount(formatNativeUsdc(listing.deposit, 2))}</span>
       <span class="cell status">${statusMark(listing.status)}</span>
     </a>`;
@@ -88,11 +108,11 @@ export const detailTemplate = (listing) => {
       <div><h2>${listing.slug}</h2><p class="sub"><code>${listing.name}</code> ${statusMark(listing.status)}</p></div>
       <dl class="scores">
         <div><dt>Conformance</dt><dd>${scoreCell(listing.published.conformance)}</dd></div>
-        <div><dt>Availability</dt><dd>${scoreCell(listing.published.availability)}</dd></div>
+        <div><dt>Availability</dt><dd>${availabilityCell(listing)}</dd></div>
         <div><dt>Bond</dt><dd>${amount(formatNativeUsdc(listing.deposit, 2))}</dd></div>
       </dl>
     </header>
-    ${unpublished ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>` : nothing}
+    ${unpublished ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${untracked(listing) ? 'N/A' : formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>` : nothing}
     ${listing.status === 'DEREGISTERED' ? html`<p class="aside">This service has been retired by its provider: its bond was returned, the proxy no longer routes calls to it, and the slug cannot be registered again. Its verdict history is on Arc and is shown below.</p>` : nothing}
     ${listing.namingLayer === 'unreachable' ? html`<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>` : nothing}
     ${listing.contested ? html`<p class="aside warn">This slug's ENS subname and its Arc registration are owned by different addresses. The proxy refuses to route it until they agree — see <a href="/how">how it works</a>.</p>` : nothing}
@@ -114,7 +134,7 @@ export const detailTemplate = (listing) => {
     <section class="block">
       <h3>What it delivered <small>${listing.history.length} verdict${listing.history.length === 1 ? '' : 's'}</small></h3>
       ${listing.history.length === 0
-        ? html`<p class="aside">No paid calls yet. A service nobody has called is presumed healthy — that is why it scores 1000 rather than 0.</p>`
+        ? html`<p class="aside">No paid calls yet. A service nobody has called is presumed healthy, which is why its conformance reads 100% rather than 0 — but nothing has been observed about whether it answers, so availability reads N/A until the first verdict lands.</p>`
         : html`
           <div class="strip" aria-hidden="true">${[...listing.history].reverse().map((verdict) => html`<i class=${verdict.outcome.toLowerCase()} title=${`${verdict.outcome}${verdict.blockNumber === null ? '' : ` · block ${verdict.blockNumber}`}`}></i>`)}</div>
           <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th>Request</th><th>Payer</th><th class="num">Paid</th><th class="num">Refunded</th><th class="num">Block</th></tr></thead><tbody>
