@@ -544,8 +544,11 @@ export class VerdiktApp extends LitElement {
     const account = getConnectedAccount();
     const auth = this.writeAuthorization(account?.address ?? null);
     const consoleUrl = account ? providerUrl(account.address) : PROVIDER_PATH;
-    return html`${pageHead('List a service', 'Claim the ENS subname, register the bond and publish the SLA that calls will be judged against.')}
-      <p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>
+    // The way out comes before the heading, the same as the service page's
+    // own back link — a way out that sits under the title reads as the first
+    // step of the page rather than as the way off it.
+    return html`<p class="back"><a href=${consoleUrl} @click=${navigateOnClick(go, consoleUrl)}>← back to your console</a></p>
+      ${pageHead('List a service', 'Claim the ENS subname, register the bond and publish the SLA that calls will be judged against.')}
       ${this.mode !== 'live' ? html`<p class="aside warn">Registration needs a live chain. This build is showing seeded demo data.</p>` : nothing}
       <section class="block">
         ${!account
