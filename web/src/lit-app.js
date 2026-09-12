@@ -301,16 +301,16 @@ const promisedSection = (listing, clauses, anchors) => html`
     <h3>What it promised <small>${clauses.length ? `${clauses.length} clause${clauses.length === 1 ? '' : 's'}` : ''}</small></h3>
     ${clauses.length === 0
       ? html`<p class="aside">${listing.slaRaw ? 'The published SLA does not parse, so every call falls back to status-only judging: 2xx passes, 5xx fails, anything else writes no verdict.' : 'No SLA published. Every call falls back to status-only judging.'}</p>`
-      : html`<ol class="clauses">
+      : html`<ol class="promises">
           ${clauses.map((clause) => html`
-            <li class="clause" id=${anchors.get(clause.id) ?? nothing}>
-              <div class="clause-body">
-                <p class="clause-promise">${clausePromise(clause)}</p>
+            <li class="promise" id=${anchors.get(clause.id) ?? nothing}>
+              <div class="promise-body">
+                <p class="promise-line">${clausePromise(clause)}</p>
                 ${/** @type {{description?: string}} */ (clause).description
-                  ? html`<p class="clause-note">${/** @type {{description?: string}} */ (clause).description}</p>`
+                  ? html`<p class="promise-note">${/** @type {{description?: string}} */ (clause).description}</p>`
                   : nothing}
               </div>
-              <p class="clause-key"><span class="note-head">${clause.type}</span><code>${clause.id}</code></p>
+              <p class="promise-key"><span class="note-head">${clause.type}</span><code>${clause.id}</code></p>
             </li>`)}
         </ol>`}
   </section>`;
@@ -391,11 +391,12 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
     ${listing.namingLayer === 'unreachable'
       ? html`<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>`
       : unpublished
-        // A standing note, not a provenance line: "why is this blank" is the
-        // reader's live question, and answering it in grey under the figures
-        // buries it. Reachable-but-unwritten only — when Sepolia is the thing
-        // that failed, the hourly run may well have written this subname and
-        // the warning above is the honest account of why it is not shown.
+        // A standing note, not a footnote behind the help mark: "why is this
+        // blank" is the reader's live question, and a question already being
+        // asked is not one to make them click for. Reachable-but-unwritten
+        // only — when Sepolia is the thing that failed, the hourly run may
+        // well have written this subname, and the warning above is the honest
+        // account of why it is not shown.
         ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${untracked(listing) ? 'N/A' : formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>`
         : nothing}
     ${callSection(listing, clauses)}
@@ -498,11 +499,11 @@ const serviceSkeleton = (slug, go) => html`
     </section>
     <section class="block">
       <h3>What it promised</h3>
-      <ol class="clauses">
+      <ol class="promises">
         ${CLAUSE_SKELETON_WIDTHS.map((width) => html`
-          <li class="clause">
-            <div class="clause-body"><p class="clause-promise">${bar('17rem')}</p><p class="clause-note">${bar(width)}</p></div>
-            <p class="clause-key"><span class="note-head">${bar('4rem')}</span>${bar('9rem')}</p>
+          <li class="promise">
+            <div class="promise-body"><p class="promise-line">${bar('17rem')}</p><p class="promise-note">${bar(width)}</p></div>
+            <p class="promise-key"><span class="note-head">${bar('4rem')}</span>${bar('9rem')}</p>
           </li>`)}
       </ol>
     </section>

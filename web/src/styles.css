@@ -450,11 +450,15 @@ wa-tooltip.help-tip code { color: var(--ink); }
    type and the id a verdict names — goes to the margin column, which is where
    this system already keeps record keys. */
 
-.clauses { list-style: none; margin: 0; padding: 0; }
+/* `promise`, not `clause`: the SLA composer further down owns `.clause` for
+   the editable kind, and two components claiming one name is how the reading
+   record ended up laid out on the editor's grid. These are the same clauses
+   read rather than written, and the read side is a promise. */
+.promises { list-style: none; margin: 0; padding: 0; }
 /* Three columns, the last one empty: the record key has to sit beside the
    prose it annotates, not against the far edge of the sheet, and the rule
-   under the clause still has to run the whole width. */
-.clause {
+   under the record still has to run the whole width. */
+.promise {
   display: grid; grid-template-columns: minmax(0, 64ch) minmax(0, 16rem) minmax(0, 1fr);
   column-gap: 32px; padding: 14px 0 15px;
   border-bottom: 1px solid var(--rule);
@@ -463,24 +467,24 @@ wa-tooltip.help-tip code { color: var(--ink); }
      above it is landing nowhere. */
   scroll-margin-top: 64px;
 }
-.clause:last-child { border-bottom: 0; }
-.clause-body { min-width: 0; }
-.clause-promise { margin: 0; font-size: 17.5px; font-weight: 500; letter-spacing: -0.005em; max-width: 56ch; }
-.clause-note { margin: 5px 0 0; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
-.clause-key {
+.promise:last-child { border-bottom: 0; }
+.promise-body { min-width: 0; }
+.promise-line { margin: 0; font-size: 17.5px; font-weight: 500; letter-spacing: -0.005em; max-width: 56ch; }
+.promise-note { margin: 5px 0 0; color: var(--ink-2); font-size: 15.5px; max-width: 70ch; }
+.promise-key {
   grid-column: 2; margin: 0; align-self: start; min-width: 0;
   padding-left: 20px; border-left: 1px solid var(--rule);
 }
 /* The clause type is vocabulary the SLA schema fixes — `priceRange`, not
    "price range" — so this caption keeps the margin's mono weight and drops
    the uppercasing rather than printing a term no schema declares. */
-.clause-key .note-head { display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0.04em; font-size: 12px; }
-.clause-key code { font-size: 13px; color: var(--ink-2); }
+.promise-key .note-head { display: block; margin-bottom: 4px; text-transform: none; letter-spacing: 0.04em; font-size: 12px; }
+.promise-key code { font-size: 13px; color: var(--ink-2); }
 /* A verdict's clause link lands here, and an ink rule in the margin says
    which of three records it sent you to. The rule hangs outside the measure
    — margin, padding and border cancel — so the clause it marks does not jump
    sideways at the moment the reader is looking straight at it. */
-.clause:target {
+.promise:target {
   margin-left: -14px; padding-left: 12px;
   border-left: 2px solid var(--rule-strong);
 }
@@ -494,8 +498,8 @@ wa-tooltip.help-tip code { color: var(--ink); }
    key drops under its clause and keeps its rule on the left, so the grammar
    survives the stack. */
 @media (max-width: 860px) {
-  .clause { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
-  .clause-key { grid-column: 1; }
+  .promise { grid-template-columns: minmax(0, 1fr); row-gap: 10px; }
+  .promise-key { grid-column: 1; }
   .endpoint-url { font-size: 17.5px; }
   .copy { margin-left: 0; }
 }
