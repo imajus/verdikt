@@ -10,6 +10,7 @@ import { LitElement, html, nothing } from 'lit';
 import { resolveServiceRecord } from '@verdikt/sdk';
 import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
+import { track } from '../analytics.js';
 import { formatTxError } from '../format.js';
 import { ensExplorerUrl, navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-validity.js';
@@ -185,7 +186,13 @@ export class VerdiktWizard extends LitElement {
       await step.ensure();
       await step.run();
       this.done = index + 1;
-      if (this.done === steps.length) deps.onDone();
+      // Named by the step's own key (claim/register/url/sla) rather than its
+      // index, so the funnel reads the same regardless of step order.
+      track('Onboarding Step', { props: { step: step.key } });
+      if (this.done === steps.length) {
+        track('Onboarding Complete');
+        deps.onDone();
+      }
     } catch (error) {
       this.execError = formatTxError(error);
     } finally {

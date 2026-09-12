@@ -10,7 +10,8 @@ const state = vi.hoisted(() => ({
   connectWallet: vi.fn(), disconnectWallet: vi.fn(), restoreWallet: vi.fn(),
   preference: /** @type {'system'|'light'|'dark'} */ ('system'),
   applyTheme: vi.fn(),
-  systemChanged: /** @type {(() => void) | null} */ (null)
+  systemChanged: /** @type {(() => void) | null} */ (null),
+  plausible: /** @type {import('vitest').Mock} */ (vi.fn())
 }));
 const OWNER = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 const OTHER = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -108,7 +109,8 @@ beforeEach(async () => {
   historyBack = vi.fn();
   scrollTo = vi.fn();
   vi.stubGlobal('history', { replaceState, pushState, back: historyBack });
-  vi.stubGlobal('window', { addEventListener: (/** @type {string} */ name, /** @type {Function} */ listener) => windowEvents.set(name, listener), scrollTo });
+  state.plausible = vi.fn();
+  vi.stubGlobal('window', { addEventListener: (/** @type {string} */ name, /** @type {Function} */ listener) => windowEvents.set(name, listener), scrollTo, plausible: state.plausible });
   await import('./main.js'); await settle();
 });
 afterEach(() => vi.unstubAllGlobals());
@@ -237,6 +239,7 @@ it('requires an explicit provider sign-in after connecting without a saved sessi
   await events.get('provider-sign-in')?.(); await settle();
   expect(state.signIn).toHaveBeenCalledOnce();
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
+  expect(state.plausible).toHaveBeenCalledWith('Sign In', undefined);
 });
 it('reports a rejected provider sign-in without reconnecting or enabling actions', async () => {
   await go('/services/weather/manage');
@@ -250,6 +253,20 @@ it('reports a rejected provider sign-in without reconnecting or enabling actions
 });
 it('rewrites a legacy ?provider= deep link to the canonical path on load', () => {
   expect(replaceState).toHaveBeenCalledWith(null, '', `/provider/${OWNER}`);
+});
+it('sends one pageview per route, however the URL got there, and none for a same-route re-render', async () => {
+  // The initial load above already syncs the route (and the marketplace
+  // fetch inside main() syncs it again) — both land on the same canonical
+  // path, so exactly one pageview should have been sent so far.
+  expect(state.plausible).toHaveBeenCalledOnce();
+  expect(state.plausible).toHaveBeenCalledWith('pageview', undefined);
+  state.plausible.mockClear();
+  await go('/terms');
+  expect(state.plausible).toHaveBeenCalledOnce();
+  state.plausible.mockClear();
+  windowEvents.get('popstate')?.({ state: null });
+  await settle();
+  expect(state.plausible).not.toHaveBeenCalled();
 });
 it('navigates to the provider console after an explicit wallet connect', async () => {
   await events.get('wallet-connect')?.(); await settle();

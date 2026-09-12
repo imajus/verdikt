@@ -1,4 +1,5 @@
 import { ARC, SEPOLIA, registryAbi } from '@verdikt/sdk';
+import { initPlausible, track } from './analytics.js';
 import { loadMarketplace } from './marketplace.js';
 import { formatNativeUsdc } from './format.js';
 import { parseRoute, providerUrl, titleFor } from './router.js';
@@ -29,10 +30,19 @@ const app = /** @type {import('./lit-app.js').VerdiktApp} */ (document.createEle
 root.append(app);
 syncTheme();
 const env = import.meta.env ?? {};
+initPlausible(env);
 const { mode, deps } = createSource(env);
 // Set before main() resolves, not just in draw(), so the nav's wallet button
 // is present in the loading skeleton rather than appearing once data lands.
 app.mode = mode;
+/**
+ * The last path a pageview was sent for. `syncRoute` runs on every draw —
+ * SPA `pushState` navigation, `popstate`, and the canonicalizing
+ * `replaceState` below alike — so this is what keeps one route change from
+ * sending more than one pageview, regardless of which history API landed it.
+ * @type {string|null}
+ */
+let lastTrackedPath = null;
 // Same reasoning, for the route: a direct load of e.g. /marketplace must not
 // flash the landing page's default route while loadMarketplace() is still
 // in flight.
@@ -62,6 +72,10 @@ function syncRoute() {
   const route = parseRoute(url);
   if (route.canonicalPath !== url.pathname + url.search) history.replaceState(null, '', route.canonicalPath);
   document.title = titleFor(route);
+  if (route.canonicalPath !== lastTrackedPath) {
+    lastTrackedPath = route.canonicalPath;
+    track('pageview');
+  }
   return route;
 }
 
@@ -282,6 +296,7 @@ async function signInConnected() {
     origin: location.origin,
     isCurrent: () => getConnectedAccount() === account
   });
+  track('Sign In');
 }
 
 /** @param {typeof ARC_CHAIN_CONFIG | typeof SEPOLIA_CHAIN_CONFIG} config */

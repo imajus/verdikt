@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { render as renderToIterable } from '@lit-labs/ssr';
 import { resolveServiceRecord } from '@verdikt/sdk';
+import { track } from '../analytics.js';
 import { VerdiktWizard, buildExecutionSteps } from './wizard.js';
 
 /** @param {unknown} template */
@@ -10,6 +11,7 @@ vi.mock('@verdikt/sdk', async (importOriginal) => ({
   ...(await importOriginal()),
   resolveServiceRecord: vi.fn(async () => ({ owner: null }))
 }));
+vi.mock('../analytics.js', () => ({ track: vi.fn() }));
 
 /** @returns {any} */
 const deps = (overrides = {}) => ({
@@ -115,6 +117,29 @@ describe('the wizard element', () => {
     for (let i = 0; i < 4; i++) await el.runStep(i);
     expect(el.done).toBe(4);
     expect(el.deps.onDone).toHaveBeenCalledOnce();
+  });
+
+  it('tracks each written step by key, and completion once, for the onboarding funnel', async () => {
+    const el = mount();
+    el.deps = deps();
+    ready(el);
+    for (let i = 0; i < 4; i++) await el.runStep(i);
+    expect(track).toHaveBeenCalledWith('Onboarding Step', { props: { step: 'claim' } });
+    expect(track).toHaveBeenCalledWith('Onboarding Step', { props: { step: 'register' } });
+    expect(track).toHaveBeenCalledWith('Onboarding Step', { props: { step: 'url' } });
+    expect(track).toHaveBeenCalledWith('Onboarding Step', { props: { step: 'sla' } });
+    expect(track).toHaveBeenCalledWith('Onboarding Complete');
+  });
+
+  it('does not track a step that failed', async () => {
+    const register = vi.fn(async () => { throw new Error('user rejected'); });
+    const el = mount();
+    el.deps = deps({ walletClientFor: (/** @type {string} */ chain) => (chain === 'arc' ? { writeContract: register } : { writeContract: vi.fn(async () => '0xhash'), sendTransaction: vi.fn(async () => '0xhash') }) });
+    ready(el);
+    await el.runStep(0);
+    vi.mocked(track).mockClear();
+    await el.runStep(1);
+    expect(track).not.toHaveBeenCalled();
   });
 
   // Each wallet interaction must sit in its own user-activation window, so
