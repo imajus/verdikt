@@ -14,6 +14,7 @@ import { formatTxError } from '../format.js';
 import { ensExplorerUrl, navigateOnClick, serviceUrl } from '../router.js';
 import { describeSlaValidity } from './sla-validity.js';
 import './sla-composer.js';
+import '../address-view.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 // A keystroke-per-RPC-call availability check would spam the Sepolia
@@ -91,13 +92,15 @@ export function buildExecutionSteps(deps, { slug, url, sla }) {
 export class VerdiktWizard extends LitElement {
   static properties = {
     deps: { attribute: false }, message: {}, step: { state: true }, slug: { state: true },
-    availability: { state: true }, available: { state: true }, url: { state: true }, sla: { state: true },
+    availability: { state: true }, claimedBy: { state: true }, available: { state: true }, url: { state: true }, sla: { state: true },
     done: { state: true }, execError: { state: true }, pending: { state: true }
   };
   constructor() {
     super();
     /** @type {{account:string, registrarAddress:string, registryAddress:string, depositAmount:bigint, sepoliaRpcUrl:string, formatNativeUsdc:(v:bigint)=>string, walletClientFor:(chain:'arc'|'sepolia')=>{writeContract:Function,sendTransaction:Function}, ensureSepolia:()=>Promise<void>, ensureArc:()=>Promise<void>, onDone:()=>void, go:(path:string)=>void, pushStep:(step:number)=>void, backStep:()=>void}|null} */ this.deps = null;
     this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
+    /** @type {string|null} the slug's current owner, when the availability check found one — kept apart from `availability` so the render can put it through `<verdikt-address>` rather than baking a raw address into a status string. */
+    this.claimedBy = null;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
     this.checkToken = 0;
     this.slugDebounceTimer = /** @type {ReturnType<typeof setTimeout>|null} */ (null);
@@ -107,7 +110,7 @@ export class VerdiktWizard extends LitElement {
     this.deps = null;
     this.checkToken++;
     clearTimeout(this.slugDebounceTimer ?? undefined);
-    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.available = false;
+    this.message = ''; this.step = 1; this.slug = ''; this.availability = ''; this.claimedBy = null; this.available = false;
     this.url = ''; this.sla = ''; this.done = 0; this.execError = ''; this.pending = false;
   }
   // The four steps share one URL, so each forward move records a same-URL
@@ -139,6 +142,7 @@ export class VerdiktWizard extends LitElement {
   editSlug(event) {
     this.slug = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value.trim();
     this.available = false;
+    this.claimedBy = null;
     // Invalidate any check already scheduled or in flight for the previous
     // value — its result must never land after a keystroke has moved on.
     this.checkToken++;
@@ -153,9 +157,11 @@ export class VerdiktWizard extends LitElement {
       const record = await resolveServiceRecord(this.slug, { rpcUrl: /** @type {NonNullable<typeof this.deps>} */ (this.deps).sepoliaRpcUrl });
       if (token !== this.checkToken) return;
       this.available = !record.owner;
-      this.availability = record.owner ? `Already claimed by ${record.owner}.` : 'Available.';
+      this.claimedBy = record.owner;
+      this.availability = record.owner ? '' : 'Available.';
     } catch (error) {
       if (token !== this.checkToken) return;
+      this.claimedBy = null;
       this.availability = `Could not check availability: ${formatTxError(error)}`;
     }
   }
@@ -195,7 +201,11 @@ export class VerdiktWizard extends LitElement {
   renderStep() {
     if (this.step === 1) return html`
       <wa-input id="wizard-slug" label="Slug" autocomplete="off" .value=${this.slug} placeholder="weather" @input=${this.editSlug}></wa-input>
-      ${this.availability ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>` : nothing}
+      ${this.claimedBy
+        ? html`<p class="form-status" id="wizard-availability">Already claimed by <verdikt-address address=${this.claimedBy}></verdikt-address>.</p>`
+        : this.availability
+          ? html`<p class="form-status" id="wizard-availability">${this.availability}</p>`
+          : nothing}
       <div class="wizard-nav"><wa-button type="button" id="wizard-next-1" ?disabled=${!this.available} @click=${() => this.goStep(2)}>Next</wa-button></div>`;
     if (this.step === 2) return html`
       <wa-input id="wizard-url" label="Endpoint URL" type="url" autocomplete="off" placeholder="https://provider.example/api" .value=${this.url} @input=${this.editUrl}></wa-input>

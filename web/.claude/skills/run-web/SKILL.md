@@ -133,8 +133,8 @@ const input = document.querySelector('#wizard-slug');
 input.value = 'weather';
 input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
 // poll w.availability until it stops being 'Checking…'
-// 'weather'          -> "Already claimed by 0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79.", available: false
-// 'anything-unused'  -> "Available.", available: true, Claim button enabled
+// 'weather'          -> availability: '', claimedBy: '0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79', available: false
+// 'anything-unused'  -> availability: 'Available.', claimedBy: null, available: true, Claim button enabled
 ```
 
 Stub `walletClientFor` and the wizard will walk steps 2 and 3 without a wallet or

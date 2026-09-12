@@ -94,6 +94,27 @@ describe('the wizard element', () => {
     }
   });
 
+  // The owner comes back as `claimedBy`, not baked into `availability` as a
+  // sentence — the render puts it through `<verdikt-address>` rather than a
+  // raw address in a status string (issue #69).
+  it('carries a claimed slug\'s owner separately from the status message', async () => {
+    vi.useFakeTimers();
+    const owner = '0x9cBb40D45ec9dD095309BBA505f3BC54e63A3a79';
+    vi.mocked(resolveServiceRecord).mockResolvedValueOnce(/** @type {any} */ ({ owner }));
+    try {
+      const el = mount();
+      el.deps = deps();
+      el.editSlug(/** @type {any} */ ({ currentTarget: { value: 'weather' } }));
+      await vi.advanceTimersByTimeAsync(400);
+      expect(el.claimedBy).toBe(owner);
+      expect(el.availability).toBe('');
+      expect(el.available).toBe(false);
+    } finally {
+      vi.useRealTimers();
+      vi.mocked(resolveServiceRecord).mockClear();
+    }
+  });
+
   /** @param {any} el */
   const ready = (el) => { el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}'; el.step = 4; };
 

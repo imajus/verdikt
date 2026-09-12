@@ -406,7 +406,7 @@ const recordSection = (listing, mode, go) => {
         <tr><th>Address record</th><td>${listing.payTo ? html`<verdikt-address address=${listing.payTo} copy .resolve=${mode === 'live'}></verdikt-address>` : html`<span class="muted">none published</span>`}</td></tr>
         <tr><th>Provider</th><td><a href=${consolePath} @click=${navigateOnClick(go, consolePath)}><verdikt-address address=${listing.provider} .resolve=${mode === 'live'}></verdikt-address></a></td></tr>
         <tr><th>Service id</th><td><code>${listing.serviceId}</code></td></tr>
-        ${mode === 'live' ? html`<tr><th>Registry</th><td><code>${ARC.registry}</code> <span class="muted">on Arc Testnet</span></td></tr>` : nothing}
+        ${mode === 'live' ? html`<tr><th>Registry</th><td><verdikt-address address=${ARC.registry} copy></verdikt-address> <span class="muted">on Arc Testnet</span></td></tr>` : nothing}
       </table>
       <p class="aside">The proxy’s trust anchor is the <code>url</code> record, bound to the bond by the subname’s owner and the Arc provider being the same address. The <code>address</code> record is the provider’s own declaration and is not checked against the 402 challenge.</p>
     </section>`;
@@ -556,10 +556,10 @@ const serviceSkeleton = (slug, go) => html`
   </div>
   <p class="visually-hidden" role="status">Loading ${slug}…</p>`;
 
-/** @param {string} address */
-const providerSkeleton = (address) => html`
+/** @param {string} address @param {'live'|'demo'} mode */
+const providerSkeleton = (address, mode) => html`
   <div aria-hidden="true">
-    <header class="page-head"><div><p class="tagline">Provider <code>${address}</code></p></div></header>
+    <header class="page-head"><div><p class="tagline">Provider <verdikt-address address=${address} copy .resolve=${mode === 'live'}></verdikt-address></p></div></header>
     <section class="figures">
       ${['services', 'bonded', 'refunded from these bonds', 'verdicts'].map((label) => html`
         <div class="figure skeleton"><span class="value">${bar('3.5rem')}</span><span class="label">${label}</span></div>`)}
@@ -583,11 +583,12 @@ const manageSkeleton = (slug, go) => html`
 /**
  * @param {{view: string, slug: string|null, address: string|null}} route
  * @param {(path: string) => void} go
+ * @param {'live'|'demo'} mode
  */
-const skeleton = (route, go) => {
+const skeleton = (route, go, mode) => {
   if (route.view === 'service' && route.slug) return serviceSkeleton(route.slug, go);
   if (route.view === 'manage' && route.slug) return manageSkeleton(route.slug, go);
-  if (route.view === 'provider' && route.address) return providerSkeleton(route.address);
+  if (route.view === 'provider' && route.address) return providerSkeleton(route.address, mode);
   return html`<div aria-hidden="true">${marketplaceSkeleton()}</div>
     <p class="visually-hidden" role="status">Loading the marketplace…</p>`;
 };
@@ -706,7 +707,7 @@ export class VerdiktApp extends LitElement {
     const auth = this.writeAuthorization(listing.provider);
     const head = pageHead(`Manage ${listing.slug}`, html`Publish the SLA every call to <code>${listing.name}</code> is judged against, and keep the bond its refunds are drawn from. Each change is a transaction you sign yourself.`);
     if (this.mode === 'demo') return html`${back}${head}<p class="aside warn">Showing seeded data, not a live chain. A service is managed against Arc and Sepolia directly; set <code>VITE_ARC_RPC_URL</code>.</p>`;
-    if (!auth.ownPage) return html`${back}${head}<p class="aside">Only the wallet that registered this service can manage it — provider <code>${listing.provider}</code>. ${getConnectedAccount() ? 'The connected wallet is a different address.' : 'Connect that wallet to continue.'}</p>`;
+    if (!auth.ownPage) return html`${back}${head}<p class="aside">Only the wallet that registered this service can manage it — provider <verdikt-address address=${listing.provider}></verdikt-address>. ${getConnectedAccount() ? 'The connected wallet is a different address.' : 'Connect that wallet to continue.'}</p>`;
     if (!auth.signedIn || !auth.supported) return html`${back}${head}<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage this service.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>`;
     return html`${back}${head}
       <section class="editor block"><h3>SLA <small>${listing.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
@@ -764,7 +765,7 @@ export class VerdiktApp extends LitElement {
     // skeleton of a page it is not.
     if (this.route.view === 'how') return html`${navBar}${how()}${legalFooter(go)}`;
     if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
-    if (!this.marketplace) return html`${navBar}${skeleton(this.route, go)}${legalFooter(go)}`;
+    if (!this.marketplace) return html`${navBar}${skeleton(this.route, go, this.mode)}${legalFooter(go)}`;
     const { services, stats } = this.marketplace;
     const body = this.route.view === 'service'
       ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
