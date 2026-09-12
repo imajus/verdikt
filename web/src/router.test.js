@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MARKETPLACE_PATH, PROVIDER_PATH, WITHDRAW_PATH, parseRoute, providerUrl, serviceUrl, titleFor } from './router.js';
+import { MARKETPLACE_PATH, PROVIDER_PATH, TRY_PATH, WITHDRAW_PATH, parseRoute, providerUrl, serviceUrl, titleFor } from './router.js';
 
 const OWNER = '0xA11ce00000000000000000000000000000000001';
 
@@ -43,6 +43,9 @@ describe('parseRoute', () => {
     expect(parseRoute(new URL('https://verdikt.example/how')).view).toBe('how');
     expect(parseRoute(new URL('https://verdikt.example/terms')).view).toBe('terms');
     expect(parseRoute(new URL('https://verdikt.example/privacy')).view).toBe('privacy');
+  });
+  it('reads the try path', () => {
+    expect(parseRoute(new URL('https://verdikt.example/try'))).toEqual({ view: 'try', slug: null, address: null, rejected: null, canonicalPath: TRY_PATH });
   });
   it('reads the register path', () => {
     expect(parseRoute(new URL('https://verdikt.example/register'))).toEqual({ view: 'register', slug: null, address: null, rejected: null, canonicalPath: '/register' });
@@ -101,5 +104,8 @@ describe('titleFor', () => {
   });
   it('titles the withdraw page', () => {
     expect(titleFor(parseRoute(new URL('https://verdikt.example/withdraw')))).toBe('Withdraw — Verdikt');
+  });
+  it('titles the try page', () => {
+    expect(titleFor(parseRoute(new URL('https://verdikt.example/try')))).toBe('Try it — Verdikt');
   });
 });

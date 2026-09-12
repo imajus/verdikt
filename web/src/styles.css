@@ -1180,3 +1180,36 @@ table.tree tr.ignored td { padding-left: calc(var(--depth, 0) * 18px); font-size
   .wizard-run li { grid-template-columns: 2rem minmax(0, 1fr); }
   .wizard-run .run-chain, .wizard-run .run-action { grid-column: 2; justify-self: start; }
 }
+
+/* Try-it demo chat -------------------------------------------------------- */
+
+/* Turns, not bubbles: the same hairline-and-mono vocabulary the rest of the
+   ledger uses, so a demo built to prove nothing is faked doesn't turn around
+   and dress itself like a mockup chat app. */
+.demo-chat { max-width: 62ch; }
+.demo-turn { padding: 16px 0; border-bottom: 1px solid var(--rule); }
+.demo-turn:first-child { padding-top: 0; }
+.demo-who {
+  margin: 0 0 6px; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
+}
+.demo-turn.demo-verdikt .demo-who { color: var(--ink); }
+.demo-text { margin: 0; font-size: 16.5px; color: var(--ink); }
+.demo-turn.demo-record { border-bottom: 0; padding-top: 20px; }
+.demo-turn.demo-record .demo-text { color: var(--ink-2); font-style: italic; }
+.demo-link {
+  display: inline-block; margin-top: 8px; font-size: 14.5px; color: var(--muted);
+  text-decoration: none; border-bottom: 1px solid var(--rule);
+}
+.demo-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
+.demo-actions { margin-top: 22px; display: flex; align-items: center; gap: 14px; }
+.demo-actions wa-button { margin-top: 0; }
+.demo-count { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.demo-disclosure {
+  margin-top: 28px; padding-left: 14px; border-left: 2px solid var(--rule);
+  color: var(--ink-2); font-size: 14px; max-width: 74ch;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .demo-turn { animation: demo-in 260ms ease both; }
+}
+@keyframes demo-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

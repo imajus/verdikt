@@ -27,6 +27,7 @@ export const LANDING_PATH = '/';
 export const MARKETPLACE_PATH = '/marketplace';
 export const PROVIDER_PATH = '/provider';
 export const HOW_PATH = '/how';
+export const TRY_PATH = '/try';
 export const TERMS_PATH = '/terms';
 export const PRIVACY_PATH = '/privacy';
 export const REGISTER_PATH = '/register';
@@ -36,6 +37,7 @@ const STATIC_VIEWS = /** @type {Record<string, string>} */ ({
   '/': 'landing',
   [MARKETPLACE_PATH]: 'marketplace',
   [HOW_PATH]: 'how',
+  [TRY_PATH]: 'try',
   [TERMS_PATH]: 'terms',
   [PRIVACY_PATH]: 'privacy',
   [REGISTER_PATH]: 'register',
@@ -100,7 +102,7 @@ function normalize(pathname) {
 /**
  * @param {URL} url
  * @returns {{
- *   view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy',
+ *   view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'try'|'terms'|'privacy',
  *   slug: string|null,
  *   address: string|null,
  *   rejected: string|null,
@@ -157,6 +159,7 @@ const TITLES = /** @type {Record<string, string>} */ ({
   register: 'List a service — Verdikt',
   withdraw: 'Withdraw — Verdikt',
   how: 'How it works — Verdikt',
+  try: 'Try it — Verdikt',
   terms: 'Terms — Verdikt',
   privacy: 'Privacy — Verdikt'
 });
