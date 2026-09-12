@@ -19,6 +19,10 @@ const githubIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fi
 const xIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.53 6.78 15.17.5h-1.34L8.94 5.87 5.02.5H0l5.92 8.15L0 15.5h1.34l5.19-5.7 4.15 5.7H16L9.53 6.78Zm-1.84 2.02-.6-.83L2.3 1.44h2.06l3.84 5.29.6.83 4.99 6.87h-2.06L7.69 8.8Z"></path></svg>`;
 const sunIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M18.01 18.01l1.77 1.77M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M18.01 5.99l1.77-1.77"/></svg>`;
 const moonIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>`;
+const systemIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 20h8M12 17v3"/></svg>`;
+const NEXT_PREFERENCE = { system: 'light', light: 'dark', dark: 'system' };
+const PREFERENCE_ICON = { system: systemIcon, light: sunIcon, dark: moonIcon };
+const PREFERENCE_LABEL = { system: 'Switch to light mode', light: 'Switch to dark mode', dark: 'Switch to system theme' };
 
 /** @param {number|null} score */
 const scoreCell = (score) => html`
@@ -405,14 +409,14 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
     ${recordSection(listing, mode, go)}`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
-const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
+/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
+export const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
     const active = view === activeView || (activeView === 'marketplace' && view === 'service');
     return html`<a href=${path} class="nav-item ${active ? 'active' : ''}" data-nav=${activeView} @click=${navigateOnClick(go, path)}>${label}</a>`;
   };
-  const themeToggle = html`<button type="button" class="theme-toggle" aria-label=${theme === 'light' ? 'Switch to dark mode' : 'Switch to light mode'} @click=${() => changeTheme(theme === 'light' ? 'dark' : 'light')}>${theme === 'light' ? sunIcon() : moonIcon()}</button>`;
+  const themeToggle = html`<button type="button" class="theme-toggle" aria-label=${PREFERENCE_LABEL[theme]} @click=${() => changeTheme(NEXT_PREFERENCE[theme])}>${PREFERENCE_ICON[theme]()}</button>`;
   /** @param {CustomEvent<{ item: { value: string } }>} event */
   const selectWalletAction = (event) => {
     if (event.detail.item.value === 'change') connect();
@@ -565,7 +569,7 @@ export class VerdiktApp extends LitElement {
     /** @type {Marketplace|null} */ this.marketplace = null;
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
-    /** @type {'light'|'dark'} */ this.theme = 'light';
+    /** @type {'system'|'light'|'dark'} */ this.theme = 'system';
     /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
   }
@@ -575,7 +579,7 @@ export class VerdiktApp extends LitElement {
   connect() { this.dispatchEvent(new CustomEvent('wallet-connect')); }
   disconnect() { this.dispatchEvent(new CustomEvent('wallet-disconnect')); }
   signIn() { this.dispatchEvent(new CustomEvent('provider-sign-in')); }
-  /** @param {'light'|'dark'} theme */
+  /** @param {'system'|'light'|'dark'} theme */
   changeTheme(theme) { this.dispatchEvent(new CustomEvent('theme-select', { detail: theme })); }
   /**
    * Whether the connected wallet may write against `providerAddress`, and
