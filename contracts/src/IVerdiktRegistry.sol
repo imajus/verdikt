@@ -108,6 +108,13 @@ interface IVerdiktRegistry {
     event RefundCredited(bytes32 indexed serviceId, bytes32 indexed requestId, address indexed payer, uint256 amount);
 
     event RefundWithdrawn(address indexed payer, uint256 amount);
+
+    /// @dev Emitted by `withdrawWithAuthorization`, distinct from
+    ///      `RefundWithdrawn` because the recipient is not necessarily the
+    ///      payer credited by `RefundCredited` — that is the entire point of
+    ///      the signature path (issue #61).
+    event RefundClaimed(address indexed payer, address indexed recipient, uint256 amount, bytes32 nonce);
+
     event ServiceSuspended(bytes32 indexed serviceId);
     event ServiceReinstated(bytes32 indexed serviceId, uint256 deposit);
     event ServiceDeregistered(bytes32 indexed serviceId, address indexed provider, uint256 returnedDeposit);
@@ -128,6 +135,13 @@ interface IVerdiktRegistry {
     error NothingOwed(address payer);
     error TransferFailed(address to, uint256 amount);
     error Reentrancy();
+
+    // -- `withdrawWithAuthorization` validity (issue #61).
+    error AuthorizationExpired(uint256 validBefore);
+    error AuthorizationAlreadyUsed(address payer, bytes32 nonce);
+    error InvalidSignature();
+    error ZeroRecipient();
+    error InsufficientOwed(address payer, uint256 requested, uint256 available);
 
     // -- report payload validity. The forwarder/workflow-owner checks live in
     // `ReportReceiver`, shared with VerdiktScoreWriter on Sepolia.
@@ -157,6 +171,44 @@ interface IVerdiktRegistry {
     /// @notice Pull payment: the agent collects refunds credited to it.
     function withdraw() external returns (uint256 amount);
 
+    /// @notice Pull payment by signature, relayable by anyone: pays out a
+    ///         credit without requiring the credited payer itself to be able
+    ///         to send an Arc transaction.
+    /// @dev There is no `payer` parameter. The payer is *recovered* from the
+    ///      EIP-712 signature over `(recipient, amount, validBefore, nonce)`,
+    ///      so the recipient and the amount are the signer's decision alone —
+    ///      a relayer supplies the signature verbatim or the call reverts, it
+    ///      cannot substitute its own recipient or inflate the amount
+    ///      (issue #61). `nonce` is single-use per payer, checked against
+    ///      `isAuthorizationUsed`, so the same authorization cannot be
+    ///      relayed twice; `validBefore` bounds how long it can be relayed.
+    ///      A recipient that rejects the transfer fails only this call — the
+    ///      credit itself is untouched, exactly as an EOA's own `withdraw()`
+    ///      would leave it.
+    /// @param recipient where the payer wants the credit sent. Named by the
+    ///        payer at signing time, never by the relayer.
+    /// @param amount the exact amount to claim; reverts if it exceeds what is
+    ///        currently owed rather than silently capping, so a stale
+    ///        authorization fails loudly instead of paying less than signed.
+    /// @param validBefore the signature stops verifying at this timestamp.
+    /// @param nonce chosen by the signer; opaque to the registry beyond
+    ///        single use.
+    /// @return claimed the amount actually sent, equal to `amount`.
+    function withdrawWithAuthorization(
+        address recipient,
+        uint256 amount,
+        uint256 validBefore,
+        bytes32 nonce,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external returns (uint256 claimed);
+
+    /// @notice Whether `payer` has already spent `nonce` via
+    ///         `withdrawWithAuthorization`. Lets a signer or relayer pick a
+    ///         fresh nonce, or confirm one has settled, without replaying it.
+    function isAuthorizationUsed(address payer, bytes32 nonce) external view returns (bool);
+
     // ------------------------------------------------------------------- views
 
     /// @dev Canonical slug → serviceId derivation. `packages/sdk/registry.js`
@@ -172,4 +224,9 @@ interface IVerdiktRegistry {
 
     function DEPOSIT_AMOUNT() external view returns (uint256);
     function FIXED_REFUND() external view returns (uint256);
+
+    /// @notice EIP-712 domain separator `withdrawWithAuthorization` verifies
+    ///         against — `name: "VerdiktRegistry"`, `version: "1"`, this
+    ///         chain's id, and this contract's own address.
+    function DOMAIN_SEPARATOR() external view returns (bytes32);
 }

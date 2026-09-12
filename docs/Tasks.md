@@ -377,11 +377,19 @@ Registrar and escrow in one contract for MVP.
       and pays nothing
 - [x] Auto-suspend when the deposit hits zero
 - [x] `withdraw()` — agent collects credited refunds
+- [x] `withdrawWithAuthorization(recipient, amount, validBefore, nonce, v, r,
+      s)` — a relayer collects on the payer's behalf. The payer is recovered
+      from an EIP-712 signature, never passed as an argument, so the
+      recipient and amount it names cannot be substituted or widened by
+      whoever relays it (issue #61). Landed in `contracts/` only — both live
+      registries pin their forwarder and workflow owner immutably, so this
+      needs a fresh registry deployment before either Arc Testnet or a future
+      chain carries it
 - [x] Events: `ServiceRegistered`, `VerdictWritten` (carrying `outcome`),
-      `VerdictRejected`, `RefundCredited`, `RefundWithdrawn`,
+      `VerdictRejected`, `RefundCredited`, `RefundWithdrawn`, `RefundClaimed`,
       `ServiceSuspended`, `ServiceReinstated`, `ServiceDeregistered`
 - [x] Views: `getVerdict`, `getService`, `getDeposit`, `getStatus`,
-      `getProvider`, `getOwed`
+      `getProvider`, `getOwed`, `isAuthorizationUsed`
 
 > **Decision — the verdict entry point is `onReport`, not `setVerdict`.**
 > Absorbed from Spike B (CRE-2). A CRE workflow holds no key and sends no
@@ -417,11 +425,17 @@ Registrar and escrow in one contract for MVP.
 ### 2.2 Payout safety — pull payments
 
 The verdict path books `owed[payer] += amount` and sends nothing. The agent
-calls `withdraw()` to collect.
+calls `withdraw()` to collect, or authorises `withdrawWithAuthorization` for
+anyone to relay on its behalf (issue #61).
 
 - [x] No external call anywhere in the verdict path
 - [x] `withdraw()` zeroes the balance before transferring (checks-effects-
       interactions); a guard is then belt-and-braces
+- [x] `withdrawWithAuthorization` recovers the payer from the signature —
+      there is no `payer` argument a relayer could pass — checks
+      effects-before-interaction under the same reentrancy guard as
+      `withdraw()`, and rejects a malleable `s` so each authorization has one
+      valid encoding
 
 Rationale: pushing value while recording a verdict would let a payer address
 that rejects transfers revert the whole transaction and erase its own FAIL
@@ -452,6 +466,14 @@ State machine, table-driven:
 - [x] Reverting payer → verdict still written, credit still booked
 - [x] Reentrant `withdraw` → no double payout
 - [x] `withdraw` with nothing owed → reverts, never underflows
+- [x] `withdrawWithAuthorization` pays the signer-named recipient, relayable
+      by a third party that gains nothing; a replayed nonce, an expired
+      authorization, a zero recipient, an amount above what's owed, a
+      tampered field (recovers an unrelated signer), an out-of-range `v`, a
+      malleable `s`, a reverting recipient (claim fails, credit and nonce
+      untouched) and a reentrant recipient (no double payout) each revert or
+      settle exactly as designed; fuzzed against arbitrary owed/requested
+      amounts (issue #61)
 - [x] Fuzz: credit is simultaneously ≤ `paidAmount`, ≤ `FIXED_REFUND` and
       ≤ the remaining deposit, for every outcome
 - [x] Solvency: contract balance always equals bonds plus credits

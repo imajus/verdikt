@@ -52,8 +52,17 @@ contract VerdiktRegistryTest is Test {
     bytes10 internal constant WORKFLOW_NAME = bytes10("verdikt-v1");
 
     address internal provider = makeAddr("provider");
-    address internal payer = makeAddr("payer");
+    address internal payer;
+    uint256 internal payerKey;
     address internal stranger = makeAddr("stranger");
+
+    /// @dev `WithdrawAuthorization`'s own EIP-712 typehash — reimplemented
+    ///      here rather than read off the contract, so a test signs the same
+    ///      way an independent off-chain signer would (Specification.md's
+    ///      own convention: `test_serviceIdOfMatchesTheSharedVector` pins a
+    ///      literal vector rather than trusting the contract's own formula).
+    bytes32 internal constant WITHDRAW_AUTHORIZATION_TYPEHASH =
+        keccak256("WithdrawAuthorization(address recipient,uint256 amount,uint256 validBefore,bytes32 nonce)");
 
     VerdiktRegistry internal registry;
     bytes32 internal serviceId;
@@ -64,6 +73,7 @@ contract VerdiktRegistryTest is Test {
         registry = new VerdiktRegistry(FORWARDER, WORKFLOW_OWNER, WORKFLOW_NAME, DEPOSIT, REFUND);
         vm.deal(provider, 100e18);
         serviceId = keccak256(bytes(SLUG));
+        (payer, payerKey) = makeAddrAndKey("payer");
     }
 
     // ------------------------------------------------------------- helpers
@@ -101,6 +111,42 @@ contract VerdiktRegistryTest is Test {
         bytes32 clause
     ) internal pure returns (bytes memory) {
         return abi.encode(id, requestId, uint8(outcome), who, amount, clause);
+    }
+
+    /// @dev Independent of `VerdiktRegistry.DOMAIN_SEPARATOR` — recomputed
+    ///      from the same fixed name/version an off-chain signer would use,
+    ///      plus `block.chainid` and the deployed address, both readable
+    ///      without asking the contract.
+    function _domainSeparator() internal view returns (bytes32) {
+        return keccak256(
+            abi.encode(
+                keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)"),
+                keccak256(bytes("VerdiktRegistry")),
+                keccak256(bytes("1")),
+                block.chainid,
+                address(registry)
+            )
+        );
+    }
+
+    function _authorizationDigest(address recipient, uint256 amount, uint256 validBefore, bytes32 nonce)
+        internal
+        view
+        returns (bytes32)
+    {
+        bytes32 structHash =
+            keccak256(abi.encode(WITHDRAW_AUTHORIZATION_TYPEHASH, recipient, amount, validBefore, nonce));
+        return keccak256(abi.encodePacked("\x19\x01", _domainSeparator(), structHash));
+    }
+
+    function _signAuthorization(
+        uint256 signerKey,
+        address recipient,
+        uint256 amount,
+        uint256 validBefore,
+        bytes32 nonce
+    ) internal view returns (uint8 v, bytes32 r, bytes32 s) {
+        (v, r, s) = vm.sign(signerKey, _authorizationDigest(recipient, amount, validBefore, nonce));
     }
 
     function _deliver(bytes32 requestId, IVerdiktRegistry.Outcome outcome, address who, uint256 amount) internal {
@@ -582,6 +628,232 @@ contract VerdiktRegistryTest is Test {
 
         assertEq(address(attacker).balance, 0);
         assertEq(registry.getOwed(address(attacker)), REFUND);
+    }
+
+    // ------------------------------------------------ withdrawWithAuthorization
+
+    /// @dev The whole point: a relayer with no key of the payer's own can
+    ///      still move the credit, to whatever address the payer named.
+    function test_withdrawWithAuthorizationPaysTheRecipientTheSignerNamed() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        address recipient = makeAddr("recipient");
+        address relayer = makeAddr("relayer");
+        bytes32 nonce = keccak256("n1");
+        uint256 validBefore = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, recipient, REFUND, validBefore, nonce);
+
+        vm.expectEmit(true, true, false, true);
+        emit IVerdiktRegistry.RefundClaimed(payer, recipient, REFUND, nonce);
+        vm.prank(relayer);
+        uint256 claimed = registry.withdrawWithAuthorization(recipient, REFUND, validBefore, nonce, v, r, s);
+
+        assertEq(claimed, REFUND);
+        assertEq(recipient.balance, REFUND);
+        assertEq(relayer.balance, 0);
+        assertEq(registry.getOwed(payer), 0);
+        assertTrue(registry.isAuthorizationUsed(payer, nonce));
+    }
+
+    /// @dev Nothing about relaying requires the relayer to be anyone in
+    ///      particular — not the payer, not the recipient.
+    function test_withdrawWithAuthorizationCanBeRelayedByAThirdParty() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(payerKey, payer, REFUND, block.timestamp + 1 hours, keccak256("n1"));
+
+        vm.prank(stranger);
+        registry.withdrawWithAuthorization(payer, REFUND, block.timestamp + 1 hours, keccak256("n1"), v, r, s);
+
+        assertEq(payer.balance, REFUND);
+    }
+
+    function test_withdrawWithAuthorizationCanClaimLessThanFullyOwedLeavingTheRemainder() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        _deliver("r2", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        assertEq(registry.getOwed(payer), 2 * REFUND);
+
+        address recipient = makeAddr("recipient");
+        uint256 validBefore = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, recipient, REFUND, validBefore, keccak256("n1"));
+        registry.withdrawWithAuthorization(recipient, REFUND, validBefore, keccak256("n1"), v, r, s);
+
+        assertEq(recipient.balance, REFUND);
+        assertEq(registry.getOwed(payer), REFUND);
+
+        // The remainder is still claimable, under a fresh nonce.
+        (v, r, s) = _signAuthorization(payerKey, recipient, REFUND, validBefore, keccak256("n2"));
+        registry.withdrawWithAuthorization(recipient, REFUND, validBefore, keccak256("n2"), v, r, s);
+        assertEq(recipient.balance, 2 * REFUND);
+        assertEq(registry.getOwed(payer), 0);
+    }
+
+    function test_withdrawWithAuthorizationRejectsAReplayedNonce() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        _deliver("r2", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, REFUND, validBefore, nonce);
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, nonce, v, r, s);
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.AuthorizationAlreadyUsed.selector, payer, nonce));
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, nonce, v, r, s);
+
+        // The first claim went through; only the replay was refused.
+        assertEq(registry.getOwed(payer), REFUND);
+    }
+
+    function test_withdrawWithAuthorizationRejectsAnExpiredAuthorization() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, REFUND, validBefore, keccak256("n1"));
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.AuthorizationExpired.selector, validBefore));
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, keccak256("n1"), v, r, s);
+    }
+
+    function test_withdrawWithAuthorizationRejectsAZeroRecipient() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, address(0), REFUND, validBefore, keccak256("n1"));
+
+        vm.expectRevert(IVerdiktRegistry.ZeroRecipient.selector);
+        registry.withdrawWithAuthorization(address(0), REFUND, validBefore, keccak256("n1"), v, r, s);
+    }
+
+    function test_withdrawWithAuthorizationRejectsAnAmountAboveWhatsOwed() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        uint256 tooMuch = REFUND + 1;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, tooMuch, validBefore, keccak256("n1"));
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.InsufficientOwed.selector, payer, tooMuch, REFUND));
+        registry.withdrawWithAuthorization(payer, tooMuch, validBefore, keccak256("n1"), v, r, s);
+    }
+
+    /// @dev Nothing is owed to a stranger who never had a verdict credited —
+    ///      the same authentication path a live, unbonded service exercises.
+    function test_withdrawWithAuthorizationWithNothingOwedReverts() public {
+        uint256 strangerKey = 0xBEEF;
+        address signer = vm.addr(strangerKey);
+        uint256 validBefore = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(strangerKey, signer, 1, validBefore, keccak256("n1"));
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.InsufficientOwed.selector, signer, 1, 0));
+        registry.withdrawWithAuthorization(signer, 1, validBefore, keccak256("n1"), v, r, s);
+    }
+
+    /// @dev Changing any signed field after signing recovers a different
+    ///      address entirely — there is no `payer` parameter to mismatch
+    ///      against, so tampering just points the claim at an account that
+    ///      (almost certainly) owns no credit rather than at a recognisable
+    ///      "wrong signer" error.
+    function test_withdrawWithAuthorizationRejectsATamperedRecipient() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        address signedRecipient = makeAddr("recipient");
+        address swappedRecipient = makeAddr("attacker-recipient");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, signedRecipient, REFUND, validBefore, nonce);
+
+        vm.expectPartialRevert(IVerdiktRegistry.InsufficientOwed.selector);
+        registry.withdrawWithAuthorization(swappedRecipient, REFUND, validBefore, nonce, v, r, s);
+    }
+
+    function test_withdrawWithAuthorizationRejectsAnOutOfRangeVValue() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        (, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, REFUND, validBefore, keccak256("n1"));
+
+        vm.expectRevert(IVerdiktRegistry.InvalidSignature.selector);
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, keccak256("n1"), 17, r, s);
+    }
+
+    /// @dev The malleable twin of a valid signature — same signer, same
+    ///      message, `s` flipped to the curve's upper half and `v` flipped to
+    ///      match — must not verify. Otherwise every authorization would have
+    ///      two valid encodings instead of one.
+    function test_withdrawWithAuthorizationRejectsAMalleableSignature() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, REFUND, validBefore, nonce);
+
+        // secp256k1's order n; the flipped signature over the same digest is
+        // (r, n - s, 27 ^ 28 ^ v).
+        uint256 n = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+        bytes32 flippedS = bytes32(n - uint256(s));
+        uint8 flippedV = v == 27 ? 28 : 27;
+
+        vm.expectRevert(IVerdiktRegistry.InvalidSignature.selector);
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, nonce, flippedV, r, flippedS);
+    }
+
+    /// @dev A recipient that rejects the transfer loses only this claim — the
+    ///      nonce is not spent and the credit is not decremented, so the payer
+    ///      can sign a fresh authorization naming an address that can collect.
+    function test_withdrawWithAuthorizationRecipientThatRejectsValueFailsOnlyItsOwnClaim() public {
+        _register();
+        address hostile = address(new RevertingPayer());
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, hostile, REFUND, validBefore, nonce);
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.TransferFailed.selector, hostile, REFUND));
+        registry.withdrawWithAuthorization(hostile, REFUND, validBefore, nonce, v, r, s);
+
+        assertEq(registry.getOwed(payer), REFUND);
+        assertFalse(registry.isAuthorizationUsed(payer, nonce));
+    }
+
+    /// @dev Same shared `_lock` as `withdraw()`: a recipient that re-enters
+    ///      during its own payout cannot double-spend the credit.
+    function test_reentrantRecipientCannotDoublePayViaWithdrawWithAuthorization() public {
+        _register();
+        ReentrantPayer attacker = new ReentrantPayer(registry);
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, address(attacker), REFUND, validBefore, nonce);
+
+        vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.TransferFailed.selector, address(attacker), REFUND));
+        registry.withdrawWithAuthorization(address(attacker), REFUND, validBefore, nonce, v, r, s);
+
+        assertEq(address(attacker).balance, 0);
+        assertEq(registry.getOwed(payer), REFUND);
+        assertFalse(registry.isAuthorizationUsed(payer, nonce));
+    }
+
+    function testFuzz_withdrawWithAuthorizationNeverPaysMoreThanSigned(uint64 paidMinor, uint256 requested) public {
+        _register();
+        vm.assume(paidMinor > 0);
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, paidMinor);
+        uint256 owed = registry.getOwed(payer);
+        vm.assume(owed > 0);
+
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, requested, validBefore, nonce);
+
+        if (requested > owed) {
+            vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.InsufficientOwed.selector, payer, requested, owed));
+            registry.withdrawWithAuthorization(payer, requested, validBefore, nonce, v, r, s);
+        } else {
+            uint256 claimed = registry.withdrawWithAuthorization(payer, requested, validBefore, nonce, v, r, s);
+            assertEq(claimed, requested);
+            assertEq(payer.balance, requested);
+            assertEq(registry.getOwed(payer), owed - requested);
+        }
     }
 
     // --------------------------------------------------------------- solvency

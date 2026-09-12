@@ -210,6 +210,21 @@ non-confidential logic in the TEE.
   to hold a spotless conformance ratio while failing real calls. Booking a credit
   decouples recording a verdict from paying anyone, and removes the reentrancy
   surface an external call inside the verdict path would open.
+- **A second pull path, by signature, alongside `withdraw()`** — the payer
+  recovered from an x402 signature is not reliably an address that can itself
+  send an Arc transaction (Circle's `GatewayWalletBatched` credits the agent
+  wallet's backing EOA; a payer that signed on another chain would first need
+  Arc USDC just to claim its refund). `withdrawWithAuthorization(recipient,
+  amount, validBefore, nonce, v, r, s)` recovers the payer from an EIP-712
+  signature over `(recipient, amount, validBefore, nonce)` rather than trusting
+  `msg.sender`, so anyone can relay the claim to the recipient the payer
+  named. The recipient and the amount are therefore the payer's decision
+  alone — a relayer that changes either invalidates the signature, gains
+  nothing by holding it, and cannot replay it once `nonce` is spent. Every
+  invariant above still holds: the registry still never pushes value on
+  `onReport`, and a recipient that rejects the transfer fails only that one
+  claim, leaving the credit and the nonce untouched for a retry to a
+  different address ([#61](https://github.com/imajus/verdikt/issues/61)).
 - **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
   penalty on top. With no dispute layer, a refund larger than the payment would
   make induced failure profitable; capping at the payment makes griefing
