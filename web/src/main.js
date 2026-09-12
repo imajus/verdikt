@@ -91,7 +91,7 @@ function draw(options = {}) {
   app.route = route;
   if (!marketplaceCache) return;
   const marketplace = /** @type {Marketplace} */ (marketplaceCache);
-  const managesControls = mode === 'live' && (route.view === 'service' || route.view === 'register');
+  const managesControls = mode === 'live' && (route.view === 'manage' || route.view === 'register');
   // `verdikt-app` is patched asynchronously by Lit. Clear the currently
   // mounted controls before that patch removes them, otherwise a wallet that
   // owns no services — or one looking at somebody else's service, where the
@@ -99,7 +99,7 @@ function draw(options = {}) {
   // listing and dependencies.
   if (managesControls) {
     const { canWrite, target } = providerAuthorization(marketplace, route);
-    if (!canWrite || (route.view === 'service' && !target)) clearProviderControls(false);
+    if (!canWrite || (route.view === 'manage' && !target)) clearProviderControls(false);
   }
   app.marketplace = marketplace;
   if (managesControls) {
@@ -131,16 +131,16 @@ function clearProviderControls(reset = true) {
  * `writeAuthorization` in lit-app.js — the two must agree, or a section
  * renders without a mount behind it (a dead control) or a mount appears with
  * no section around it (an invisible one). `target` only exists on a
- * `service` route: `register` acts on the connected wallet directly, and
- * `provider` mounts nothing at all any more.
+ * `manage` route: `register` acts on the connected wallet directly, and the
+ * service page and the provider console mount nothing at all.
  * @param {Marketplace} marketplace
  * @param {ReturnType<typeof parseRoute>} route
  */
 function providerAuthorization(marketplace, route) {
   const account = getConnectedAccount();
   const session = getSession();
-  const target = route.view === 'service' ? marketplace.services.find((listing) => listing.slug === route.slug) ?? null : null;
-  const providerAddress = route.view === 'service' ? (target?.provider ?? null) : (account?.address ?? null);
+  const target = route.view === 'manage' ? marketplace.services.find((listing) => listing.slug === route.slug) ?? null : null;
+  const providerAddress = route.view === 'manage' ? (target?.provider ?? null) : (account?.address ?? null);
   const ownPage = Boolean(account && providerAddress && account.address.toLowerCase() === providerAddress.toLowerCase());
   const sessionMatchesAccount = Boolean(account && session && session.address.toLowerCase() === account.address.toLowerCase() && [ARC.chainId, SEPOLIA.chainId].includes(account.chainId));
   return { account, target, canWrite: ownPage && sessionMatchesAccount };
@@ -189,10 +189,10 @@ function mountProviderConsole(route) {
   }
   const slaMount = /** @type {import('./forms/sla-editor.js').VerdiktSlaEditor|null} */ (app.querySelector('#sla-editor-mount'));
   const bondMount = /** @type {import('./forms/bond.js').VerdiktBondControls|null} */ (app.querySelector('#bond-controls-mount'));
-  // Off the service route, or a service route with no resolved listing (a
+  // Off the manage route, or a manage route with no resolved listing (a
   // slug nobody owns), there is nothing for these two to act on — clear
   // rather than merely null, which also drops a stale draft.
-  if (route.view !== 'service' || !target) {
+  if (route.view !== 'manage' || !target) {
     slaMount?.clear();
     bondMount?.clear();
     return;

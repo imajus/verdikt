@@ -12,7 +12,8 @@ import { parseSla } from '@verdikt/sla';
 import { claimSubname, publishSla, publishUrl, registerService } from '../actions.js';
 import { formatTxError } from '../format.js';
 import { navigateOnClick, serviceUrl } from '../router.js';
-import { describeSlaValidity } from './sla-editor.js';
+import { describeSlaValidity } from './sla-validity.js';
+import './sla-composer.js';
 
 const SLUG = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 // A keystroke-per-RPC-call availability check would spam the Sepolia
@@ -141,7 +142,7 @@ export class VerdiktWizard extends LitElement {
     }
   }
   /** @param {InputEvent} event */ editUrl(event) { this.url = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
-  /** @param {InputEvent} event */ editSla(event) { this.sla = /** @type {{value:string}} */ (/** @type {unknown} */ (event.currentTarget)).value; }
+  /** @param {CustomEvent<{ value: string }>} event */ editSla(event) { this.sla = event.detail.value; }
   get urlValid() { return /^https?:\/\//.test(this.url.trim()); }
   /**
    * Run exactly one step, and only the one the cursor is on. Deliberately
@@ -184,8 +185,7 @@ export class VerdiktWizard extends LitElement {
     if (this.step === 3) {
       const validity = describeSlaValidity(this.sla);
       return html`
-        <wa-textarea id="wizard-sla" label="SLA (JSON)" spellcheck="false" rows="10" resize="vertical" .value=${this.sla} @input=${this.editSla}></wa-textarea>
-        <p class="check ${validity.ok ? 'ok' : 'bad'}" id="wizard-sla-check"><i class="dot"></i>${validity.message}</p>
+        <verdikt-sla-composer id="wizard-sla" .value=${this.sla} @sla-change=${this.editSla}></verdikt-sla-composer>
         <div class="wizard-nav"><wa-button type="button" appearance="outlined" @click=${() => this.stepBack()}>Back</wa-button><wa-button type="button" id="wizard-next-3" ?disabled=${!validity.ok} @click=${() => this.goStep(4)}>Next</wa-button></div>`;
     }
     return this.renderReview();

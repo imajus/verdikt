@@ -5,7 +5,7 @@ import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { isListed } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, navigateOnClick, providerUrl, serviceUrl } from './router.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
 import { amount, landing } from './landing.js';
 
@@ -144,7 +144,7 @@ export const detailTemplate = (listing) => {
     </section>`;
 };
 
-/** @param {'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
+/** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'light'|'dark') => void} changeTheme */
 const nav = (view, mode, theme, account, go, connect, disconnect, changeTheme) => {
   /** @param {string} path @param {string} label @param {string} activeView */
   const item = (path, label, activeView) => {
@@ -222,7 +222,7 @@ export class VerdiktApp extends LitElement {
     /** @type {'live'|'demo'} */ this.mode = 'demo';
     /** @type {string|null} */ this.error = null;
     /** @type {'light'|'dark'} */ this.theme = 'light';
-    /** @type {{view: 'landing'|'marketplace'|'service'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
+    /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
   }
   createRenderRoot() { return this; }
@@ -276,14 +276,33 @@ export class VerdiktApp extends LitElement {
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */
   renderService(services, slug, go) {
     const listing = services.find((service) => service.slug === slug) ?? null;
-    const back = html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p>`;
+    if (!listing) return html`<p class="back"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a></p><p class="empty">No service found for “${slug}”.</p>`;
+    // The service page is public and read-only. Its owner gets one way in to
+    // the controls, and nobody else sees that there are any.
+    const owner = this.writeAuthorization(listing.provider).ownPage;
+    return html`<p class="back ${owner ? 'with-action' : ''}"><a href=${MARKETPLACE_PATH} @click=${navigateOnClick(go, MARKETPLACE_PATH)}>← back to the marketplace</a>${owner ? html`<wa-button size="s" id="manage-service" href=${manageUrl(listing.slug)} @click=${navigateOnClick(go, manageUrl(listing.slug))}>Manage service</wa-button>` : nothing}</p>
+      ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}${detailTemplate(listing)}`;
+  }
+  /**
+   * The owner's console for one service. Anyone can open the URL; what it
+   * shows is decided here in the same steps main.js's mount side takes
+   * (providerAuthorization), so a section never renders without a mount
+   * behind it. The SLA editor and bond controls exist only on this page.
+   * @param {Listing[]} services @param {string} slug @param {(path: string) => void} go
+   */
+  renderManage(services, slug, go) {
+    const listing = services.find((service) => service.slug === slug) ?? null;
+    const backPath = listing ? serviceUrl(slug) : MARKETPLACE_PATH;
+    const back = html`<p class="back"><a href=${backPath} @click=${navigateOnClick(go, backPath)}>← back to ${listing ? listing.slug : 'the marketplace'}</a></p>`;
     if (!listing) return html`${back}<p class="empty">No service found for “${slug}”.</p>`;
     const auth = this.writeAuthorization(listing.provider);
-    return html`${back}${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}${detailTemplate(listing)}
-      ${auth.ownPage && (!auth.signedIn || !auth.supported) ? html`<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage this service.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>` : nothing}
-      ${auth.canWrite ? html`
-        <section class="editor block"><h3>SLA editor <small>${listing.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
-        <section class="block"><h3>Bond <small>${listing.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>` : nothing}`;
+    const head = pageHead(`Manage ${listing.slug}`, html`Publish the SLA every call to <code>${listing.name}</code> is judged against, and keep the bond its refunds are drawn from. Each change is a transaction you sign yourself.`);
+    if (this.mode === 'demo') return html`${back}${head}<p class="aside warn">Showing seeded data, not a live chain. A service is managed against Arc and Sepolia directly; set <code>VITE_ARC_RPC_URL</code>.</p>`;
+    if (!auth.ownPage) return html`${back}${head}<p class="aside">Only the wallet that registered this service can manage it — provider <code>${listing.provider}</code>. ${getConnectedAccount() ? 'The connected wallet is a different address.' : 'Connect that wallet to continue.'}</p>`;
+    if (!auth.signedIn || !auth.supported) return html`${back}${head}<div class="aside"><p>${auth.signedIn ? 'Switch to a supported network to manage this service.' : 'Sign in once to manage your services. Your sign-in lasts 24 hours in this browser.'}</p><wa-button size="s" appearance="outlined" ?disabled=${this.signInPending} ?loading=${this.signInPending} @click=${this.signIn}>${auth.signedIn ? 'Switch network' : 'Enable provider actions'}</wa-button>${this.signInError ? html`<p role="status">${this.signInError}</p>` : nothing}</div>`;
+    return html`${back}${head}
+      <section class="editor block"><h3>SLA <small>${listing.name}</small></h3><p class="aside">Validated against the same <code>schema.json</code> the verifier enforces. Sent from your own wallet; Verdikt holds no key of yours.</p><verdikt-sla-editor id="sla-editor-mount"></verdikt-sla-editor></section>
+      <section class="block"><h3>Bond <small>${listing.name}</small></h3><verdikt-bond-controls id="bond-controls-mount"></verdikt-bond-controls></section>`;
   }
   /** @param {(path: string) => void} go */
   renderRegister(go) {
@@ -331,6 +350,8 @@ export class VerdiktApp extends LitElement {
       ? how()
       : this.route.view === 'service'
         ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
+        : this.route.view === 'manage'
+          ? this.renderManage(services, /** @type {string} */ (this.route.slug), go)
         : this.route.view === 'provider'
           ? this.renderProvider(resolveProviderConsole(services, this.route.address).owned, /** @type {string} */ (this.route.address), go)
           : this.renderMarketplace(stats, services, go);

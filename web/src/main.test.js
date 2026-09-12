@@ -3,7 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // Exercise the application coordinator with inert view elements. Wallet and
 // SIWE adapters have their own provider/signature tests; here we verify that
 // their events revoke and restore the actual form dependencies, now split
-// across the wizard on /register and the SLA/bond controls on /services/<slug>.
+// across the wizard on /register and the SLA/bond controls on /services/<slug>/manage.
 const state = vi.hoisted(() => ({
   account: /** @type {any} */ (null), session: /** @type {any} */ (null),
   changed: /** @type {any} */ (null), signIn: vi.fn(), ensureChain: vi.fn(),
@@ -110,11 +110,15 @@ it('mounts the wizard, not the sla/bond controls, on /register for the signed-in
   expect(controls['sla-editor-mount'].deps).toBeNull();
   expect(controls['bond-controls-mount'].deps).toBeNull();
 });
-it('mounts the sla/bond controls, not the wizard, on the owner’s own service page', async () => {
-  await go('/services/weather');
+it('mounts the sla/bond controls, not the wizard, on the owner’s own manage page', async () => {
+  await go('/services/weather/manage');
   expect(controls['sla-editor-mount'].deps).not.toBeNull();
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
   expect(controls['wizard-mount'].deps).toBeNull();
+});
+it('mounts nothing on the service page itself, even for its owner', async () => {
+  await go('/services/weather');
+  for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('mounts nothing on a service owned by someone else', async () => {
   await go('/services/quotes');
@@ -136,7 +140,7 @@ it('starts wallet restoration on load without requesting connection or sign-in',
   expect(state.signIn).not.toHaveBeenCalled();
 });
 it('immediately removes stale controls when a different account views the owner-only service page', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(OTHER);
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   await settle();
@@ -148,18 +152,18 @@ it('resets the wizard’s step when a different account activates /register', as
   expect(controls['wizard-mount'].step).toBe(1);
 });
 it('revokes all provider controls on disconnect', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   await events.get('wallet-disconnect')?.(); await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('suspends controls on an external chain change without losing drafts', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(OWNER, 1, false); await settle();
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
   expect(controls['sla-editor-mount'].draft).toBe('draft');
 });
 it('reuses authentication after switching to Arc and restores its dependencies', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
   await ensureArc();
   expect(state.ensureChain).toHaveBeenCalledWith(5042002, expect.objectContaining({ chainId: 5042002 }));
@@ -170,7 +174,7 @@ it('reuses authentication after switching to Arc and restores its dependencies',
   expect(controls['wizard-mount'].step).toBe(2);
 });
 it('does not restore controls when re-authentication is rejected', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   state.signIn.mockRejectedValueOnce(new Error('user rejected'));
   const ensureArc = controls['bond-controls-mount'].deps.ensureArc;
   state.session = null;
@@ -178,7 +182,7 @@ it('does not restore controls when re-authentication is rejected', async () => {
   for (const control of Object.values(controls)) expect(control.deps).toBeNull();
 });
 it('connects on an unsupported network without requesting a signature or network switch', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(OWNER, 1, false); await settle();
   await events.get('wallet-connect')?.(); await settle();
   expect(state.ensureChain).not.toHaveBeenCalled();
@@ -186,7 +190,7 @@ it('connects on an unsupported network without requesting a signature or network
   expect(controls['bond-controls-mount'].deps).toBeNull();
 });
 it('recovers from an unsupported network on explicit provider activation without re-signing', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(OWNER, 1, false); await settle();
   await events.get('provider-sign-in')?.(); await settle();
   expect(state.ensureChain).toHaveBeenCalledWith(11155111, expect.objectContaining({ chainId: 11155111 }));
@@ -194,7 +198,7 @@ it('recovers from an unsupported network on explicit provider activation without
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
 });
 it('requires an explicit provider sign-in after connecting without a saved session', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(); await settle();
   await events.get('wallet-connect')?.(); await settle();
   expect(state.signIn).not.toHaveBeenCalled();
@@ -204,7 +208,7 @@ it('requires an explicit provider sign-in after connecting without a saved sessi
   expect(controls['bond-controls-mount'].deps).not.toBeNull();
 });
 it('reports a rejected provider sign-in without reconnecting or enabling actions', async () => {
-  await go('/services/weather');
+  await go('/services/weather/manage');
   change(); await settle();
   state.signIn.mockRejectedValueOnce(new Error('user rejected'));
   await events.get('provider-sign-in')?.(); await settle();

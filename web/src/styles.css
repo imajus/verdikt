@@ -307,6 +307,10 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 
 .detail { border-top: 1.5px solid var(--rule-strong); padding-top: 18px; }
 .back { margin: 0 0 18px; }
+/* The owner's one way in sits on the back line, top right, so the header
+   below keeps its title-and-scores composition for every other reader. */
+.back.with-action { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.back wa-button { margin-top: 0; }
 .back a { color: var(--link); text-decoration: none; }
 .back a:hover { text-decoration: underline; }
 .detail-head { display: flex; flex-wrap: wrap; gap: 20px 32px; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
@@ -743,6 +747,122 @@ label { display: block; font-size: 14.5px; color: var(--muted); margin-top: 14px
 
 .form-status { font-size: 14.5px; color: var(--ink-2); margin: 8px 0 0; font-family: var(--mono); overflow-wrap: anywhere; }
 .bond-form, .retire-form { max-width: 420px; margin-top: 16px; }
+
+/* SLA composer ----------------------------------------------------------------- */
+
+/* Clause by clause, on the same ruled-row vocabulary as the wizard's docket:
+   an index, the clause, and its one action. Nothing is a card — a clause is
+   content hung between two hairlines, and the implicit delivery clause is
+   row 00 in muted so a provider sees what is enforced before what they add. */
+.composer { margin-top: 14px; }
+.composer-views { display: flex; gap: 20px; border-bottom: 1px solid var(--rule); }
+.composer-views button {
+  background: none; border: 0; border-radius: 0; margin: 0 0 -1px; padding: 4px 0 8px;
+  font-size: 14.5px; color: var(--muted); border-bottom: 1.5px solid transparent;
+}
+.composer-views button:hover:not(:disabled) { opacity: 1; color: var(--ink); }
+.composer-views button.active { color: var(--ink); border-bottom-color: var(--ink); }
+
+.clauses { list-style: none; margin: 0; padding: 0; }
+.clause {
+  display: grid; grid-template-columns: 2.25rem minmax(0, 1fr) 1.5rem; gap: 4px 14px;
+  align-items: start; padding: 18px 2px 20px; border-bottom: 1px solid var(--rule);
+}
+.clause.implicit { padding: 14px 2px; }
+.clause-index { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; padding-top: 4px; }
+.clause-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 12px; margin-bottom: 12px; }
+.clause.implicit .clause-head { margin-bottom: 0; }
+.clause-kind { font-weight: 500; font-size: 16.5px; }
+.clause-blurb { font-size: 14.5px; color: var(--ink-2); max-width: 70ch; }
+.clause.implicit .clause-kind, .clause.implicit .clause-blurb { color: var(--muted); }
+.clause-act { justify-self: end; padding-top: 1px; }
+.clause-meta { display: grid; grid-template-columns: minmax(0, 15rem) minmax(0, 1fr); gap: 12px 24px; margin-top: 16px; }
+
+/* Boxed console fields, sized to what they hold rather than the column: a
+   clause id is a short mono token, a bound is a number. */
+.composer input[type="text"] { margin: 0; font-family: var(--sans); font-size: 15px; }
+.composer input.mono { font-family: var(--mono); }
+.composer input.num { width: 7.5rem; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.composer input.invalid, .composer textarea.invalid { border-color: var(--poor); }
+.composer textarea.sample { min-height: 150px; }
+/* The two ways to author a shape sit on one line with the label, as a pair
+   of tabs in the same underline vocabulary as the Form/JSON switch above. */
+.source-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: 8px; }
+.source-head .composer-label { margin: 0; }
+.source-modes { display: flex; gap: 14px; }
+.source-modes button {
+  background: none; border: 0; border-radius: 0; padding: 0 0 2px; margin: 0;
+  font: inherit; font-size: 14.5px; color: var(--muted); border-bottom: 1.5px solid transparent;
+}
+.source-modes button:hover:not(:disabled) { opacity: 1; color: var(--ink); }
+.source-modes button.active { color: var(--ink); border-bottom-color: var(--ink); }
+.composer .hint code { font-size: 13px; }
+.composer textarea.json { min-height: 320px; }
+.composer-label { display: block; font-size: 14.5px; color: var(--muted); margin: 0 0 6px; }
+.composer-label .muted { font-size: 13px; }
+.composer-inline { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.composer-inline label { margin: 0; font-size: 15.5px; color: var(--ink); }
+.composer .unit { font-size: 14.5px; color: var(--muted); }
+.composer .echo { font-family: var(--mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.composer .hint { font-size: 14px; color: var(--muted); margin: 8px 0 0; max-width: 78ch; }
+.field-problem { font-size: 14px; color: var(--poor); margin: 6px 0 0; max-width: 78ch; }
+/* A rename guard is a warning about a permanent effect on the record, so it
+   speaks in the same amber as "edited since" — the fact it is predicting. */
+.field-guard { font-size: 14px; color: var(--fair); margin: 8px 0 0; max-width: 78ch; }
+.field-guard code { color: inherit; }
+
+.composer button.quiet {
+  background: none; border: 0; padding: 2px; border-radius: 2px;
+  color: var(--muted); font: inherit; font-size: 14px;
+}
+.composer button.quiet:hover:not(:disabled) { color: var(--ink); opacity: 1; }
+.composer button.icon { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; }
+.composer button.link { padding: 0; color: var(--link); text-decoration: underline; text-underline-offset: 2px; font-size: inherit; }
+.composer button.link:hover:not(:disabled) { color: var(--link); }
+.composer button.restore { padding: 0 2px; }
+.composer button.restore code { color: var(--ink-2); text-decoration: underline dotted; text-underline-offset: 3px; }
+.composer button.restore:hover code { color: var(--ink); }
+
+/* The field tree: the response's own shape, one row per field, with the two
+   decisions a provider makes beside it. Depth is an indent, not a glyph. */
+table.tree { font-size: 14.5px; margin-top: 12px; }
+table.tree th { font-size: 13.5px; }
+table.tree td { padding: 5px 14px 5px 0; vertical-align: middle; }
+table.tree td.field { padding-left: calc(var(--depth, 0) * 18px); white-space: nowrap; }
+table.tree td.field code { font-size: 14px; }
+table.tree tr.root td.field code { font-weight: 500; }
+table.tree td.type { font-family: var(--mono); font-size: 13.5px; color: var(--ink-2); white-space: nowrap; }
+table.tree td.type select {
+  font: inherit; color: var(--ink); background: transparent; cursor: pointer;
+  border: 0; border-bottom: 1px solid var(--rule); border-radius: 0; padding: 1px 0 2px;
+}
+table.tree td.type select:hover { border-bottom-color: var(--muted); }
+table.tree .extras { color: var(--muted); font-size: 12.5px; text-decoration: underline dotted; text-underline-offset: 3px; cursor: help; }
+table.tree td.promised { text-align: center; width: 1%; }
+table.tree th:nth-child(3) { text-align: center; }
+table.tree input[type="checkbox"] { accent-color: var(--ink); width: 15px; height: 15px; margin: 0; display: block; margin-inline: auto; }
+table.tree td.bounds { white-space: nowrap; }
+table.tree td.bounds input { width: 4.75rem; padding: 3px 7px; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+table.tree .to { font-size: 13px; color: var(--muted); margin: 0 5px; }
+table.tree td.bounds .unit { font-size: 13px; margin-left: 6px; }
+table.tree td.act { width: 1%; padding-right: 0; }
+table.tree tr.problem-row td, table.tree tr.ignored td { padding-top: 0; }
+table.tree tr.problem-row .field-problem { margin: 0 0 4px; }
+table.tree tr.ignored td { padding-left: calc(var(--depth, 0) * 18px); font-size: 14px; padding-bottom: 8px; }
+
+.composer-add { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; margin-top: 18px; }
+.composer-add .composer-label { margin: 0 4px 0 0; }
+.composer-add wa-button { margin-top: 0; }
+.composer-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 14px; }
+.composer-actions wa-button { margin-top: 0; }
+.composer .check { margin-top: 16px; }
+@media (max-width: 720px) {
+  .clause-meta { grid-template-columns: minmax(0, 1fr); }
+  .clause-meta input[type="text"] { width: 100%; }
+}
+@media (max-width: 560px) {
+  .clause { grid-template-columns: 2rem minmax(0, 1fr) 1.5rem; gap: 4px 10px; }
+}
 
 /* Onboarding wizard ------------------------------------------------------------ */
 

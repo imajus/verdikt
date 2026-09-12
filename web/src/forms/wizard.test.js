@@ -97,6 +97,17 @@ describe('the wizard element', () => {
   /** @param {any} el */
   const ready = (el) => { el.slug = 'weather'; el.available = true; el.url = 'https://x.example'; el.sla = '{}'; el.step = 4; };
 
+  it('composes the SLA on step 3 and gates Next on the record it emits', () => {
+    const el = mount();
+    el.deps = deps();
+    el.step = 3;
+    expect(stringify(el.renderStep())).toContain('id="wizard-next-3" disabled');
+    el.editSla(/** @type {any} */ ({ detail: { value: '{"version":1,"clauses":[{"id":"fast","type":"latency","maxMs":5000}]}' } }));
+    const out = stringify(el.renderStep());
+    expect(out).toContain('<verdikt-sla-composer');
+    expect(out).not.toContain('id="wizard-next-3" disabled');
+  });
+
   it('advances one step per click, finishing after the fourth', async () => {
     const el = mount();
     el.deps = deps();
