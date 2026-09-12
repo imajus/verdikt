@@ -290,6 +290,10 @@ contract VerdiktRegistry is IVerdiktRegistry, ReportReceiver {
     ) external nonReentrant returns (uint256 claimed) {
         if (block.timestamp >= validBefore) revert AuthorizationExpired(validBefore);
         if (recipient == address(0)) revert ZeroRecipient();
+        // Before the recovery, because a zero claim is the one amount that
+        // clears `amount > available` for every address, including the
+        // arbitrary one any forged signature recovers to.
+        if (amount == 0) revert ZeroClaim();
 
         bytes32 structHash =
             keccak256(abi.encode(WITHDRAW_AUTHORIZATION_TYPEHASH, recipient, amount, validBefore, nonce));

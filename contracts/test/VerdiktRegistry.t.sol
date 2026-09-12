@@ -738,10 +738,9 @@ contract VerdiktRegistryTest is Test {
     /// @dev Nothing is owed to a stranger who never had a verdict credited —
     ///      the same authentication path a live, unbonded service exercises.
     function test_withdrawWithAuthorizationWithNothingOwedReverts() public {
-        uint256 strangerKey = 0xBEEF;
-        address signer = vm.addr(strangerKey);
+        (address signer, uint256 signerKey) = makeAddrAndKey("uncredited");
         uint256 validBefore = block.timestamp + 1 hours;
-        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(strangerKey, signer, 1, validBefore, keccak256("n1"));
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(signerKey, signer, 1, validBefore, keccak256("n1"));
 
         vm.expectRevert(abi.encodeWithSelector(IVerdiktRegistry.InsufficientOwed.selector, signer, 1, 0));
         registry.withdrawWithAuthorization(signer, 1, validBefore, keccak256("n1"), v, r, s);
@@ -816,10 +815,18 @@ contract VerdiktRegistryTest is Test {
 
     /// @dev Same shared `_lock` as `withdraw()`: a recipient that re-enters
     ///      during its own payout cannot double-spend the credit.
+    ///
+    ///      The attacker is credited a refund of its own first, deliberately.
+    ///      Without that, its re-entrant `withdraw()` would revert
+    ///      `NothingOwed` and the test would pass with the guard deleted —
+    ///      proving nothing about the lock. Owed something, the re-entry is a
+    ///      real second payout that only `nonReentrant` stops.
     function test_reentrantRecipientCannotDoublePayViaWithdrawWithAuthorization() public {
         _register();
         ReentrantPayer attacker = new ReentrantPayer(registry);
         _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        _deliver("r2", IVerdiktRegistry.Outcome.FAIL, address(attacker), 5e6);
+        assertEq(registry.getOwed(address(attacker)), REFUND);
         uint256 validBefore = block.timestamp + 1 hours;
         bytes32 nonce = keccak256("n1");
         (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, address(attacker), REFUND, validBefore, nonce);
@@ -829,15 +836,72 @@ contract VerdiktRegistryTest is Test {
 
         assertEq(address(attacker).balance, 0);
         assertEq(registry.getOwed(payer), REFUND);
+        assertEq(registry.getOwed(address(attacker)), REFUND);
         assertFalse(registry.isAuthorizationUsed(payer, nonce));
+    }
+
+    /// @dev The digest is bound to this deployment through
+    ///      `DOMAIN_SEPARATOR`'s `verifyingContract`. A signature made against
+    ///      a sibling registry recovers some unrelated address here rather
+    ///      than the payer, so a credit cannot be drawn across deployments —
+    ///      the same binding that stops a cross-chain replay, and the one a
+    ///      refactor of the separator would silently drop.
+    function test_withdrawWithAuthorizationIsBoundToThisDeployment() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        VerdiktRegistry sibling = new VerdiktRegistry(FORWARDER, WORKFLOW_OWNER, WORKFLOW_NAME, DEPOSIT, REFUND);
+        assertTrue(sibling.DOMAIN_SEPARATOR() != registry.DOMAIN_SEPARATOR());
+
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        bytes32 structHash = keccak256(abi.encode(WITHDRAW_AUTHORIZATION_TYPEHASH, payer, REFUND, validBefore, nonce));
+        bytes32 foreignDigest = keccak256(abi.encodePacked("\x19\x01", sibling.DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(payerKey, foreignDigest);
+
+        vm.expectPartialRevert(IVerdiktRegistry.InsufficientOwed.selector);
+        registry.withdrawWithAuthorization(payer, REFUND, validBefore, nonce, v, r, s);
+        assertEq(registry.getOwed(payer), REFUND);
+    }
+
+    /// @dev A claim of nothing would otherwise succeed for *any* signature —
+    ///      zero never exceeds what an address is owed, so a forged one would
+    ///      spend a nonce and emit `RefundClaimed` for an account nobody signed
+    ///      as. `withdraw()` refuses to pay nothing; so does this.
+    function test_withdrawWithAuthorizationRejectsAZeroClaim() public {
+        _register();
+        _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 nonce = keccak256("n1");
+        (uint8 v, bytes32 r, bytes32 s) = _signAuthorization(payerKey, payer, 0, validBefore, nonce);
+
+        vm.expectRevert(IVerdiktRegistry.ZeroClaim.selector);
+        registry.withdrawWithAuthorization(payer, 0, validBefore, nonce, v, r, s);
+        assertFalse(registry.isAuthorizationUsed(payer, nonce));
+    }
+
+    /// @dev The same zero claim, this time with bytes nobody signed. It must
+    ///      not be the one shape an unauthenticated caller can push through.
+    function test_withdrawWithAuthorizationRejectsAZeroClaimOnAForgedSignature() public {
+        uint256 validBefore = block.timestamp + 1 hours;
+        bytes32 s = bytes32(uint256(1));
+        bytes32 r;
+        for (uint256 i = 0; i < 64; ++i) {
+            r = keccak256(abi.encode(i));
+            if (ecrecover(bytes32(uint256(1)), 27, r, s) != address(0)) break;
+        }
+
+        vm.expectRevert(IVerdiktRegistry.ZeroClaim.selector);
+        registry.withdrawWithAuthorization(stranger, 0, validBefore, keccak256("junk"), 27, r, s);
     }
 
     function testFuzz_withdrawWithAuthorizationNeverPaysMoreThanSigned(uint64 paidMinor, uint256 requested) public {
         _register();
+        // A non-zero payment always credits something: `min` of three terms
+        // that are each non-zero here. So `owed > 0` needs no second assume.
         vm.assume(paidMinor > 0);
+        vm.assume(requested > 0);
         _deliver("r1", IVerdiktRegistry.Outcome.FAIL, payer, paidMinor);
         uint256 owed = registry.getOwed(payer);
-        vm.assume(owed > 0);
 
         uint256 validBefore = block.timestamp + 1 hours;
         bytes32 nonce = keccak256("n1");
@@ -873,5 +937,19 @@ contract VerdiktRegistryTest is Test {
         vm.prank(payer);
         registry.withdraw();
         assertEq(address(registry).balance, registry.getDeposit(serviceId) + registry.getOwed(stranger));
+
+        // The signature path moves value out of the same two buckets, so it
+        // has to leave the identity standing too.
+        _deliver("r4", IVerdiktRegistry.Outcome.FAIL, payer, 5e6);
+        uint256 validBefore = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signAuthorization(payerKey, makeAddr("elsewhere"), REFUND, validBefore, keccak256("n1"));
+        vm.prank(stranger);
+        registry.withdrawWithAuthorization(makeAddr("elsewhere"), REFUND, validBefore, keccak256("n1"), v, r, s);
+
+        assertEq(
+            address(registry).balance,
+            registry.getDeposit(serviceId) + registry.getOwed(payer) + registry.getOwed(stranger)
+        );
     }
 }

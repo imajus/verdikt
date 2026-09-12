@@ -462,17 +462,24 @@ State machine, table-driven:
 - [x] `withdraw` with nothing owed → reverts, never underflows
 - [x] `withdrawWithAuthorization` → pays the recipient the signer named,
       relayed by a third party that gains nothing
-- [x] Replayed nonce, expired authorization, zero recipient, amount above
-      what is owed → revert
-- [x] A tampered signed field → recovers an unrelated signer, which is owed
+- [x] Replayed nonce, expired authorization, zero recipient, zero amount,
+      amount above what is owed → revert. Zero is the one amount that clears
+      every owed balance, so without its own guard a *forged* signature would
+      settle: `ecrecover` on arbitrary bytes names some address, and nothing
+      is never more than that address is owed
+- [x] A tampered signed field, or a signature made against another
+      deployment's domain → recovers an unrelated signer, which is owed
       nothing; out-of-range `v` or malleable `s` → revert
 - [x] Recipient that reverts, or re-enters → the claim fails with the credit
-      and the nonce untouched; no double payout
+      and the nonce untouched; no double payout. The re-entering attacker is
+      credited a refund of its own first, or its inner `withdraw()` would
+      revert `NothingOwed` and the test would pass with the guard deleted
 - [x] Fuzz: a claim pays exactly the signed amount or reverts, never more
       than is owed
 - [x] Fuzz: credit is simultaneously ≤ `paidAmount`, ≤ `FIXED_REFUND` and
       ≤ the remaining deposit, for every outcome
-- [x] Solvency: contract balance always equals bonds plus credits
+- [x] Solvency: contract balance always equals bonds plus credits, across both
+      pull paths
 - [x] `serviceIdOf` agrees with `packages/sdk/registry.js` on shared vectors —
       both sides assert the same two hashes
 

@@ -219,7 +219,11 @@ non-confidential logic in the TEE.
   the amount are named in that signature, so they are the payer's decision and
   not the relayer's, and a single-use nonce stops the authorization being
   replayed. `withdraw()` remains the cheaper path for a payer that can transact
-  on Arc.
+  on Arc. Two details the signature is only as good as: the amount is in Arc's
+  18-decimal native view, the units `getOwed` reports and *not* the 6-decimal
+  minor units x402 carries; and a claim of nothing is refused outright, because
+  zero is the one amount no owed balance can be short of, which would otherwise
+  make a forged signature settle as readily as a real one.
 - **Refund capped at the amount paid** — `min(fixedRefund, paidAmount)`, never a
   penalty on top. With no dispute layer, a refund larger than the payment would
   make induced failure profitable; capping at the payment makes griefing

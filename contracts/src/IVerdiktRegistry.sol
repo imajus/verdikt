@@ -135,6 +135,12 @@ interface IVerdiktRegistry {
     error AuthorizationAlreadyUsed(address payer, bytes32 nonce);
     error InvalidSignature();
     error ZeroRecipient();
+    /// @dev A claim of nothing pays nothing but still spends its nonce, and
+    ///      succeeds for *any* signature at all — `ecrecover` on random bytes
+    ///      names some address, and zero is never more than that address is
+    ///      owed. Refusing it keeps the path authenticated and mirrors
+    ///      `withdraw()`, which refuses to pay nothing too.
+    error ZeroClaim();
     error InsufficientOwed(address payer, uint256 requested, uint256 available);
 
     // -- report payload validity. The forwarder/workflow-owner checks live in
@@ -171,6 +177,11 @@ interface IVerdiktRegistry {
     ///      signature over the other four, so the recipient and the amount are
     ///      the signer's to name and a relayer can only pass them on verbatim.
     ///      `nonce` is single-use per payer.
+    /// @param amount in Arc's 18-decimal native view, the same units
+    ///        `getOwed` reports — **not** the 6-decimal minor units x402 and
+    ///        the SLA's price clause carry. They differ by
+    ///        `NATIVE_PER_MINOR_UNIT`, so signing a minor-unit figure claims a
+    ///        millionth of a millionth of it and spends the nonce doing so.
     function withdrawWithAuthorization(
         address recipient,
         uint256 amount,
