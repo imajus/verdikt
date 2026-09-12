@@ -1,6 +1,37 @@
 // Proxy configuration, read once at startup.
 
 /**
+ * The chains a *provider* can ask to be paid on, mapped from the name its env
+ * var uses to the chain id its 402 names. Read only to ask a smart-contract
+ * account whether it authorized a payment (ERC-1271).
+ *
+ * Names rather than ids in the environment, because `PAYMENT_BASE_RPC_URL` is
+ * reviewable in a config file and `PAYMENT_RPC_URL_8453` is not. The id belongs
+ * here, once, where it can be commented — an x402 challenge names its chain as
+ * CAIP-2 (`eip155:8453`), so the lookup has to happen somewhere either way.
+ *
+ * A chain absent from this table, or present with no URL set, simply cannot
+ * have contract payers verified on it — their payments are refused rather than
+ * trusted, which is the safe direction.
+ */
+export const PAYMENT_CHAIN_IDS = Object.freeze({
+  ETHEREUM: 1,
+  BNB: 56,
+  GNOSIS: 100,
+  POLYGON: 137,
+  // X Layer, which `pnl` prices on. Its Alchemy host is `xlayer-mainnet`;
+  // `xlayer-testnet` is chain 1952 and answers for a different chain entirely.
+  XLAYER: 196,
+  // `pnl`'s challenge also advertises a `method="tempo"` payment path whose own
+  // `methodDetails.chainId` is this one.
+  TEMPO: 4217,
+  BASE: 8453,
+  ARBITRUM: 42161,
+  LINEA: 59144,
+  BASE_SEPOLIA: 84532
+});
+
+/**
  * @param {Record<string, string|undefined>} [source]
  * @returns {ProxyConfig}
  */
@@ -27,27 +58,19 @@ export function loadConfig(source = process.env) {
     return { triggerUrl, workflowId, privateKey, callbackUrl, timeoutMs: Number(env('PROXY_VERIFY_TIMEOUT_MS') ?? 45_000) };
   };
   /**
-   * `PAYMENT_RPC_URLS` as `<chainId>=<url>` pairs, comma-separated —
-   * e.g. `8453=https://mainnet.base.org,137=https://polygon-rpc.com`.
-   *
-   * A map rather than a single URL because the chain is the *provider's*
-   * choice: its 402 names where it wants to be paid, and that is routinely
-   * neither of Verdikt's own two chains. Unparseable pairs are dropped rather
-   * than thrown on — a typo in one chain must not take the proxy down for the
-   * rest, and the consequence is only that contract payers on that chain are
-   * refused, which is the safe direction.
+   * `PAYMENT_<NAME>_RPC_URL` for each chain in `PAYMENT_CHAIN_IDS`, keyed by
+   * chain id for the reader that uses it. One variable per chain, so a single
+   * chain can be repointed — or promoted to a `wrangler secret` — without
+   * touching the rest.
    *
    * @returns {Record<number, string>}
    */
   const paymentRpcUrls = () => {
     /** @type {Record<number, string>} */
     const urls = {};
-    for (const pair of (env('PAYMENT_RPC_URLS') ?? '').split(',')) {
-      const at = pair.indexOf('=');
-      if (at < 1) continue;
-      const chainId = Number(pair.slice(0, at).trim());
-      const url = pair.slice(at + 1).trim();
-      if (Number.isInteger(chainId) && chainId > 0 && url !== '') urls[chainId] = url;
+    for (const [name, chainId] of Object.entries(PAYMENT_CHAIN_IDS)) {
+      const url = env(`PAYMENT_${name}_RPC_URL`);
+      if (url) urls[chainId] = url;
     }
     return urls;
   };

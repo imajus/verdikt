@@ -41,12 +41,19 @@
     // replacement has to be checked from a Worker, not from a laptop.
     //
     // Breadth is cheap here and the chain is the provider's choice, so every
-    // network enabled on the Alchemy app is listed. A chain that is absent
-    // simply cannot have contract payers verified on it: notably X Layer
-    // (eip155:196), which `pnl` prices on — the app has X Layer *testnet*
-    // (1952), a different chain, and CRE has no selector for the mainnet
-    // either.
-    "PAYMENT_RPC_URLS": "1=https://eth-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,56=https://bnb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,100=https://gnosis-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,137=https://polygon-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,4217=https://tempo-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,8453=https://base-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,42161=https://arb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,59144=https://linea-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,84532=https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
+    // network enabled on the Alchemy app gets an entry. Chain ids live in
+    // `PAYMENT_CHAIN_IDS` (proxy/src/config.js); a name with no entry here
+    // cannot have contract payers verified on it.
+    "PAYMENT_ETHEREUM_RPC_URL": "https://eth-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BNB_RPC_URL": "https://bnb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_GNOSIS_RPC_URL": "https://gnosis-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_POLYGON_RPC_URL": "https://polygon-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_XLAYER_RPC_URL": "https://xlayer-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_TEMPO_RPC_URL": "https://tempo-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BASE_RPC_URL": "https://base-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_ARBITRUM_RPC_URL": "https://arb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_LINEA_RPC_URL": "https://linea-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    "PAYMENT_BASE_SEPOLIA_RPC_URL": "https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every

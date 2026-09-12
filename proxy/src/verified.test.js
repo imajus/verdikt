@@ -231,13 +231,13 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
   // `decodePayment` can only settle it by asking the account (ERC-1271). That
   // ask is an `eth_call` on the *payment's* chain — whichever chain the
   // provider's 402 named, routinely neither of Verdikt's own two — so the
-  // proxy hands down a reader built from `PAYMENT_RPC_URLS`. Live, this was
+  // proxy hands down a reader built from the `PAYMENT_<NAME>_RPC_URL` vars. Live, this was
   // the whole of a `payment_undecodable` 500 on a call the agent had paid for.
   describe('the reader it gives decodePayment for a contract-account payer', () => {
     const withRpc = loadConfig({
       PROXY_PUBLIC_HOST: 'verdikt.bond',
       VERDIKT_REGISTRY_ADDRESS: '0x01',
-      PAYMENT_RPC_URLS: '8453=https://base.example/rpc'
+      PAYMENT_BASE_RPC_URL: 'https://base.example/rpc'
     });
     const MAGIC_WORD = `0x1626ba7e${'00'.repeat(28)}`;
 
