@@ -87,6 +87,15 @@ interface DecodedPayment {
   amount: bigint;
 }
 
+/**
+ * One `eth_call`, on whichever chain a payment names. Injected rather than
+ * built inside the SDK so no endpoint is hardcoded here and tests stay offline
+ * — the caller owns which chains it is willing to read.
+ *
+ * Returns the raw hex return data; `0x` for an address with no code.
+ */
+type EthCall = (request: { chainId: number; to: string; data: string }) => Promise<string>;
+
 interface ArcOptions {
   /** Defaults to `ARC_RPC_URL`, then Arc Testnet's public RPC. */
   rpcUrl?: string;

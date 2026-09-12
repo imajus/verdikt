@@ -32,23 +32,32 @@ const CHALLENGE_ACCEPTS = [{ scheme: 'exact', network: 'eip155:84532', extra: { 
  *   accepts-probe with. Defaults to a 402 carrying `CHALLENGE_ACCEPTS`, since the verified branch now
  *   fetches this on every paid call (see 'the accepts wiring' below) — a test that cares only about the
  *   workflow outcome should not have to know that.
+ * @param {ProxyConfig} [options.config] overrides the default, for the tests that care which
+ *   payment-chain RPCs are configured.
  */
-function harness({ result, noWorkflow = false, paymentError, upstream } = {}) {
+function harness({ result, noWorkflow = false, paymentError, upstream, config: configOverride = config } = {}) {
   const verify = vi.fn(async (/** @type {VerificationRequest} */ _request) => {
     if (result instanceof Error) throw result;
     return result ?? verdict();
   });
-  const decodePayment = vi.fn(async () => {
-    if (paymentError) throw paymentError;
-    return { payer: PAYER, amount: 2500n };
-  });
+  // Params are declared, unused as they are, so `mock.lastCall` stays a typed
+  // 2-tuple — the reader wiring is asserted off its second argument.
+  const decodePayment = vi.fn(
+    async (
+      /** @type {string} */ _header,
+      /** @type {{ accepts: unknown[], ethCall?: EthCall }} */ _options
+    ) => {
+      if (paymentError) throw paymentError;
+      return { payer: PAYER, amount: 2500n };
+    }
+  );
   const upstreamFetch = vi.fn(async (/** @type {URL|string} */ _url, /** @type {RequestInit} */ _init) =>
     typeof upstream === 'function'
       ? upstream()
       : (upstream ?? new Response(JSON.stringify({ accepts: CHALLENGE_ACCEPTS }), { status: 402 }))
   );
   const deps = /** @type {ProxyDeps} */ ({
-    config,
+    config: configOverride,
     resolveServiceRecord: async () => ({
       ...SERVICE_RECORD,
       address: '0x2222222222222222222222222222222222222222',
@@ -151,7 +160,7 @@ describe('the verified branch — the accepts wiring', () => {
     const { deps, decodePayment, upstreamFetch } = harness();
     await paidCall(deps);
 
-    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), { accepts: CHALLENGE_ACCEPTS });
+    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ accepts: CHALLENGE_ACCEPTS }));
     expect(upstreamFetch).toHaveBeenCalledTimes(1);
     expect(String(upstreamFetch.mock.calls[0][0])).toBe('https://provider.example/weather/current?lat=52');
   });
@@ -217,13 +226,57 @@ describe('the verified branch — x402 v2’s payment-signature header', () => {
     expect(headers['x-payment']).toBeUndefined();
   });
 
+  // A Circle agent wallet pays as a deployed smart-contract account: the
+  // signature is made by an owner key and validated by the account itself, so
+  // `decodePayment` can only settle it by asking the account (ERC-1271). That
+  // ask is an `eth_call` on the *payment's* chain — whichever chain the
+  // provider's 402 named, routinely neither of Verdikt's own two — so the
+  // proxy hands down a reader built from `PAYMENT_RPC_URLS`. Live, this was
+  // the whole of a `payment_undecodable` 500 on a call the agent had paid for.
+  describe('the reader it gives decodePayment for a contract-account payer', () => {
+    const withRpc = loadConfig({
+      PROXY_PUBLIC_HOST: 'verdikt.bond',
+      VERDIKT_REGISTRY_ADDRESS: '0x01',
+      PAYMENT_RPC_URLS: '8453=https://base.example/rpc'
+    });
+    const MAGIC_WORD = `0x1626ba7e${'00'.repeat(28)}`;
+
+    it('calls the RPC configured for the payment’s chain, and returns what it answers', async () => {
+      const { deps, decodePayment, upstreamFetch } = harness({ config: withRpc });
+      upstreamFetch.mockImplementation(async (/** @type {URL|string} */ url) =>
+        String(url) === 'https://base.example/rpc'
+          ? new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: MAGIC_WORD }))
+          : new Response(JSON.stringify({ accepts: CHALLENGE_ACCEPTS }), { status: 402 })
+      );
+      await paidCall(deps);
+
+      const ethCall = /** @type {EthCall} */ (decodePayment.mock.lastCall?.[1]?.ethCall);
+      expect(await ethCall({ chainId: 8453, to: '0xacc0', data: '0xdeadbeef' })).toBe(MAGIC_WORD);
+      const rpcCall = upstreamFetch.mock.calls.find(([url]) => String(url) === 'https://base.example/rpc');
+      expect(JSON.parse(String(rpcCall?.[1]?.body))).toMatchObject({
+        method: 'eth_call',
+        params: [{ to: '0xacc0', data: '0xdeadbeef' }, 'latest']
+      });
+    });
+
+    // Refusing beats guessing: an unconfigured chain means Verdikt cannot check
+    // who authorized the payment, and `decodePayment` treats the throw as "did
+    // not validate" rather than crediting an unverified payer.
+    it('refuses a chain it has no RPC for, rather than reading some other chain', async () => {
+      const { deps, decodePayment } = harness({ config: withRpc });
+      await paidCall(deps);
+      const ethCall = /** @type {EthCall} */ (decodePayment.mock.lastCall?.[1]?.ethCall);
+      await expect(ethCall({ chainId: 137, to: '0xacc0', data: '0x' })).rejects.toThrow(/no RPC configured for chain 137/);
+    });
+  });
+
   it('reads the accepts probe’s challenge out of the v2 `payment-required` header when the body has none', async () => {
     const encoded = Buffer.from(JSON.stringify({ accepts: CHALLENGE_ACCEPTS })).toString('base64');
     const { deps, decodePayment } = harness({
       upstream: () => new Response('not json at all', { status: 402, headers: { 'payment-required': encoded } })
     });
     await paidCall(deps);
-    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), { accepts: CHALLENGE_ACCEPTS });
+    expect(decodePayment).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ accepts: CHALLENGE_ACCEPTS }));
   });
 
   // The enclave replays the payment to the provider itself (workflow.ts) and

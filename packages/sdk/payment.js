@@ -22,7 +22,7 @@
 // was chasing, and it now covers every `exact` option a real challenge has
 // been seen to offer.
 
-import { getAddress, hashTypedData, recoverAddress } from 'viem';
+import { decodeFunctionResult, encodeFunctionData, getAddress, hashTypedData, recoverAddress } from 'viem';
 import { DECODED_PAYMENT } from '@verdikt/fixtures';
 
 /** Set `VERDIKT_ALLOW_STUB_PAYMENT=true` to develop against the fixture. */
@@ -43,6 +43,28 @@ const TRANSFER_WITH_AUTHORIZATION = {
     { name: 'nonce', type: 'bytes32' }
   ]
 };
+
+/**
+ * ERC-1271's `isValidSignature`, the only way a *contract* account can answer
+ * whether it authorized a hash. A smart-contract account holds no key of its
+ * own — an owner key signs for it — so ECDSA recovery returns that owner and
+ * never the account, which is why the account has to be asked directly.
+ */
+const IS_VALID_SIGNATURE_ABI = /** @type {const} */ ([
+  {
+    name: 'isValidSignature',
+    type: 'function',
+    stateMutability: 'view',
+    inputs: [
+      { name: 'hash', type: 'bytes32' },
+      { name: 'signature', type: 'bytes' }
+    ],
+    outputs: [{ name: '', type: 'bytes4' }]
+  }
+]);
+
+/** `bytes4(keccak256("isValidSignature(bytes32,bytes)"))`, ERC-1271's "yes". */
+const ERC1271_MAGIC = '0x1626ba7e';
 
 /**
  * Whether decoding is backed by real verification rather than the fixture.
@@ -185,8 +207,10 @@ function matchingOption(envelope, accepts) {
  * GatewayWalletBatched (issue #41) and would happen again to the next one.
  *
  * @param {string} header raw payment header value
- * @param {{ accepts?: any[], allowStub?: boolean }} [options] `accepts` is the
- *   challenge's own array — required to verify anything.
+ * @param {{ accepts?: any[], allowStub?: boolean, ethCall?: EthCall }} [options]
+ *   `accepts` is the challenge's own array — required to verify anything.
+ *   `ethCall` is what lets a *contract* account be verified at all: without it
+ *   a smart-contract payer is refused rather than trusted.
  * @returns {Promise<DecodedPayment>}
  */
 export async function decodePayment(header, options = {}) {
@@ -197,7 +221,7 @@ export async function decodePayment(header, options = {}) {
   const option = options.accepts ? matchingOption(envelope, options.accepts) : null;
 
   if (envelope.scheme === 'exact' && option) {
-    return verifyExact(envelope, option);
+    return verifyExact(envelope, option, options.ethCall);
   }
 
   const named = option ? (option.extra?.name ?? 'unknown') : 'unknown (no accepts supplied)';
@@ -230,11 +254,19 @@ export async function decodePayment(header, options = {}) {
  * payer that could choose its own domain could sign a harmless message on
  * some other contract and present it here.
  *
+ * Two kinds of payer sign this same message, and they are verified differently.
+ * An EOA's signature recovers to the payer itself. A smart-contract account
+ * holds no key — an owner key signs for it — so recovery yields that owner, and
+ * only the account can say whether it authorized the hash (ERC-1271). Recovery
+ * is tried first because it is offline and covers the common case; the account
+ * is asked only when recovery does not match, and only if a reader was supplied.
+ *
  * @param {{ network: string, payload: Record<string, any> }} envelope
  * @param {any} option the matching `accepts` entry
+ * @param {EthCall} [ethCall] reader for the payment's own chain, for ERC-1271
  * @returns {Promise<DecodedPayment>}
  */
-async function verifyExact(envelope, option) {
+async function verifyExact(envelope, option, ethCall) {
   const { signature, authorization } = envelope.payload;
   if (typeof signature !== 'string' || !authorization || typeof authorization !== 'object') {
     throw new Error('decodePayment: payload needs a signature and an authorization');
@@ -265,24 +297,38 @@ async function verifyExact(envelope, option) {
     nonce: authorization.nonce
   };
 
-  const recovered = await recoverAddress({
-    hash: hashTypedData({
-      domain,
-      types: TRANSFER_WITH_AUTHORIZATION,
-      primaryType: 'TransferWithAuthorization',
-      message
-    }),
-    signature: /** @type {`0x${string}`} */ (signature)
+  const hash = hashTypedData({
+    domain,
+    types: TRANSFER_WITH_AUTHORIZATION,
+    primaryType: 'TransferWithAuthorization',
+    message
   });
+  const recovered = await recoverAddress({ hash, signature: /** @type {`0x${string}`} */ (signature) });
 
   if (getAddress(recovered) !== message.from) {
-    throw new Error(
-      `decodePayment: signature does not bind this payment to ${message.from} (recovered ${getAddress(recovered)}). ` +
-        'Refusing: the payer named here is who a refund would be credited to.'
-    );
+    const validated =
+      ethCall !== undefined &&
+      (await validatedByAccount({ ethCall, chainId: domain.chainId, account: message.from, hash, signature }));
+    if (!validated) {
+      throw new Error(
+        `decodePayment: signature does not bind this payment to ${message.from} (recovered ${getAddress(recovered)}). ` +
+          'Refusing: the payer named here is who a refund would be credited to.' +
+          (ethCall === undefined
+            ? ' If this payer is a smart-contract account, verifying it needs a reader for its chain (ERC-1271).'
+            : '')
+      );
+    }
   }
 
   // `payTo` is checked because the signature binds `to` as tightly as `from`.
+  //
+  // NOTE (rotating payout addresses): a seller that mints a single-use `payTo`
+  // per challenge fails here, because the option this is checked against comes
+  // from a *fresh* probe rather than from the challenge the payer answered.
+  // Seen live on a Stripe-custody seller: three probes, three addresses. The
+  // guard is not the bug — it is what stops an agent paying itself and
+  // collecting a refund on a call the provider never got — so supporting those
+  // sellers needs a different anchor, not a weaker check.
   // A payment signed to somebody else's address is a valid signature over the
   // wrong payment, and crediting it here would let an agent claim a refund on
   // a call this provider was never paid for.
@@ -293,4 +339,43 @@ async function verifyExact(envelope, option) {
   }
 
   return { payer: message.from, amount: message.value };
+}
+
+/**
+ * Ask a smart-contract account whether it authorized this hash (ERC-1271).
+ *
+ * The account's own answer is the authority here, which is why it is read from
+ * the chain rather than inferred. This does not weaken the payer binding: a
+ * contract that validates anything gains an attacker nothing it could not do
+ * already by signing properly from an address it controls — what stops a
+ * fabricated payment is `payTo` plus the provider's own acceptance of it.
+ *
+ * Any failure — no code at that address, a reverted call, a short or unexpected
+ * return — is "did not validate", never an exception. A bogus payer address
+ * then fails exactly the way a wrong signature does, and an RPC hiccup cannot
+ * turn into a 500 on a call the agent has already paid for.
+ *
+ * @param {{ ethCall: EthCall, chainId: number, account: string, hash: string, signature: string }} args
+ * @returns {Promise<boolean>}
+ */
+async function validatedByAccount({ ethCall, chainId, account, hash, signature }) {
+  try {
+    const returned = await ethCall({
+      chainId,
+      to: account,
+      data: encodeFunctionData({
+        abi: IS_VALID_SIGNATURE_ABI,
+        functionName: 'isValidSignature',
+        args: [/** @type {`0x${string}`} */ (hash), /** @type {`0x${string}`} */ (signature)]
+      })
+    });
+    const magic = decodeFunctionResult({
+      abi: IS_VALID_SIGNATURE_ABI,
+      functionName: 'isValidSignature',
+      data: /** @type {`0x${string}`} */ (returned)
+    });
+    return magic === ERC1271_MAGIC;
+  } catch {
+    return false;
+  }
 }

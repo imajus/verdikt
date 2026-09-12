@@ -18,6 +18,14 @@ interface ProxyConfig {
     timeoutMs: number;
   } | null;
   arc: { rpcUrl?: string; address?: string; deployBlock?: bigint };
+  /**
+   * Chain id -> RPC URL, for reading the chain a *payment* names — which is
+   * whatever chain the provider's own 402 offers, not one of Verdikt's two.
+   * Only used to ask a smart-contract account whether it authorized a payment
+   * (ERC-1271). A chain that is absent here cannot have contract payers
+   * verified on it, and their payments are refused rather than trusted.
+   */
+  paymentRpcUrls: Record<number, string>;
 }
 
 /** Everything the router reaches outside itself, injectable so tests need no network. */
@@ -28,7 +36,13 @@ interface ProxyDeps {
   fetch?: typeof fetch;
   /** Absent means the proxy cannot verify a paid call and says so, rather than relaying one unverified. */
   workflow?: WorkflowClient | null;
-  decodePayment?: (header: string) => Promise<DecodedPayment>;
+  /**
+   * `accepts` is the challenge's own array, and `ethCall` reads the payment's
+   * chain so a smart-contract account can be asked whether it authorized the
+   * payment (ERC-1271). Both are passed on every call — the router has always
+   * passed `accepts`, and this type used to omit it.
+   */
+  decodePayment?: (header: string, options: { accepts: unknown[]; ethCall?: EthCall }) => Promise<DecodedPayment>;
   /** Injectable so a test can assert the id that comes back in the response headers. */
   newRequestId?: () => string;
   /** Backs the discovery API. Absent means /services answers 503. */
