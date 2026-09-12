@@ -16,7 +16,7 @@ export function renderDetail(listing) {
 /**
  * @param {Marketplace|null} marketplace
  * @param {'live'|'demo'} mode
- * @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'try'|'terms'|'privacy'} view
+ * @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy'} view
  * @param {string|null} selectedSlug
  * @param {string|null} [address]
  * @param {string|null} [rejected]

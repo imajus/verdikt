@@ -755,25 +755,34 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 .tagline.lead { font-size: 19px; max-width: 56ch; }
 .landing-cta { margin: 26px 0 0; display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; }
 .landing-cta wa-button { margin-top: 0; }
-/* The page's focal action, so it is painted in the page's own ink rather than
-   the component library's neutral slate: ink on paper for the primary, the
-   page's own strong rule for the ruled sibling, and the figure's square
-   corners on both. */
-.landing-cta wa-button::part(button) {
-  font-size: 16.5px; padding-inline: 22px; border-radius: 2px;
-  font-weight: 500; transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
+/* The page's focal actions, so they are painted in the page's own ink rather
+   than the component library's neutral slate: ink on paper for the primary,
+   the page's own strong rule for the ruled sibling, and the figure's square
+   corners on both. The try-it chat's own Send shares the paint and not the
+   size — it is one rank below the hero's pair, not a second pair of them. */
+.landing-cta wa-button::part(button),
+.demo-composer wa-button::part(button) {
+  border-radius: 2px; font-weight: 500;
+  transition: background-color 120ms ease, color 120ms ease, border-color 120ms ease;
 }
+.landing-cta wa-button::part(button) { font-size: 16.5px; padding-inline: 22px; }
+.demo-composer wa-button::part(button) { font-size: 15px; padding-inline: 18px; }
 /* Web Awesome reflects `appearance="accent"` onto the host itself, so the
    primary has to be named by that attribute — `:not([appearance])` matches
    nothing and leaves the button in the library's slate. */
-.landing-cta wa-button[appearance="accent"]::part(button) {
+.landing-cta wa-button[appearance="accent"]::part(button),
+.demo-composer wa-button[appearance="accent"]::part(button) {
   background: var(--ink); color: var(--paper); border: 1.5px solid var(--ink);
 }
-.landing-cta wa-button[appearance="accent"]:hover::part(button) { background: var(--ink-2); border-color: var(--ink-2); }
-.landing-cta wa-button[appearance="outlined"]::part(button) {
+.landing-cta wa-button[appearance="accent"]:hover::part(button),
+.demo-composer wa-button[appearance="accent"]:hover::part(button) { background: var(--ink-2); border-color: var(--ink-2); }
+.landing-cta wa-button[appearance="outlined"]::part(button),
+.demo-composer wa-button[appearance="outlined"]::part(button) {
   background: none; color: var(--ink); border: 1.5px solid var(--rule-strong);
 }
-.landing-cta wa-button[appearance="outlined"]:hover::part(button) { background: var(--paper-2); }
+.landing-cta wa-button[appearance="outlined"]:hover::part(button),
+.demo-composer wa-button[appearance="outlined"]:hover::part(button) { background: var(--paper-2); }
+.demo-composer wa-button[disabled]::part(button) { opacity: 0.4; cursor: not-allowed; }
 .cta-aside { color: var(--muted); font-size: 15px; text-decoration: none; border-bottom: 1px solid var(--rule); }
 .cta-aside:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
@@ -1194,10 +1203,16 @@ table.tree tr.ignored td { padding-left: calc(var(--depth, 0) * 18px); font-size
    what happened. The closing "on the record" line is a fourth register:
    the page speaking directly once the roleplay is over, so it carries no
    bubble and no rule either. */
-.demo-chat { display: flex; flex-direction: column; gap: 18px; max-width: 66ch; }
+/* The whole component sits on the entry's own measure — 70ch of the entry
+   body's 18.15px reading size — so the visitor's right-leaning bubble ends
+   exactly where the paragraph above it ends instead of stopping short of it.
+   Every register inside declares its own size, so the host's only job here is
+   to make that `ch` resolve against the same type as the prose. */
+verdikt-demo-chat { display: block; max-width: 70ch; font-size: 18.15px; }
+.demo-chat { display: flex; flex-direction: column; gap: 16px; }
 .demo-turn { display: flex; flex-direction: column; }
 .demo-turn.demo-user { align-items: flex-end; }
-.demo-turn.demo-reply { align-items: flex-start; }
+.demo-turn.demo-reply { align-items: flex-start; margin-top: 4px; }
 .demo-who {
   margin: 0 0 6px; font-family: var(--mono); font-size: 11px;
   letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted);
@@ -1206,34 +1221,53 @@ table.tree tr.ignored td { padding-left: calc(var(--depth, 0) * 18px); font-size
 .demo-user .demo-bubble { background: transparent; border: 1.5px solid var(--rule-strong); }
 .demo-reply .demo-bubble { background: var(--paper-2); }
 .demo-text { margin: 0; font-size: 16.5px; color: var(--ink); }
-.demo-link {
-  display: inline-block; margin-top: 8px; font-size: 14.5px; color: var(--muted);
-  text-decoration: none; border-bottom: 1px solid var(--rule);
+/* Evidence is the whole point of this demo, so it is set in the system's link
+   blue and nothing quieter — three transactions a visitor can open are worth
+   more than the sentences around them. */
+.demo-link { color: var(--link); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.demo-link:hover { text-decoration-thickness: 2px; }
+/* One rule down the whole log, not a stub per line: the trail is a single
+   run of the aside's own left-rule idiom, which is what makes eight lines
+   read as one block of evidence. */
+.demo-log-lines {
+  list-style: none; margin: 0; padding: 2px 0 2px 14px;
+  border-left: 2px solid var(--rule);
+  display: flex; flex-direction: column; gap: 7px;
 }
-.demo-link:hover { color: var(--ink); border-bottom-color: var(--ink); }
-.demo-log-lines { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+/* Hanging indent, because a log line is one fact and a narrow screen wraps
+   several of them: the continuation steps in, so where a fact ends is read
+   from the shape of the block rather than from counting the gaps. */
 .demo-log-line {
-  padding-left: 14px; border-left: 1.5px solid var(--rule);
-  font-family: var(--mono); font-size: 13px; line-height: 1.5; color: var(--muted);
+  padding-left: 1.4em; text-indent: -1.4em;
+  font-family: var(--mono); font-size: 14px; line-height: 1.5; color: var(--muted);
 }
-.demo-log-line .outcome { font-family: var(--sans); }
-/* The evidence opens its own line rather than hanging under it, so the link
-   flows inline — and lifts to `ink-2` to read as the one clickable phrase on
-   a line of muted mono. */
-.demo-log-line .demo-link { display: inline; margin-top: 0; font-size: inherit; color: var(--ink-2); }
+/* `text-indent` inherits, and the outcome mark is an inline-flex whose items
+   are block containers — left alone, the hanging indent above would pull the
+   word back over its own dot. */
+.demo-log-line .outcome { font-family: var(--sans); text-indent: 0; }
+/* A figure and its unit are one token and never break across a line. */
+.demo-log-line .demo-value { font-size: inherit; color: var(--ink); white-space: nowrap; }
 /* The route the agent calls, named rather than linked — underlined wherever
-   it appears so one identifier reads as one thing in the log and in prose. */
-.demo-host { text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
+   it appears so one identifier reads as one thing in the log and in prose,
+   and in ink rather than muted so the underline is not mistaken for a link's. */
+.demo-host { color: var(--ink); text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 2px; }
 /* Block, not the flex column every other turn is: as a flex item the closing
    link would stretch, and its 1px underline would read as a full-width rule
-   across the sheet rather than as the link's own. */
-.demo-turn.demo-coda {
-  display: block; margin: 0; padding-top: 16px; border-top: 1px solid var(--rule);
-  color: var(--ink-2); font-size: 16.5px; font-style: italic;
+   across the sheet rather than as the link's own. It carries no rule of its
+   own either — the composer's is a few lines below, and two hairlines that
+   close to each other stripe the end of the exchange instead of ending it. */
+.demo-turn.demo-coda { display: block; margin: 10px 0 0; font-size: 16.5px; }
+/* The composer: the message before it is sent, on the ledger line it is
+   written on. Deliberately not a field — the script is fixed, so it takes no
+   caret, no placeholder and none of a hairline field's focus weight. It holds
+   its height while the script plays, so the control never jumps under the
+   pointer that just clicked it. */
+.demo-composer {
+  margin-top: 20px; padding-top: 14px; border-top: 1px solid var(--rule);
+  display: flex; align-items: center; gap: 18px;
 }
-.demo-coda .demo-link { margin-top: 0; color: var(--muted); }
-.demo-actions { margin-top: 22px; display: flex; align-items: center; gap: 14px; }
-.demo-actions wa-button { margin-top: 0; }
+.demo-draft { flex: 1; min-width: 0; margin: 0; min-height: 1.5em; font-size: 16.5px; color: var(--ink); }
+.demo-composer wa-button { flex: none; margin-top: 0; }
 @media (prefers-reduced-motion: no-preference) {
   .demo-turn { animation: demo-in 260ms ease both; }
   .demo-log-line { animation: demo-in 220ms ease both; }

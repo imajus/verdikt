@@ -54,7 +54,19 @@ export const DEMO_REFUNDED = '0.0025 USDC';
 export const DEMO_LATENCY = '87 ms';
 
 export const DEMO_USER_MESSAGE = 'Get weather for today in New York.';
-export const DEMO_REPLY = 'Sorry, something went wrong — the weather service isn’t answering properly right now. The {amount} it charged was refunded automatically, so you are not out of pocket. I’ll try a different service.';
+export const DEMO_REPLY = 'Sorry, something went wrong — the weather service isn’t answering properly right now. The {paid} it charged was refunded automatically, so you are not out of pocket. I’ll try a different service.';
+
+/**
+ * The figures the script quotes, by the token that stands for them in a step's
+ * text. They are named rather than interpolated so the renderer can tell a
+ * chain value from the words around it and set it in the page's own ink — in
+ * the log, where everything is already mono, that is the difference between a
+ * wall of grey and three facts you can find; in the reply, where the prose is
+ * sans, it is DESIGN.md's chain-data rule (a chain value never ships in the
+ * sans face).
+ * @type {Record<string, string>}
+ */
+export const DEMO_VALUES = { paid: DEMO_PAID, refunded: DEMO_REFUNDED, latency: DEMO_LATENCY };
 
 /**
  * A log step's `link` is not a footnote under the line — its `label` opens the
@@ -63,18 +75,15 @@ export const DEMO_REPLY = 'Sorry, something went wrong — the weather service i
  * what is on the other side (which chain, which record), because inline it is
  * all a reader gets before clicking.
  *
- * Three substitution tokens, each so a value keeps typography a plain string
- * cannot carry: `{amount}` in prose becomes mono (DESIGN.md's chain-data rule
- * — a chain value never ships in the sans face), `{outcome}` becomes the
- * dotted PASS/FAIL mark the ledger tables use, and `{host}` underlines the
- * proxy route wherever it is named. The closing step carries a link and no
- * text at all: the record speaks for itself.
+ * Two tokens beyond the values above, each carrying typography a plain string
+ * cannot: `{outcome}` becomes the dotted PASS/FAIL mark the ledger tables use,
+ * and `{host}` underlines the proxy route wherever it is named. The closing
+ * step carries a link and no text at all: the record speaks for itself.
  * @typedef {{
  *   kind: 'user'|'log'|'reply'|'coda',
  *   text: string,
  *   link?: { label: string, href: string, internal?: boolean },
- *   outcome?: 'fail',
- *   amount?: string
+ *   outcome?: 'fail'
  * }} DemoStep
  */
 
@@ -82,14 +91,14 @@ export const DEMO_REPLY = 'Sorry, something went wrong — the weather service i
 export const DEMO_SCRIPT = [
   { kind: 'user', text: DEMO_USER_MESSAGE },
   { kind: 'log', text: 'Send HTTP request to {host}' },
-  { kind: 'log', text: `Received 402 Payment Required — price ${DEMO_PAID}` },
+  { kind: 'log', text: 'Received 402 Payment Required — price {paid}' },
   { kind: 'log', text: 'Signed payment, resent the request' },
   {
     kind: 'log',
     text: '— accepted by Base Sepolia’s USDC contract',
     link: { label: 'Payment received', href: `https://sepolia.basescan.org/tx/${PAYMENT_TX}` }
   },
-  { kind: 'log', text: `Provider answered 200 in ${DEMO_LATENCY}` },
+  { kind: 'log', text: 'Provider answered 200 in {latency}' },
   {
     kind: 'log',
     text: 'is {outcome} — response is missing the advertised data',
@@ -98,9 +107,9 @@ export const DEMO_SCRIPT = [
   },
   {
     kind: 'log',
-    text: `— ${DEMO_REFUNDED}`,
+    text: '— {refunded}',
     link: { label: 'Refund booked', href: `${ARC_EXPLORER}/tx/${VERDICT_TX}` }
   },
-  { kind: 'reply', text: DEMO_REPLY, amount: DEMO_PAID },
+  { kind: 'reply', text: DEMO_REPLY },
   { kind: 'coda', text: '', link: { label: `${DEMO_SLUG}’s full verdict history`, href: DEMO_SERVICE_URL, internal: true } }
 ];

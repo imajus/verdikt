@@ -33,41 +33,67 @@ form's own label or placeholder says does not get restated in the prose that
 introduces it.
 
 Entry 01, `#try-it`, is the guided demo chat (issue #66 / #67, corrected
-three times over): one click, then it plays itself, terse throughout. Three
+several times over): one click, then it plays itself, terse throughout. Three
 registers, not a single turn-taking chat: the visitor's own message ("Get
 weather for today in New York.") is a bubble leaning right; between it and
-the reply, the calling agent's own status log is a plain mono trail down a
-left hairline — not a bubble, because it is not something either party said,
-it is what happened. Each log line is one fact, and where a line has evidence
-behind it the link opens the line rather than trailing under it ("Payment
-received ↗ — accepted by Base Sepolia's USDC contract", "On-chain verdict ↗
-is FAIL — response is missing the advertised data", "Refund booked ↗ —
-0.0025 USDC"), so the reader's eye lands on the record itself. Three figures
-run through the log (price `0.0025 USDC`, `87 ms` to answer, `0.0025 USDC`
-refunded) — all the same Arc verdict record in
+the reply, the calling agent's own status log is a plain mono trail down one
+continuous left hairline — the aside's own idiom, and not a bubble, because
+it is not something either party said, it is what happened. It carries no
+speaker caption either: the log is the register nobody spoke, and a second
+"AGENT" above the agent's own reply labelled the wrong thing twice. Each log
+line is one fact, hung on a 1.4em indent so a line that wraps on a phone is
+read as a continuation rather than as the next fact, and where a line has
+evidence behind it the link opens the line rather than trailing under it
+("Payment received ↗ — accepted by Base Sepolia's USDC contract", "On-chain
+verdict ↗ is FAIL — response is missing the advertised data", "Refund booked
+↗ — 0.0025 USDC"), in the system's own Ledger Blue, because three
+transactions a visitor can open are worth more than the sentences around
+them. Three figures run through the log (price `0.0025 USDC`, `87 ms` to
+answer, `0.0025 USDC` refunded) — all the same Arc verdict record in
 `docs/evidence/clause-detail-live.log`; the Base Sepolia signature is a
 separate leg for a different amount, so no money figure ever attaches to
-that line. The agent's reply — "something went wrong… I'll try a different
-service", naming the *weather service*, never the hostname or provider,
-because a person doesn't read wiring — states only the charge and that it
-was refunded, in mono where DEMO_SCRIPT's `{amount}` token marks it; the
-proxy route itself (`{host}`, underlined wherever it is named) appears only
-in the log, which is the agent's own record of what it dialed. A visitor who
-has asked for no motion gets the same script revealed in one frame instead of
-a slower version of the same wait. The closing step is link-only now — no
-editorial "on the record" prose, just `weather-lite's full verdict history →`
-back to the record — rendered as a block, not the flex column every other
-turn is, so the link's own 1px underline doesn't stretch into a full-width
-rule. None of it borrows a bubble shape or shadow the flat system doesn't
-already own (2px control radius, paper-2 tonal fill, the aside's own
-left-rule idiom for the log). No hero CTA points at it any more — it is the
-entry right after the hero, so a visitor reaches it on the same scroll that
-carries them past "Verified per call." It is not a `wide` entry — its margin sits in the ordinary
-right column, matching entries 02 and 03, rather than the bottom caption a
-wide entry gets. Its angle is onboarding, not disclosure: nothing to
-integrate (an agent already paying x402 uses Verdikt's proxy API endpoint
-instead of the provider's own — same challenge) — generic on purpose, unlike
-the log, which is free to name this one demo's actual `weather-lite.verdikt.bond`.
+that line. Each is named by its own token in `DEMO_SCRIPT` (`{paid}`,
+`{latency}`, `{refunded}`) rather than interpolated, which is what lets the
+renderer set a chain value apart from the words around it — mono inside the
+reply's sans prose, ink inside a log line that is already mono. The agent's
+reply — "something went wrong… I'll try a different service", naming the
+*weather service*, never the hostname or provider, because a person doesn't
+read wiring — states only the charge and that it was refunded; the proxy
+route itself (`{host}`, underlined wherever it is named) appears only in the
+log, which is the agent's own record of what it dialed.
+
+Under the exchange is a composer, which is what makes the entry read as a
+chat at rest rather than as a button with no object: the message sits on its
+own ledger line with `Send` at the end of it. Deliberately not a field — the
+script is fixed, so it takes no caret, no placeholder and none of a hairline
+field's focus weight — and it clears once sent, the way a real composer does,
+while holding its height so nothing moves. That control is one element for
+the whole script (Send, disabled while it plays, then Replay), painted in the
+page's own ink through the same `::part(button)` rules the hero's CTAs use
+and one size rank below them; when it comes back enabled, focus goes back to
+it, because disabling a focused control blurs it and the visitor who pressed
+Enter on Send would otherwise land back at the top of the document. A visitor
+who has asked for no motion gets the same script revealed in one frame
+instead of a slower version of the same wait.
+
+The whole component sits on the entry's own 70ch measure, so the
+right-leaning bubble ends exactly where the paragraph above it ends. The
+closing step is link-only — no editorial "on the record" prose, just
+`weather-lite's full verdict history →` back to the record — rendered as a
+block, not the flex column every other turn is, so the link's own underline
+doesn't stretch into a full-width rule, and carrying no rule of its own,
+because the composer's is a few lines below and two hairlines that close
+together stripe the end of the exchange instead of ending it. None of it
+borrows a bubble shape or shadow the flat system doesn't already own (2px
+control radius, paper-2 tonal fill, the aside's left rule for the log). No
+hero CTA points at it any more — it is the entry right after the hero, so a
+visitor reaches it on the same scroll that carries them past "Verified per
+call." It is not a `wide` entry — its margin sits in the ordinary right
+column, matching entries 02 and 03, rather than the bottom caption a wide
+entry gets. Its angle is onboarding, not disclosure: nothing to integrate (an
+agent already paying x402 uses Verdikt's proxy API endpoint instead of the
+provider's own — same challenge) — generic on purpose, unlike the log, which
+is free to name this one demo's actual `weather-lite.verdikt.bond`.
 
 Entry 05 closes the sheet and carries both asks, side by side above 1040px and
 stacked below it (`.entry-split`). Left, **Tell us what you are building** and

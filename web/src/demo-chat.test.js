@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render as renderToIterable } from '@lit-labs/ssr';
-import { DEMO_HOST, DEMO_PAID, DEMO_SCRIPT } from './demo-script.js';
+import { DEMO_HOST, DEMO_PAID, DEMO_SCRIPT, DEMO_USER_MESSAGE, DEMO_VALUES } from './demo-script.js';
 import { VerdiktDemoChat } from './demo-chat.js';
 
 /** @param {unknown} template */
@@ -10,6 +10,10 @@ const stringify = (template) => Array.from(renderToIterable(template)).join('');
 const plain = (/** @type {unknown} */ template) => stringify(template).replace(/<!--[^]*?-->/g, '');
 
 const LOG_STEP_COUNT = DEMO_SCRIPT.filter((step) => step.kind === 'log').length;
+
+/** The rendered log, one `<li>`'s inner markup per entry. */
+const logLines = (/** @type {string} */ html) =>
+  html.split('<li class="demo-log-line">').slice(1).map((rest) => rest.slice(0, rest.indexOf('</li>')));
 
 // Instantiated directly rather than via document.createElement — same reason
 // forms/wizard.test.js does: only the element's own logic is under test, and
@@ -27,6 +31,29 @@ describe('the try-it demo chat element', () => {
     const el = mount();
     expect(el.revealed).toBe(0);
     expect(stringify(el.render())).not.toContain('demo-turn');
+  });
+
+  // At rest the entry has to read as a chat rather than as a button with no
+  // object: the message is sitting in the composer, so Send has something
+  // visible to send.
+  it('shows the message waiting to be sent before anything is clicked', () => {
+    const html = plain(mount().render());
+    expect(html).toContain('class="demo-composer"');
+    expect(html.slice(html.indexOf('class="demo-draft"'))).toContain(DEMO_USER_MESSAGE);
+    expect(html).toContain('>Send<');
+  });
+
+  // The composer clears the way a real one does — the message is in the
+  // conversation now, not still waiting to be sent.
+  it('clears the draft once the message has been sent', () => {
+    vi.useFakeTimers();
+    const el = mount();
+    el.send();
+    const draft = plain(el.render());
+    expect(draft.slice(draft.indexOf('class="demo-draft"'))).not.toContain(DEMO_USER_MESSAGE);
+    vi.runAllTimers();
+    const done = plain(el.render());
+    expect(done.slice(done.indexOf('class="demo-draft"'))).not.toContain(DEMO_USER_MESSAGE);
   });
 
   it('reveals the visitor’s own message at once on send, before any timer fires', () => {
@@ -47,13 +74,23 @@ describe('the try-it demo chat element', () => {
     expect(el.revealed).toBe(DEMO_SCRIPT.length);
   });
 
-  it('hides the control entirely while the script is playing, and offers Replay once it finishes', () => {
+  // One control for the whole script, never two and never none: it holds its
+  // place so nothing moves under the pointer that just clicked it, and so the
+  // keyboard has something to come back to.
+  it('keeps the one control in place — disabled while the script plays, Replay once it finishes', () => {
     vi.useFakeTimers();
     const el = mount();
+    expect(stringify(el.render()).match(/<wa-button/g)?.length).toBe(1);
     el.send();
-    expect(stringify(el.render())).not.toContain('<wa-button');
+    const playing = stringify(el.render());
+    expect(playing.match(/<wa-button/g)?.length).toBe(1);
+    expect(playing).toContain('disabled');
+    expect(playing).not.toContain('Replay');
     vi.runAllTimers();
-    expect(stringify(el.render())).toContain('Replay');
+    const done = stringify(el.render());
+    expect(done.match(/<wa-button/g)?.length).toBe(1);
+    expect(done).toContain('Replay');
+    expect(done).not.toContain('disabled');
   });
 
   it('groups every consecutive log step into one status block', () => {
@@ -64,6 +101,32 @@ describe('the try-it demo chat element', () => {
     const html = stringify(el.render());
     expect(html.match(/class="demo-turn demo-log"/g)?.length).toBe(1);
     expect(html.match(/class="demo-log-line"/g)?.length).toBe(LOG_STEP_COUNT);
+  });
+
+  // The log is the one register nobody spoke, and a second "Agent" caption
+  // directly above the agent's own reply labelled the wrong thing twice.
+  it('labels the two bubbles and leaves the status log unattributed', () => {
+    vi.useFakeTimers();
+    const el = mount();
+    el.send();
+    vi.runAllTimers();
+    const html = stringify(el.render());
+    expect(html.match(/class="demo-who"/g)?.length).toBe(2);
+    const log = html.slice(html.indexOf('demo-turn demo-log'), html.indexOf('demo-turn demo-reply'));
+    expect(log).not.toContain('demo-who');
+  });
+
+  // Every figure the log quotes is set apart from the words around it, or a
+  // reader has to parse eight lines of one grey to find the three that matter.
+  it('sets each chain figure apart from the mono it sits in', () => {
+    vi.useFakeTimers();
+    const el = mount();
+    el.send();
+    vi.runAllTimers();
+    const html = plain(el.render());
+    for (const value of new Set(Object.values(DEMO_VALUES))) {
+      expect(html).toContain(`<code class="demo-value">${value}</code>`);
+    }
   });
 
   it('flags only the log line naming the SLA failure with the outcome dot, and never leaks its placeholder', () => {
@@ -84,13 +147,11 @@ describe('the try-it demo chat element', () => {
     const el = mount();
     el.send();
     vi.runAllTimers();
-    const html = plain(el.render());
-    const linked = DEMO_SCRIPT.filter((step) => step.kind === 'log' && step.link);
-    for (const step of linked) {
-      const line = html.slice(html.indexOf(`href="${step.link?.href}"`));
-      expect(line.indexOf(/** @type {string} */ (step.link?.label))).toBeLessThan(line.indexOf(step.text.replace('{outcome}', 'FAIL').slice(-24)));
-    }
-    expect(html).not.toContain('class="demo-link" style="display:block"');
+    const lines = logLines(plain(el.render()));
+    expect(lines.length).toBe(LOG_STEP_COUNT);
+    const linked = lines.filter((line) => line.includes('<a '));
+    expect(linked.length).toBe(DEMO_SCRIPT.filter((step) => step.kind === 'log' && step.link).length);
+    for (const line of linked) expect(line.trimStart().startsWith('<a ')).toBe(true);
   });
 
   it('renders the agent’s reply as a left-leaning bubble, distinct from the log', () => {
@@ -101,7 +162,7 @@ describe('the try-it demo chat element', () => {
     const html = plain(el.render());
     const reply = /** @type {{text: string}} */ (DEMO_SCRIPT.find((step) => step.kind === 'reply'));
     expect(html).toContain('class="demo-turn demo-reply"');
-    for (const segment of reply.text.split(/\{host\}|\{amount\}/)) expect(html).toContain(segment);
+    for (const segment of reply.text.split(/\{[a-z]+\}/)) expect(html).toContain(segment);
   });
 
   it('sets the amount inside the reply in mono, underlines the route, and leaks no placeholder', () => {
@@ -110,9 +171,10 @@ describe('the try-it demo chat element', () => {
     el.send();
     vi.runAllTimers();
     const html = plain(el.render());
-    expect(html).toContain(`<code>${DEMO_PAID}</code>`);
+    const reply = html.slice(html.indexOf('demo-turn demo-reply'));
+    expect(reply).toContain(`<code class="demo-value">${DEMO_PAID}</code>`);
     expect(html).toContain(`<span class="demo-host">${DEMO_HOST}</span>`);
-    expect(html).not.toMatch(/\{host\}|\{amount\}|\{outcome\}/);
+    expect(html).not.toMatch(/\{[a-z]+\}/);
   });
 
   it('renders the closing record as plain prose, not a bubble', () => {

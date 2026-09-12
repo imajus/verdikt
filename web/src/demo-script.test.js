@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEMO_HOST, DEMO_LATENCY, DEMO_PAID, DEMO_REFUNDED, DEMO_REPLY, DEMO_SCRIPT, DEMO_SERVICE_URL, DEMO_SLUG, DEMO_USER_MESSAGE } from './demo-script.js';
+import { DEMO_HOST, DEMO_LATENCY, DEMO_PAID, DEMO_REFUNDED, DEMO_REPLY, DEMO_SCRIPT, DEMO_SERVICE_URL, DEMO_SLUG, DEMO_USER_MESSAGE, DEMO_VALUES } from './demo-script.js';
 
 const TX = /^0x[0-9a-f]{64}$/;
 const HTTPS = /^https:\/\//;
@@ -74,9 +74,21 @@ describe('DEMO_SCRIPT', () => {
   });
   it('states what the call cost, how long it took, and what came back', () => {
     const log = DEMO_SCRIPT.filter((step) => step.kind === 'log').map((step) => step.text).join('\n');
-    expect(log).toContain(DEMO_PAID);
-    expect(log).toContain(DEMO_LATENCY);
-    expect(log).toContain(DEMO_REFUNDED);
+    expect(log).toContain('{paid}');
+    expect(log).toContain('{latency}');
+    expect(log).toContain('{refunded}');
+    expect(DEMO_VALUES).toEqual({ paid: DEMO_PAID, latency: DEMO_LATENCY, refunded: DEMO_REFUNDED });
+  });
+
+  // A token nothing resolves would ship to a visitor as `{paid}`, and a figure
+  // spelled out raw would ship in the same grey as the words around it.
+  it('quotes every figure through a token the renderer knows, and none it does not', () => {
+    for (const step of DEMO_SCRIPT) {
+      for (const [, key] of step.text.matchAll(/\{([a-z]+)\}/g)) {
+        expect(key === 'host' || key === 'outcome' || key in DEMO_VALUES).toBe(true);
+      }
+      for (const value of Object.values(DEMO_VALUES)) expect(step.text).not.toContain(value);
+    }
   });
 
   // docs/evidence/clause-detail-live.log §3: the judged call paid 2500 minor
@@ -98,9 +110,8 @@ describe('DEMO_SCRIPT', () => {
   });
 
   it('carries the charge into the agent’s own reply, as a value the renderer can set in mono', () => {
-    const reply = /** @type {{text: string, amount?: string}} */ (DEMO_SCRIPT.find((step) => step.kind === 'reply'));
-    expect(reply.amount).toBe(DEMO_PAID);
-    expect(reply.text).toContain('{amount}');
+    const reply = /** @type {{text: string}} */ (DEMO_SCRIPT.find((step) => step.kind === 'reply'));
+    expect(reply.text).toContain('{paid}');
     expect(DEMO_REPLY).toMatch(/refunded/i);
   });
 
