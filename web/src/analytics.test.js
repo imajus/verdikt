@@ -1,30 +1,26 @@
 import { afterEach, expect, it, vi } from 'vitest';
 import { initPlausible, track } from './analytics.js';
 
-afterEach(() => vi.unstubAllGlobals());
+const init = vi.hoisted(() => vi.fn());
+vi.mock('@plausible-analytics/tracker', () => ({ init }));
 
-it('never throws with no browser globals at all', () => {
+afterEach(() => { vi.unstubAllGlobals(); init.mockClear(); });
+
+it('never throws with no config and no browser globals at all', async () => {
+  await expect(initPlausible({})).resolves.toBeUndefined();
   expect(() => track('pageview')).not.toThrow();
-  expect(() => initPlausible({})).not.toThrow();
+  expect(init).not.toHaveBeenCalled();
 });
 
-it('does not touch the DOM unless both env vars are set', () => {
-  const append = vi.fn();
-  vi.stubGlobal('document', { createElement: vi.fn(), head: { append } });
-  initPlausible({ VITE_PLAUSIBLE_SRC: 'https://analytics.example/script.js' });
-  initPlausible({ VITE_PLAUSIBLE_DOMAIN: 'verdikt.bond' });
-  expect(append).not.toHaveBeenCalled();
+it('does not import or initialize the tracker unless both env vars are set', async () => {
+  await initPlausible({ VITE_PLAUSIBLE_ENDPOINT: 'https://analytics.example/api/event' });
+  await initPlausible({ VITE_PLAUSIBLE_DOMAIN: 'verdikt.bond' });
+  expect(init).not.toHaveBeenCalled();
 });
 
-it('injects a deferred script tagged with the configured domain once both are set', () => {
-  const script = /** @type {any} */ ({ dataset: {} });
-  const createElement = vi.fn(() => script);
-  const append = vi.fn();
-  vi.stubGlobal('document', { createElement, head: { append } });
-  initPlausible({ VITE_PLAUSIBLE_SRC: 'https://analytics.example/script.js', VITE_PLAUSIBLE_DOMAIN: 'verdikt.bond' });
-  expect(createElement).toHaveBeenCalledWith('script');
-  expect(script).toMatchObject({ defer: true, src: 'https://analytics.example/script.js', dataset: { domain: 'verdikt.bond' } });
-  expect(append).toHaveBeenCalledWith(script);
+it('initializes the tracker with the configured domain/endpoint and manual pageviews once both are set', async () => {
+  await initPlausible({ VITE_PLAUSIBLE_ENDPOINT: 'https://analytics.example/api/event', VITE_PLAUSIBLE_DOMAIN: 'verdikt.bond' });
+  expect(init).toHaveBeenCalledWith({ domain: 'verdikt.bond', endpoint: 'https://analytics.example/api/event', autoCapturePageviews: false });
 });
 
 it('calls window.plausible when present, and no-ops when it is not', () => {

@@ -33,14 +33,16 @@ function inlineScriptHash() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd());
-  const plausibleOrigin = originOf(env.VITE_PLAUSIBLE_SRC);
+  // Plausible is a bundled dependency (@plausible-analytics/tracker), not a
+  // remote <script>, so its origin only ever needs connect-src, for the
+  // /api/event beacon — never script-src.
   const connectSrc = [
     "'self'",
     originOf(env.VITE_ARC_RPC_URL) || ARC_RPC_DEFAULT,
     originOf(env.VITE_SEPOLIA_RPC_URL) || SEPOLIA_RPC_DEFAULT,
-    plausibleOrigin
+    originOf(env.VITE_PLAUSIBLE_ENDPOINT)
   ].filter(Boolean).join(' ');
-  const scriptSrc = ["'self'", inlineScriptHash(), plausibleOrigin].filter(Boolean).join(' ');
+  const scriptSrc = ["'self'", inlineScriptHash()].join(' ');
 
   return {
     plugins: [

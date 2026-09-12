@@ -57,9 +57,9 @@
     <!-- The font stylesheet below is the only external request declared in
          this file. Every face has a system fallback in styles.css, so offline
          the page is plainer, not broken. Self-hosted Plausible analytics
-         (web/src/analytics.js), where a build configures it, adds one more
-         request of its own — injected from JS rather than declared here, so
-         it can no-op cleanly when unset. -->
+         (web/src/analytics.js) is a bundled dependency, not a script declared
+         here — where a build configures it, it sends its own request to the
+         self-hosted instance's event API, and stays a no-op when unset. -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
