@@ -139,6 +139,26 @@ const listingRow = (listing, go) => {
     </div>`;
 };
 
+/**
+ * A footnote, as a mark you can ask rather than a paragraph you must read
+ * past. The rules it carries — how a refund is capped, which window the
+ * published ratios cover — are permanent background: true of every service on
+ * every reading, and so the fourth time down the marketplace they are furniture
+ * standing between a reader and the numbers they came for.
+ *
+ * The icon is drawn, not a `?` character: a glyph standing in for an icon is
+ * the one thing this system's icon rule names outright.
+ *
+ * @param {string} id shared with the `wa-tooltip` that anchors to it
+ * @param {string} label the button's own name, for when the tooltip has not upgraded
+ */
+const helpButton = (id, label) => html`<button type="button" class="help" id=${id} aria-label=${label}>
+  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M9.1 9.3a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17.02h.01"/></svg>
+</button>`;
+
+/** @param {string} id @param {string} placement @param {unknown} content */
+const helpTip = (id, placement, content) => html`<wa-tooltip class="help-tip" for=${id} placement=${placement} trigger="hover focus click">${content}</wa-tooltip>`;
+
 const copyIcon = () => html`<svg class="icon-copy" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="1"/><path d="M15 5.5A1.5 1.5 0 0 0 13.5 4h-9A1.5 1.5 0 0 0 3 5.5v9A1.5 1.5 0 0 0 4.5 16"/></svg>`;
 const checkIcon = () => html`<svg class="icon-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m4 12.5 5.5 5.5L20 6"/></svg>`;
 
@@ -304,7 +324,9 @@ const deliveredSection = (listing, anchors) => {
     .map((outcome) => html`<span class=${outcome.toLowerCase()}><i class="dot"></i>${counts[outcome]} ${outcome}</span>`);
   return html`
     <section class="block">
-      <h3>What it delivered <small class="tally">${listing.history.length === 0 ? 'no calls yet' : tally}</small></h3>
+      <h3>What it delivered <small class="tally">${listing.history.length === 0 ? 'no calls yet' : tally}</small>
+        ${listing.history.length === 0 ? nothing : helpButton('delivered-help', 'How a refund is sized and paid')}</h3>
+      ${listing.history.length === 0 ? nothing : helpTip('delivered-help', 'bottom-start', html`A FAIL or DOWN credits the payer from this service’s bond, capped at what they actually paid — never a penalty on top. The credit is booked, not sent: the agent calls <code>withdraw()</code> to collect it.`)}
       ${listing.history.length === 0
         ? html`<p class="aside">No paid calls yet. A service nobody has called is presumed healthy, which is why its conformance reads 100% rather than 0 — but nothing has been observed about whether it answers, so availability reads N/A until the first verdict lands.</p>`
         : html`
@@ -314,8 +336,7 @@ const deliveredSection = (listing, anchors) => {
           </p>
           <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th><th class="edge">Request</th><th>Payer</th><th class="num">Block</th></tr></thead><tbody>
             ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td><td class="edge"><code title=${verdict.requestId}>${shortHex(verdict.requestId)}</code></td><td><code title=${verdict.payer}>${shortHex(verdict.payer)}</code></td><td class="num muted">${verdict.blockNumber ?? '—'}</td></tr>`)}
-          </tbody></table></div>
-          <p class="aside">A FAIL or DOWN credits the payer from this service’s bond, capped at what they actually paid. The credit is booked, not sent — the agent calls <code>withdraw()</code> to collect.</p>`}
+          </tbody></table></div>`}
     </section>`;
 };
 
@@ -356,13 +377,17 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
   return html`
     <header class="detail-head">
       <div><h2>${listing.slug}</h2><p class="sub"><code>${ensLink(listing.name)}</code> ${statusMark(listing.status)}</p></div>
-      <dl class="scores">
-        <div><dt>Conformance</dt><dd>${scoreCell(listing.published.conformance)}</dd></div>
-        <div><dt>Availability</dt><dd>${availabilityCell(listing)}</dd></div>
-        <div><dt>Bond</dt><dd>${figure(formatNativeUsdc(listing.deposit))}</dd>
-          ${refunded > 0n ? html`<dd class="score-note">${formatRefundUsdc(refunded)} refunded out</dd>` : nothing}</div>
-      </dl>
+      <div class="scores-group">
+        <dl class="scores">
+          <div><dt>Conformance</dt><dd>${scoreCell(listing.published.conformance)}</dd></div>
+          <div><dt>Availability</dt><dd>${availabilityCell(listing)}</dd></div>
+          <div><dt>Bond</dt><dd>${figure(formatNativeUsdc(listing.deposit))}</dd>
+            ${refunded > 0n ? html`<dd class="score-note">${formatRefundUsdc(refunded)} refunded out</dd>` : nothing}</div>
+        </dl>
+        ${unpublished ? nothing : helpButton('scores-help', 'What these figures are and where they come from')}
+      </div>
     </header>
+    ${unpublished ? nothing : helpTip('scores-help', 'bottom-end', html`Conformance and availability are the trailing ${days}-day ratios the hourly workflow publishes on <code>${listing.name}</code>; the marketplace ranks on those, not on anything computed in this page.${untracked(listing) ? html` Availability reads N/A rather than the published figure until the first verdict lands — whether this service answers has not been measured yet.` : nothing} The bond is held on Arc and is what a refund is paid from.`)}
     ${listing.namingLayer === 'unreachable'
       ? html`<p class="aside warn">The naming layer did not answer, so this service’s SLA and scores could not be read. Its bond and verdict history are on Arc and are shown.</p>`
       : unpublished
@@ -372,7 +397,7 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
         // that failed, the hourly run may well have written this subname and
         // the warning above is the honest account of why it is not shown.
         ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${untracked(listing) ? 'N/A' : formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>`
-        : html`<p class="provenance">Trailing ${days}-day ratios, published on <code>${listing.name}</code> by the hourly workflow. The bond is held on Arc and is what a refund is paid from.</p>`}
+        : nothing}
     ${callSection(listing, clauses)}
     ${promisedSection(listing, clauses, anchors)}
     ${deliveredSection(listing, anchors)}

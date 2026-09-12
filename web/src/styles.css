@@ -358,8 +358,40 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 /* Where the three figures came from, said once under all of them rather than
    three times inside them. Sits on the rule that opens the sheet. */
 .scores dd.score-note { font-size: 13px; font-weight: 400; letter-spacing: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
-.provenance { margin: 0; color: var(--muted); font-size: 14.5px; max-width: 78ch; }
-.provenance code { color: var(--ink-2); }
+.scores-group { display: flex; align-items: flex-start; gap: 10px; }
+
+/* A footnote you can ask, rather than a paragraph standing between a reader
+   and the figures. Quiet at rest and ink on hover — the same two steps every
+   other quiet control in this system moves through. */
+.help {
+  flex: none; display: inline-flex; padding: 0; margin-top: 1px;
+  background: none; border: 0; color: var(--muted); cursor: help;
+  transition: color 120ms;
+}
+.help:hover, .help[aria-expanded='true'] { color: var(--ink); }
+.block h3 .help { align-self: center; }
+
+/* The tooltip is the one floating layer in a system with no elevation, so it
+   floats the way a ledger would: paper, a hairline frame, no shadow at all.
+   Web Awesome's own default is a dark filled chip, which would be the only
+   piece of the page painted in somebody else's vocabulary. */
+wa-tooltip.help-tip {
+  /* The viewport cap keeps the frame off the screen edges: unconstrained, a
+     narrow phone rendered this flush to both sides with its own left and
+     right borders cropped away. 36px is `#app`'s mobile padding, doubled. */
+  --max-width: min(46ch, calc(100vw - 36px));
+  --wa-tooltip-background-color: var(--paper);
+  --wa-tooltip-content-color: var(--ink-2);
+  --wa-tooltip-border-color: var(--rule-strong);
+  --wa-tooltip-border-width: 1px;
+  --wa-tooltip-border-style: solid;
+  --wa-tooltip-border-radius: 2px;
+  --wa-tooltip-font-size: 14.5px;
+  --wa-tooltip-line-height: 1.5;
+  --wa-tooltip-arrow-size: 5px;
+}
+wa-tooltip.help-tip::part(body) { padding: 10px 12px; text-align: left; }
+wa-tooltip.help-tip code { color: var(--ink); }
 
 .block { margin-top: 30px; }
 .block h3 {

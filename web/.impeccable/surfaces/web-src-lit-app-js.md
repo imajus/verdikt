@@ -86,14 +86,26 @@ a verdict says from where to go and check it.
   credited one. Anything below six places reports as `< 0.000001 USDC` rather
   than rounding to nothing.
 
-- **The scores carry their provenance and their arithmetic.** A muted line
-  under the head names the window and the subname they were published on; the
-  bond carries what has been refunded out of it, so the figure reconciles with
-  the deposit. Where nothing is published the explanation is promoted from
-  that grey line to a left-ruled standing note — "why is this blank" is the
-  reader's live question. When Sepolia itself failed, that note is suppressed:
-  the hourly run may well have written the subname, and the unreachable
-  warning is the honest account.
+- **The scores carry their arithmetic.** The bond shows what has been refunded
+  out of it, so the figure reconciles with the deposit. Where nothing is
+  published the explanation is a left-ruled standing note — "why is this
+  blank" is the reader's live question. When Sepolia itself failed, that note
+  is suppressed: the hourly run may well have written the subname, and the
+  unreachable warning is the honest account.
+
+- **Two standing rules are footnotes, not paragraphs.** How a refund is sized
+  and capped, and which window the published ratios cover, are true of every
+  service on every reading — so by the fourth time down the marketplace they
+  are furniture between a reader and the numbers. Each is a `wa-tooltip`
+  anchored by `for=` to a drawn help mark: one beside the figures, one beside
+  the `What it delivered` heading. `trigger="hover focus click"`, because
+  hover alone strands every touch device. Both are withheld where they have
+  nothing to explain — no verdicts, or scores that are blank for a reason the
+  standing note already gives. The mark is a drawn SVG, never a `?` character;
+  the tooltip is repainted through `--wa-tooltip-*` to paper with a hairline
+  frame and no shadow, since Web Awesome's dark filled chip would be the one
+  piece of the page in somebody else's vocabulary, and `--max-width` is capped
+  against the viewport so a phone does not crop the frame's own side borders.
 
 - **The verdict strip is labelled "oldest first".** It runs oldest-first while
   the table under it runs newest-first, and an unlabelled row of marks gives a

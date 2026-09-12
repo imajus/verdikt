@@ -618,6 +618,55 @@ describe('what the page says a call costs', () => {
   });
 });
 
+// Two rules that are true of every service on every reading — how a refund is
+// sized, which window the published ratios cover — used to stand as
+// paragraphs between the reader and the figures they came for. They are
+// footnotes now: asked, not read past.
+describe('the standing rules behind the figures', () => {
+  /** @param {VerdictRecord[]} [verdicts] @param {Partial<ServiceRecord>} [rec] */
+  const detail = async (verdicts = [], rec = {}) => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], verdicts, records: { weather: record(rec) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('puts the refund rule in a tooltip anchored to the delivered heading', async () => {
+    const html = await detail([verdict(HONEST, 'FAIL', '0x02')]);
+    expect(html).toContain('id="delivered-help"');
+    expect(html).toContain('for="delivered-help"');
+    expect(html).toContain('capped at what they actually paid');
+    expect(html).not.toContain('class="aside">A FAIL or DOWN');
+  });
+
+  it('puts the window and the bond’s job in a tooltip anchored to the figures', async () => {
+    const html = await detail();
+    expect(html).toContain('id="scores-help"');
+    expect(html).toContain('for="scores-help"');
+    expect(html).toContain('trailing');
+    expect(html).not.toContain('class="provenance"');
+  });
+
+  // Nothing to explain about a ledger with no rows, and the reason the
+  // figures are blank is a standing note rather than a footnote — a reader
+  // looking at a dash is already asking the question.
+  it('offers no refund footnote before the first verdict', async () => {
+    expect(await detail()).not.toContain('delivered-help');
+  });
+
+  it('offers no figures footnote where the scores are unpublished', async () => {
+    const html = await detail([], { conformance: null, availability: null });
+    expect(html).not.toContain('scores-help');
+    expect(html).toContain('No scores published yet');
+  });
+
+  // Hover alone strands every touch device on a page whose explanations it
+  // cannot reach.
+  it('opens on click and on keyboard focus, not on hover alone', async () => {
+    expect(await detail()).toContain('trigger="hover focus click"');
+  });
+});
+
 // The explorer reads the same Sepolia records this app does and shows who
 // wrote each one, so it is the independent check on the ENS half of what
 // every one of these pages claims.
