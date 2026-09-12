@@ -4,7 +4,7 @@ import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
-import { isListed } from './marketplace.js';
+import { DEFAULT_MARKETPLACE_FILTERS, DEFAULT_MARKETPLACE_SORT, isListed, matchesFilters, sortListings } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
 import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
 import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms } from './pages.js';
@@ -60,14 +60,94 @@ const statusMark = (status) => html`
 const outcomeMark = (outcome) => html`
   <span class="outcome ${outcome.toLowerCase()}"><i class="dot"></i>${outcome}</span>`;
 
-const listingHead = () => html`
+/**
+ * The four fields the marketplace's column headers can sort by (issue #64).
+ * `reputation` has no column of its own — it is the combined product
+ * `byReputation` ranks on — so it rides on the `Service` header, the row's
+ * own identity column.
+ * @type {{key: MarketplaceSortKey, label: string, cellClass: string, title: string|null, sortTitle: string}[]}
+ */
+const SORT_COLUMNS = [
+  { key: 'reputation', label: 'Service', cellClass: 'name', title: null, sortTitle: 'Sort by reputation — conformance × availability' },
+  { key: 'conformance', label: 'Conformance', cellClass: 'num', title: 'Share of responses that arrived and met the SLA', sortTitle: 'Sort by conformance — share of responses that arrived and met the SLA' },
+  { key: 'availability', label: 'Availability', cellClass: 'num', title: 'Share of paid calls that returned anything usable', sortTitle: 'Sort by availability — share of paid calls that returned anything usable' },
+  { key: 'deposit', label: 'Bond', cellClass: 'num', title: null, sortTitle: 'Sort by bond size' }
+];
+
+/** @param {MarketplaceSort} sort @param {MarketplaceSortKey} key */
+const sortMark = (sort, key) => (sort.key === key ? html`<i class="sort-dir ${sort.direction}" aria-hidden="true"></i>` : nothing);
+
+/**
+ * The listing grid's own head row. Plain and static everywhere except the
+ * marketplace page: pass `sort`/`onSort` there to turn the four columns
+ * above into clickable sort controls, and every other caller (the provider
+ * console, every skeleton) gets exactly the markup it always did.
+ * @param {MarketplaceSort|null} [sort]
+ * @param {((key: MarketplaceSortKey) => void)|null} [onSort]
+ */
+const listingHead = (sort = null, onSort = null) => html`
   <div class="row head">
-    <span class="cell name">Service</span>
-    <span class="cell num" title="Share of responses that arrived and met the SLA">Conformance</span>
-    <span class="cell num" title="Share of paid calls that returned anything usable">Availability</span>
-    <span class="cell num">Bond</span>
+    ${SORT_COLUMNS.map((column) =>
+      sort && onSort
+        ? html`<button type="button" class="cell ${column.cellClass} sort" title=${column.sortTitle}
+            aria-sort=${sort.key === column.key ? (sort.direction === 'desc' ? 'descending' : 'ascending') : 'none'}
+            @click=${() => onSort(column.key)}>${column.label}${sortMark(sort, column.key)}</button>`
+        : html`<span class="cell ${column.cellClass}" title=${column.title ?? nothing}>${column.label}</span>`
+    )}
     <span class="cell status">Status</span>
   </div>`;
+
+/** @param {string} text 0-100 as typed, clamped; blank or non-numeric reads as 0 (no floor). */
+const percentToScore = (text) => {
+  const value = Number(text);
+  return text.trim() === '' || !Number.isFinite(value) ? 0 : Math.round(Math.max(0, Math.min(100, value)) * 10);
+};
+
+/** @param {number} score 0-1000, for the matching min-conformance/availability input's own value. */
+const scoreToPercentText = (score) => (score === 0 ? '' : String(score / 10));
+
+/**
+ * Search box and filter controls above the marketplace listing (issue #64).
+ * All client-side: `marketplace.services` is already fully in memory, so
+ * every keystroke or toggle here just re-filters/re-sorts that array — no
+ * new RPC call.
+ *
+ * @param {MarketplaceFilters} filters
+ * @param {(patch: Partial<MarketplaceFilters>) => void} onChange
+ */
+const marketControls = (filters, onChange) => {
+  /** @param {Event} event */
+  const valueOf = (event) => /** @type {{value: string}} */ (/** @type {unknown} */ (event.currentTarget)).value;
+  const isDefault = Object.keys(DEFAULT_MARKETPLACE_FILTERS).every(
+    (key) => filters[/** @type {keyof MarketplaceFilters} */ (key)] === DEFAULT_MARKETPLACE_FILTERS[/** @type {keyof MarketplaceFilters} */ (key)]
+  );
+  return html`
+    <section class="market-controls" aria-label="Search and filter services">
+      <input type="search" class="market-search" placeholder="Search by slug or name" aria-label="Search services"
+        .value=${filters.query} @input=${(/** @type {Event} */ event) => onChange({ query: /** @type {HTMLInputElement} */ (event.target).value })} />
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0" without-spin-buttons
+        label="Min conformance" .value=${scoreToPercentText(filters.minConformance)}
+        @input=${(/** @type {Event} */ event) => onChange({ minConformance: percentToScore(valueOf(event)) })}>
+        <span slot="end" class="unit">%</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" max="100" step="1" placeholder="0" without-spin-buttons
+        label="Min availability" .value=${scoreToPercentText(filters.minAvailability)}
+        @input=${(/** @type {Event} */ event) => onChange({ minAvailability: percentToScore(valueOf(event)) })}>
+        <span slot="end" class="unit">%</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="text" inputmode="decimal" placeholder="any"
+        label="Max price" .value=${filters.maxPriceUsdc}
+        @input=${(/** @type {Event} */ event) => onChange({ maxPriceUsdc: valueOf(event) })}>
+        <span slot="end" class="unit">USDC</span>
+      </wa-input>
+      <wa-input class="market-filter" size="s" type="number" inputmode="numeric" min="0" step="1" placeholder="any" without-spin-buttons
+        label="Max latency" .value=${filters.maxLatencyMs}
+        @input=${(/** @type {Event} */ event) => onChange({ maxLatencyMs: valueOf(event) })}>
+        <span slot="end" class="unit">ms</span>
+      </wa-input>
+      ${isDefault ? nothing : html`<button type="button" class="market-reset" @click=${() => onChange(DEFAULT_MARKETPLACE_FILTERS)}>Reset filters</button>`}
+    </section>`;
+};
 
 /** A bound in milliseconds, read as a person would say it. @param {number} ms */
 const duration = (ms) => (ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`);
@@ -562,7 +642,7 @@ const how = () => html`
   <section class="block"><h3>Why there is no dispute layer</h3><p>A verdict is final by design. The refund cap keeps a false FAIL from being worth manufacturing, and the observed value never goes on-chain. The clause, refund and trailing one-day scores remain public on Arc and ENS.</p></section>`;
 
 export class VerdiktApp extends LitElement {
-  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {}, signInPending: { state: true }, signInError: { state: true } };
+  static properties = { marketplace: { attribute: false }, mode: {}, route: { attribute: false }, error: {}, theme: {}, signInPending: { state: true }, signInError: { state: true }, marketFilters: { state: true }, marketSort: { state: true } };
   constructor() {
     super();
     this.signInPending = false;
@@ -573,6 +653,16 @@ export class VerdiktApp extends LitElement {
     /** @type {'system'|'light'|'dark'} */ this.theme = 'system';
     /** @type {{view: 'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'how'|'terms'|'privacy', slug: string|null, address: string|null, rejected?: string|null}} */
     this.route = { view: 'landing', slug: null, address: null, rejected: null };
+    /** @type {MarketplaceFilters} */ this.marketFilters = { ...DEFAULT_MARKETPLACE_FILTERS };
+    /** @type {MarketplaceSort} */ this.marketSort = { ...DEFAULT_MARKETPLACE_SORT };
+  }
+  /** @param {Partial<MarketplaceFilters>} patch */
+  updateMarketFilters(patch) { this.marketFilters = { ...this.marketFilters, ...patch }; }
+  /** @param {MarketplaceSortKey} key */
+  toggleMarketSort(key) {
+    this.marketSort = this.marketSort.key === key
+      ? { key, direction: this.marketSort.direction === 'desc' ? 'asc' : 'desc' }
+      : { key, direction: 'desc' };
   }
   createRenderRoot() { return this; }
   /** @param {string} path */
@@ -617,9 +707,17 @@ export class VerdiktApp extends LitElement {
     // stay in `marketplace.services` so their own page and their provider's
     // console still find them by slug. See isListed (marketplace.js).
     const listed = services.filter(isListed);
+    // Search/filter/sort are reactive view state (marketFilters/marketSort),
+    // not a one-time pass — this is what lets the controls below actually
+    // change the displayed order (issue #64). The old one-time `byReputation`
+    // sort in main.js is `marketSort`'s default.
+    const visible = sortListings(listed.filter((listing) => matchesFilters(listing, this.marketFilters)), this.marketSort);
     return html`${pageHead('Marketplace', TAGLINE, html`<p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p>`)}
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
-      <section class="listing flush">${listingHead()}${listed.length ? listed.map((listing) => listingRow(listing, go)) : html`<p class="empty">No services registered yet.</p>`}</section>
+      ${listed.length ? marketControls(this.marketFilters, (patch) => this.updateMarketFilters(patch)) : nothing}
+      <section class="listing flush">${listingHead(this.marketSort, (key) => this.toggleMarketSort(key))}${visible.length
+        ? visible.map((listing) => listingRow(listing, go))
+        : html`<p class="empty">${listed.length ? 'No services match these filters.' : 'No services registered yet.'}</p>`}</section>
       <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${listed.length ? html` · <a href=${providerUrl(listed[0].provider)} @click=${navigateOnClick(go, providerUrl(listed[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */

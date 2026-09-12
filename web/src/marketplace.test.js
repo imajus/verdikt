@@ -3,7 +3,7 @@ import { SLA_TEXT } from '@verdikt/fixtures';
 import { ARC } from '@verdikt/sdk';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
 import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatTxError, scoreBand, shortHex } from './format.js';
-import { byReputation, loadMarketplace } from './marketplace.js';
+import { DEFAULT_MARKETPLACE_FILTERS, DEFAULT_MARKETPLACE_SORT, byReputation, loadMarketplace, matchesFilters, sortListings } from './marketplace.js';
 import { renderApp, renderDetail } from './render.js';
 
 // The rendered page asks who is connected and whether they are signed in.
@@ -394,6 +394,185 @@ describe('byReputation', () => {
       listing({ slug: 'c', deposit: 9n })
     ].sort(byReputation);
     expect(ranked.map((entry) => entry.slug)).toEqual(['c', 'a', 'b']);
+  });
+});
+
+// The marketplace's search/filter/sort controls (issue #64): pure functions
+// over an already-fetched `Listing[]`, so no RPC and no DOM belong in these.
+describe('matchesFilters', () => {
+  /** @param {Partial<Listing>} overrides @returns {Listing} */
+  const listing = (overrides) =>
+    /** @type {Listing} */ ({
+      slug: 'weather',
+      name: 'weather.verdikt.eth',
+      status: 'ACTIVE',
+      contested: false,
+      deposit: 0n,
+      sla: null,
+      published: { conformance: 1000, availability: 1000 },
+      ...overrides
+    });
+
+  it('does not exclude a SUSPENDED or contested listing — there is no hide toggle', () => {
+    expect(matchesFilters(listing({ status: 'SUSPENDED' }), DEFAULT_MARKETPLACE_FILTERS)).toBe(true);
+    expect(matchesFilters(listing({ contested: true }), DEFAULT_MARKETPLACE_FILTERS)).toBe(true);
+  });
+
+  it('matches the free-text search against slug and name, case-insensitively', () => {
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, query: 'WEA' };
+    expect(matchesFilters(listing({}), filters)).toBe(true);
+    expect(matchesFilters(listing({ slug: 'lite', name: 'lite.verdikt.eth' }), filters)).toBe(false);
+    expect(matchesFilters(listing({ slug: 'lite', name: 'weather-lite.verdikt.eth' }), filters)).toBe(true);
+  });
+
+  it('excludes a listing below the minimum conformance or availability threshold', () => {
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, minConformance: 960 };
+    expect(matchesFilters(listing({ published: { conformance: 958, availability: 1000 } }), filters)).toBe(false);
+    expect(matchesFilters(listing({ published: { conformance: 960, availability: 1000 } }), filters)).toBe(true);
+  });
+
+  // Absence of a published score means the hourly workflow has not run for
+  // this listing yet, not that it measured badly — excluding it on a
+  // threshold it never had the chance to fail would punish "unranked" as if
+  // it were "poor" (the same reasoning byReputation applies by sorting it
+  // last rather than dropping it).
+  it('does not exclude an unranked listing on a positive threshold', () => {
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, minConformance: 960, minAvailability: 960 };
+    expect(matchesFilters(listing({ published: { conformance: null, availability: null } }), filters)).toBe(true);
+  });
+
+  it('excludes a listing whose declared price floor is above the price cap', () => {
+    const sla = { version: 1, clauses: [{ id: 'p', type: 'priceRange', minMinorUnits: '10000', maxMinorUnits: '20000', asset: 'USDC' }] };
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, maxPriceUsdc: '0.005' };
+    expect(matchesFilters(listing({ sla: /** @type {any} */ (sla) }), filters)).toBe(false);
+    expect(matchesFilters(listing({ sla: /** @type {any} */ (sla) }), { ...DEFAULT_MARKETPLACE_FILTERS, maxPriceUsdc: '0.02' })).toBe(true);
+  });
+
+  it('excludes a listing whose declared latency bound is above the latency cap', () => {
+    const sla = { version: 1, clauses: [{ id: 'l', type: 'latency', maxMs: 5000 }] };
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, maxLatencyMs: '1000' };
+    expect(matchesFilters(listing({ sla: /** @type {any} */ (sla) }), filters)).toBe(false);
+    expect(matchesFilters(listing({ sla: /** @type {any} */ (sla) }), { ...DEFAULT_MARKETPLACE_FILTERS, maxLatencyMs: '10000' })).toBe(true);
+  });
+
+  it('does not exclude a listing that never declared a price or latency clause', () => {
+    const filters = { ...DEFAULT_MARKETPLACE_FILTERS, maxPriceUsdc: '0.000001', maxLatencyMs: '1' };
+    expect(matchesFilters(listing({ sla: null }), filters)).toBe(true);
+  });
+});
+
+describe('sortListings', () => {
+  /** @param {Partial<Listing>} overrides @returns {Listing} */
+  const listing = (overrides) =>
+    /** @type {Listing} */ ({
+      slug: 'a',
+      deposit: 0n,
+      published: { conformance: 1000, availability: 1000 },
+      ...overrides
+    });
+
+  it('sorts by reputation by default, matching byReputation', () => {
+    const listings = [
+      listing({ slug: 'weak', published: { conformance: 500, availability: 500 } }),
+      listing({ slug: 'strong', published: { conformance: 1000, availability: 1000 } })
+    ];
+    expect(sortListings(listings, DEFAULT_MARKETPLACE_SORT).map((l) => l.slug)).toEqual(['strong', 'weak']);
+  });
+
+  it('sorts by conformance, highest first, unranked last', () => {
+    const listings = [
+      listing({ slug: 'unranked', published: { conformance: null, availability: 1000 } }),
+      listing({ slug: 'low', published: { conformance: 500, availability: 1000 } }),
+      listing({ slug: 'high', published: { conformance: 1000, availability: 1000 } })
+    ];
+    const ranked = sortListings(listings, { key: 'conformance', direction: 'desc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['high', 'low', 'unranked']);
+  });
+
+  it('sorts by availability, highest first', () => {
+    const listings = [
+      listing({ slug: 'low', published: { conformance: 1000, availability: 500 } }),
+      listing({ slug: 'high', published: { conformance: 1000, availability: 1000 } })
+    ];
+    const ranked = sortListings(listings, { key: 'availability', direction: 'desc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['high', 'low']);
+  });
+
+  it('sorts by deposit, largest first', () => {
+    const listings = [listing({ slug: 'small', deposit: 1n }), listing({ slug: 'big', deposit: 9n })];
+    const ranked = sortListings(listings, { key: 'deposit', direction: 'desc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['big', 'small']);
+  });
+
+  it('reverses order when direction is ascending', () => {
+    const listings = [listing({ slug: 'small', deposit: 1n }), listing({ slug: 'big', deposit: 9n })];
+    const ranked = sortListings(listings, { key: 'deposit', direction: 'asc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['small', 'big']);
+  });
+});
+
+// The rendered marketplace page: the controls from marketControls (lit-app.js)
+// show up, and marketFilters/marketSort — reactive view state, not a one-time
+// pass — actually change which rows are shown and in what order.
+describe('the marketplace listing’s search/filter/sort controls', () => {
+  const build = async () =>
+    loadMarketplace(
+      deps({
+        services: [service('weather', HONEST), service('lite', FLAKY, { status: 'SUSPENDED' })],
+        verdicts: [],
+        records: { weather: record({}), lite: record({ slug: 'lite', name: 'lite.verdikt.eth', serviceId: FLAKY }) }
+      })
+    );
+
+  it('renders the search box and filter inputs on the marketplace page', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).toContain('class="market-search"');
+  });
+
+  it('does not render the controls on the provider console, which has no sort/filter state of its own', async () => {
+    const html = renderApp(await build(), 'demo', 'provider', null, PROVIDER);
+    expect(html).not.toContain('class="market-search"');
+  });
+
+  it('shows a SUSPENDED listing by default — there is no hide toggle', async () => {
+    const marketplace = await build();
+    const html = renderApp(marketplace, 'demo', 'marketplace', null);
+    expect(html).toContain('>lite<');
+  });
+
+  it('filters the listing by the free-text search', async () => {
+    const marketplace = await build();
+    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { query: 'lite' });
+    expect(html).not.toContain('>weather<');
+    expect(html).toContain('>lite<');
+  });
+
+  it('says plainly when a search matches nothing, rather than an empty list', async () => {
+    const marketplace = await build();
+    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, { query: 'nonexistent-slug' });
+    expect(html).toContain('No services match these filters');
+  });
+
+  it('marks the active sort column with its direction, and every other column as unsorted', async () => {
+    const marketplace = await build();
+    const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, null, { key: 'deposit', direction: 'asc' });
+    expect(html).toContain('aria-sort="ascending"');
+    expect(html.match(/aria-sort="none"/g)?.length).toBe(3);
+  });
+
+  it('defaults the marketplace listing to the old byReputation order, now as reactive sort state', async () => {
+    const marketplace = await loadMarketplace(
+      deps({
+        services: [service('weather', HONEST), service('lite', FLAKY, { status: 'SUSPENDED' })],
+        verdicts: [],
+        records: {
+          weather: record({ conformance: 1000, availability: 1000 }),
+          lite: record({ slug: 'lite', name: 'lite.verdikt.eth', serviceId: FLAKY, conformance: 500, availability: 500 })
+        }
+      })
+    );
+    const html = renderApp(marketplace, 'demo', 'marketplace', null);
+    expect(html.indexOf('>weather<')).toBeLessThan(html.indexOf('>lite<'));
   });
 });
 
