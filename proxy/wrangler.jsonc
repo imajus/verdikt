@@ -31,17 +31,22 @@
     // Not Verdikt's chains: these are the chains *providers* ask to be paid on,
     // named by their own 402. Read only to ask a smart-contract account whether
     // it authorized a payment (ERC-1271) — a Circle agent wallet is one, so
-    // without this its payments are refused as unverifiable. Public endpoints
-    // with no embedded credential, same rationale as ARC_RPC_URL above.
+    // without this its payments are refused as unverifiable. Same Alchemy key
+    // as above, so this adds no exposure it does not already have.
     //
-    // NOT `mainnet.base.org`: that endpoint sits behind Cloudflare bot
-    // management, and a request from a Worker carries no browser fingerprint,
-    // so it is answered with a challenge page rather than JSON — which this
-    // reader can only read as "the account did not validate". publicnode
-    // answers a Worker the same way it answers anything else. The Alchemy key
-    // used above is not an option here until BASE_MAINNET is enabled for that
-    // app, which is a dashboard change, not a code one.
-    "PAYMENT_RPC_URLS": "8453=https://base-rpc.publicnode.com,137=https://polygon-bor-rpc.publicnode.com"
+    // NOT `mainnet.base.org`, which this used to be: that endpoint sits behind
+    // Cloudflare bot management, and a request from a Worker carries no browser
+    // fingerprint, so it was answered with a challenge page rather than JSON —
+    // which this reader can only read as "the account did not validate". Any
+    // replacement has to be checked from a Worker, not from a laptop.
+    //
+    // Breadth is cheap here and the chain is the provider's choice, so every
+    // network enabled on the Alchemy app is listed. A chain that is absent
+    // simply cannot have contract payers verified on it: notably X Layer
+    // (eip155:196), which `pnl` prices on — the app has X Layer *testnet*
+    // (1952), a different chain, and CRE has no selector for the mainnet
+    // either.
+    "PAYMENT_RPC_URLS": "1=https://eth-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,56=https://bnb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,100=https://gnosis-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,137=https://polygon-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,4217=https://tempo-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,8453=https://base-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,42161=https://arb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,59144=https://linea-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d,84532=https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every
