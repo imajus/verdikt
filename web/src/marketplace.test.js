@@ -1244,8 +1244,10 @@ describe('the listing row after the column change', () => {
 });
 
 // The service page's two standing sentences moved behind help marks, the
-// verdict table dropped the three columns nobody read, and the provenance
-// block starts closed with its two caveats on the labels they are about.
+// verdict table dropped the two columns nobody read (Block came back as its
+// own column, since a caller does want to see when each call landed), and the
+// provenance block starts closed with its two caveats on the labels they are
+// about.
 describe('the service page after the layout change', () => {
   const build = async () => {
     const { services } = await loadMarketplace(
@@ -1262,11 +1264,11 @@ describe('the service page after the layout change', () => {
     expect(html).toContain('for="price-help"');
   });
 
-  it('keeps only outcome, cause and cost in the verdict table', async () => {
+  it('keeps only block, outcome, cause and cost in the verdict table', async () => {
     const html = await build();
     expect(html).not.toContain('<th>Payer</th>');
     expect(html).not.toContain('>Request</th>');
-    expect(html).not.toContain('>Block</th>');
+    expect(html).toContain('>Block</th>');
   });
 
   it('closes the record by default and drops the service id', async () => {

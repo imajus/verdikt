@@ -373,8 +373,8 @@ const deliveredSection = (listing, anchors) => {
             <span class="strip" role="img" aria-label=${`${listing.history.length} verdicts, oldest first: ${tally.length ? `${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.DOWN} DOWN` : ''}`}>${[...listing.history].reverse().map((verdict) => html`<i class=${verdict.outcome.toLowerCase()} title=${`${verdict.outcome}${verdict.blockNumber === null ? '' : ` · block ${verdict.blockNumber}`}`}></i>`)}</span>
             <span class="strip-note">oldest first</span>
           </p>
-          <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th></tr></thead><tbody>
-            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}" title=${verdict.blockNumber === null ? nothing : `block ${verdict.blockNumber}`}><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td></tr>`)}
+          <div class="scroll"><table class="ledger"><thead><tr><th>Block</th><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th></tr></thead><tbody>
+            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${verdict.blockNumber === null ? html`<span class="muted">—</span>` : verdict.blockNumber}</td><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td></tr>`)}
           </tbody></table></div>`}
     </section>`;
 };
