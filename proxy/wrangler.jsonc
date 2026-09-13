@@ -62,6 +62,26 @@
     // Workers Free plan can run.
     { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] }
   ],
+  // This wildcard catches every subdomain, including the one that is not a
+  // service: `www`. That is handled at the edge, NOT here — a Single Redirect
+  // rule on the zone sends `www.verdikt.bond/*` to `verdikt.bond/$1` with a
+  // 301. Single Redirects run in `http_request_dynamic_redirect`, the first
+  // application-layer phase, so the rule fires before this route is matched
+  // and the Worker is never invoked for `www` at all.
+  //
+  // Recorded here because that rule is dashboard state: nothing in this repo
+  // references it and no test covers it, so the next person to see a `www`
+  // bug will reach for `router.js`. Don't — put it back in the rule. If the
+  // rule is ever deleted, `www` falls through to the wildcard and answers
+  // 404 `unknown_service` (Arc has no such service), which is wrong but not
+  // broken.
+  //
+  // Zone `verdikt.bond` = a64b9e3b0ae41b713241cf45e7b120e0, rule id
+  // 9644a5faa2c74492a94488030653e0eb, in the zone's `default` entrypoint
+  // ruleset for that phase. Read it back with:
+  //   GET /zones/{zone}/rulesets/phases/http_request_dynamic_redirect/entrypoint
+  // Wrangler cannot manage this — its surface is Workers and storage, not
+  // zone rulesets, so the API (or the dashboard) is the only way to edit it.
   "routes": [{ "pattern": "*.verdikt.bond/*", "zone_name": "verdikt.bond" }],
   // Explicit, not left to wrangler's default: unset here means a plain
   // `wrangler deploy` silently disables the workers.dev subdomain — and
