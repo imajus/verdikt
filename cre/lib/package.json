@@ -10,6 +10,7 @@
   "main": "judge.js",
   "exports": {
     "./config": "./config.js",
+    "./http-request": "./http-request.js",
     "./judge": "./judge.js",
     "./log-range": "./log-range.js",
     "./reputation": "./reputation.js"

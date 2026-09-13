@@ -458,7 +458,13 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     // and flagging the miss beats destroying a paid-for payload over
     // bookkeeping (Tasks.md 4.4).
     ...(result.outcome && !result.tx ? { 'x-verdikt-verdict-unwritten': 'true' } : {}),
-    ...(result.reason ? { 'x-verdikt-fallback-reason': result.reason } : {}),
+    // `headerSafe` for the same reason the clause headers get it: the reason
+    // quotes the engine's parse error, which quotes the provider-authored SLA,
+    // so it carries whatever that document does. A live one carried an em dash
+    // — enough for Workers to reject the header value and for undici to throw
+    // outright — and a newline would split the header and let the remainder be
+    // read as one of the agent's own.
+    ...(result.reason ? { 'x-verdikt-fallback-reason': headerSafe(result.reason) } : {}),
     ...(result.bodyTruncated ? { 'x-verdikt-body-truncated': 'true' } : {})
   };
 

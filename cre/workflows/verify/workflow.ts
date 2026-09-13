@@ -23,8 +23,9 @@ import {
   type HTTPPayload,
   type TeeRuntime
 } from '@chainlink/cre-sdk';
-import { encodeAbiParameters, hexToBytes, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
+import { encodeAbiParameters, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
 
+import { requestBodyField } from '@verdikt/cre/http-request';
 import { failedClauseOf, judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
 import { outcomeToOrdinal } from '@verdikt/sdk/registry';
 
@@ -137,7 +138,13 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
         // provider receives an empty request and answers 4xx — which the
         // status-only fallback then correctly refuses to blame it for, so the
         // agent pays and no verdict is written.
-        body: request.bodyHex ? hexToBytes(request.bodyHex as Hex) : undefined,
+        //
+        // Spread, never assigned: `body: undefined` is rejected by the
+        // capability's decoder before the request is sent, and the catch below
+        // cannot tell that apart from a dead provider — which scored every GET
+        // a false DOWN and refunded it out of the provider's bond. See
+        // `requestBodyField`.
+        ...requestBodyField(request.bodyHex),
         // Replayed under whichever header name the agent actually sent
         // (`payment-signature` in x402 v2, `x-payment` in v1) — a v2
         // provider like Alchemy does not recognize the other name at all.
