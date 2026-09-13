@@ -18,13 +18,11 @@
 // the single worst thing it could do.
 
 import { html, nothing } from 'lit';
-import { ARC } from '@verdikt/sdk';
 import { formatMinorUsdc, formatNativeUsdc } from './format.js';
-import { HOW_PATH, MARKETPLACE_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
+import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
 import './diagram.js';
 import './demo-chat.js';
-import './address-view.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
 const X_URL = 'https://x.com/denismajus';
@@ -52,7 +50,10 @@ const PLATFORM_FIGURE_LABELS = ['services', 'bonded', 'verdicts', 'refunded'];
 /** @param {PlatformStats} stats */
 export const platformFigures = (stats) => {
   const { PASS, FAIL, DOWN } = stats.breakdown;
-  return html`<section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span><span class="sub"><span>${stats.active} active</span>${stats.suspended ? html`<span>${stats.suspended} suspended</span>` : nothing}</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown">${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div><span class="sub"><span class="pass"><i class="dot"></i>${PASS} pass</span><span class="fail"><i class="dot"></i>${FAIL} fail</span><span class="down"><i class="dot"></i>${DOWN} down</span></span>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>`;
+  // The verdicts bar carries the split on its own: the counts it used to
+  // spell out under it are in its label for a screen reader and a hover.
+  const split = `${PASS} pass, ${FAIL} fail, ${DOWN} down`;
+  return html`<section class="figures"><div class="figure"><span class="value">${stats.services}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value">${stats.verdicts}</span><span class="label">verdicts</span>${stats.verdicts ? html`<div class="breakdown" role="img" aria-label=${split} title=${split}>${PASS ? html`<span class="seg pass" style="flex-grow:${PASS}"></span>` : nothing}${FAIL ? html`<span class="seg fail" style="flex-grow:${FAIL}"></span>` : nothing}${DOWN ? html`<span class="seg down" style="flex-grow:${DOWN}"></span>` : nothing}</div>` : nothing}</div><div class="figure"><span class="value">${amount(formatNativeUsdc(stats.refunded, 2))}</span><span class="label">refunded</span><span class="sub"><span>${stats.refundCount} refund${stats.refundCount === 1 ? '' : 's'}</span></span></div></section>`;
 };
 
 export const platformFiguresSkeleton = () => html`<section class="figures">${PLATFORM_FIGURE_LABELS.map(skeletonFigure)}</section>`;
@@ -93,10 +94,10 @@ const entry = (index, body, note = nothing, wide = false, id = nothing) => html`
   </section>`;
 
 /**
- * The margin beside the figures, and the page's only one. A chain address is
- * named here only where a chain was actually read: demo mode names none, and
- * says "seeded" in the head instead, because printing the real registry beside
- * numbers that did not come from it invites exactly the reading the flag denies.
+ * The margin beside the figures, and the page's only one. Demo mode says
+ * "seeded" in the head, because a number on this page that could be mistaken
+ * for a real one is the worst thing it could do; live mode names no chain
+ * address here — the service page's own record does that where it is read.
  * On an error the body's own aside already names the failure, so this stays on
  * the one thing the body does not say — that nothing was estimated in its place.
  * @param {Marketplace|null} marketplace @param {'live'|'demo'} mode @param {string|null} error
@@ -121,10 +122,7 @@ const verdictNote = (marketplace, mode, error) => {
       <dt>block</dt><dd>${verdict.blockNumber}</dd>
       <dt>paid</dt><dd>${formatMinorUsdc(verdict.paidAmount)}</dd>
       <dt>refunded</dt><dd>${verdict.refunded > 0n ? formatNativeUsdc(verdict.refunded, 2) : html`<span class="muted">none owed</span>`}</dd>
-    </dl>
-    ${mode === 'live' && ARC.registry
-      ? html`<p class="note-line note-source">read from <verdikt-address address=${ARC.registry}></verdikt-address> on Arc Testnet</p>`
-      : nothing}`;
+    </dl>`;
 };
 
 /**
@@ -170,33 +168,35 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
     ${entry('03', html`
       <h2>The payment is verifiable. The delivery is not.</h2>
       <p>x402 proves a call was paid for. Nothing proves it was answered. The promise lives in a README, the record of whether it was kept lives nowhere, and an arbitration queue would cost more than the call it was arguing about — so reliability stays whatever the provider says it is.</p>
-      <p>Verdikt deletes the claim.</p>`, html`
+      <p><strong class="brand-inline"><img src="/favicon.svg" alt="" width="22" height="22" />Verdikt</strong> deletes the claim.</p>`, html`
       <p class="note-head">Why no dispute layer</p>
-      <p class="note-line">A refund is money back, never a penalty: it cannot exceed what the call cost, or what is left of the provider’s bond. Breaking a call on purpose earns nothing, so there is nothing to appeal.</p>`)}
+      <p class="note-line">A refund is money back, never a penalty: it cannot exceed what the call cost, or what is left of the provider’s bond.</p>`)}
 
     ${entry('04', html`
       <h2>The request path</h2>
-      <p>Two chains, one reason each. USDC is Arc’s native gas token, so the payment, the bond and the refund are all the same asset on the same chain.</p>
-      <verdikt-diagram class="diagram"></verdikt-diagram>
-      <p class="figure-source">The same loop in prose, including what happens to a 4xx and why an empty window scores 1000: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`, html`
+      <p>Two chains, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token. Ethereum Sepolia holds the public record on ENS: the SLA a provider publishes and the scores anything else can integrate against.</p>
+      <p>Between them, a Chainlink CRE Confidential Workflow does the judging. The call is replayed inside a TEE, so nobody has to be trusted with the response, and the verdict it writes carries a proof of the computation that produced it.</p>
+      <verdikt-diagram class="diagram"></verdikt-diagram>`, html`
       <p class="note-head">What never leaves</p>
-      <p class="note-line">The observed value stays off the chain. It is a slice of a response the agent paid for, so it comes back to that agent on its own response as <code>x-verdikt-expected</code> and <code>x-verdikt-actual</code>, and to nobody else.</p>`, true)}
+      <p class="note-line">The observed value stays off the chain. Only the verdict is recorded there — trustlessly, because the TEE proves what computed it.</p>
+      <p class="note-line">The same loop in prose, including what happens to a 4xx and why an empty window scores 1000: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`, true)}
 
     ${entry('05', html`
       <div class="entry-split">
         <div class="split-col">
           <h2>Tell us what you are building</h2>
-          <p>Say what you are pointing at this and what you need from it. A hole you have found in the mechanism is the most welcome message of the lot, and it reaches a person rather than a queue.</p>
+          <p>What you are pointing at this, and what you need from it. A hole in the mechanism is the most welcome message of all.</p>
           <verdikt-contact></verdikt-contact>
         </div>
         <div class="split-col">
           <h2>Be informed about our progress</h2>
-          <p>The loop already runs end to end. Next comes what makes it usable by someone who is not us: a paid call carried the whole way, the workflow in production rather than in simulation, and a walkthrough you can watch. The newsletter is one short message as each of those lands, and nothing else.</p>
+          <p>One short message as each milestone lands, and nothing else.</p>
           <verdikt-subscribe></verdikt-subscribe>
           <p class="landing-social">
             <a class="cta-aside" href=${GITHUB_URL} target="_blank" rel="noopener noreferrer">Star the repository</a>
             <a class="cta-aside" href=${X_URL} target="_blank" rel="noopener noreferrer">Follow on X</a>
           </p>
         </div>
-      </div>`, nothing, true)}
+      </div>`, html`
+      <p class="note-line" id="landing-forms-note">Both forms go to the form service named in the <a href=${PRIVACY_PATH} @click=${navigateOnClick(go, PRIVACY_PATH)}>privacy policy</a>, and nowhere else.</p>`, true)}
   </div>`;

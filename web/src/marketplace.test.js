@@ -557,7 +557,7 @@ describe('the marketplace listing’s search/filter/sort controls', () => {
     const marketplace = await build();
     const html = renderApp(marketplace, 'demo', 'marketplace', null, null, null, null, { key: 'deposit', direction: 'asc' });
     expect(html).toContain('aria-sort="ascending"');
-    expect(html.match(/aria-sort="none"/g)?.length).toBe(3);
+    expect(html.match(/aria-sort="none"/g)?.length).toBe(4);
   });
 
   it('defaults the marketplace listing to the old byReputation order, now as reactive sort state', async () => {
@@ -615,7 +615,8 @@ describe('rendering', () => {
 
   it('renders a standalone service page without a DOM', async () => {
     const html = renderApp(await build(), 'demo', 'service', 'weather');
-    expect(html).toContain('responds-within-5s');
+    expect(html).toContain('What it promised');
+    expect(html).toContain('Answers within 5 s');
     expect(html).toContain('back to the marketplace');
   });
 
@@ -751,9 +752,8 @@ describe('the endpoint a service is called at', () => {
   });
 });
 
-// Read off the ledger rather than asserted: this page never fetches a 402
-// challenge, so the only price it can honestly report is the one its own
-// verdicts recorded.
+// The figure is the band the price clause promises; what the ledger recorded
+// is the footnote behind it, and whether the two agree is said outright.
 describe('what the page says a call costs', () => {
   /** @param {bigint[]} paid */
   const detail = async (paid) => {
@@ -770,32 +770,29 @@ describe('what the page says a call costs', () => {
     return renderDetail(services[0]);
   };
 
-  it('reports the one figure every recorded call paid', async () => {
+  // The honest fixture's price clause promises 1 to 10000 minor units.
+  it('leads with the band the price clause promises, not the last price paid', async () => {
     const html = await detail([2500n, 2500n]);
-    expect(html).toContain('0.0025');
-    expect(html).toContain('What all 2 recorded calls paid');
+    expect(html).toMatch(/class="price"><b>(<!--[^>]*-->)*0\.000001 to 0\.01</);
+    expect(html).toContain('All 2 recorded calls paid 0.0025 USDC');
   });
 
-  it('reports a range when they differ, rather than picking one', async () => {
+  it('reports the ledger as a range when the recorded prices differ', async () => {
     const html = await detail([1n, 2_500_000n]);
-    // The asset is set apart from the figure, so the range reads as far as its
-              // upper bound — the split that used to drop everything after "0.000001".
-              expect(html).toContain('0.000001 to 2.5');
-    expect(html).toContain('The range across 2 recorded calls');
+    expect(html).toContain('All 2 recorded calls paid 0.000001 to 2.5 USDC');
   });
 
-  // The honest fixture's price clause promises 1 to 10000 minor units. A
-  // ledger running outside that is exactly what the FAIL below it records,
-  // and the page must not talk over its own table.
-  it('claims the price sits inside the declared band only when it does', async () => {
-    expect(await detail([2500n])).toContain('Inside the');
-    expect(await detail([2_500_000n])).not.toContain('Inside the');
+  // A ledger running outside the band is exactly what the FAIL below it
+  // records, and the page must not talk over its own table.
+  it('says whether the ledger sits inside the declared band', async () => {
+    expect(await detail([2500n])).toContain('The one recorded call paid 0.0025 USDC, inside the band.');
+    expect(await detail([2_500_000n])).toContain('outside the band.');
   });
 
-  it('reports no price at all before the first call, rather than guessing one', async () => {
+  it('still shows the band before the first call, and says nothing has been paid', async () => {
     const html = await detail([]);
+    expect(html).toContain('class="price"');
     expect(html).toContain('Nothing has been called yet');
-    expect(html).not.toContain('class="price"');
   });
 });
 
@@ -954,11 +951,12 @@ describe('the provenance block', () => {
     return renderDetail(services[0]);
   };
 
-  it('keeps the upstream and the address record below the promise and the record', async () => {
+  it('folds the record under the call section, ahead of the promise and the ledger', async () => {
     const html = await build();
     expect(html).toContain('On the record');
-    expect(html.indexOf('What it delivered')).toBeLessThan(html.indexOf('On the record'));
-    expect(html.indexOf('Relays to')).toBeGreaterThan(html.indexOf('What it delivered'));
+    expect(html.indexOf('Call it')).toBeLessThan(html.indexOf('On the record'));
+    expect(html.indexOf('On the record')).toBeLessThan(html.indexOf('What it promised'));
+    expect(html.indexOf('Relays to')).toBeLessThan(html.indexOf('What it delivered'));
   });
 
   it('does not call the address record a payout, because nothing checks it', async () => {
@@ -1213,5 +1211,69 @@ describe('the address-less provider page', () => {
   // the marketplace — the same rule the legal pages already follow.
   it('renders with no marketplace loaded at all', () => {
     expect(renderApp(null, 'live', 'provider', null, null)).toContain('No provider selected');
+  });
+});
+// The listing lost its Status column and its "not yet ranked" flag, and
+// gained the one count the chain already carries per service: how many paid
+// calls have been judged. A non-active status still shows, under the name.
+describe('the listing row after the column change', () => {
+  const build = async () =>
+    loadMarketplace(
+      deps({
+        services: [service('weather', HONEST), service('lite', FLAKY, { status: 'SUSPENDED' })],
+        verdicts: [verdict(HONEST, 'PASS', '0x01'), verdict(HONEST, 'FAIL', '0x02')],
+        records: { weather: record({ conformance: null, availability: null }), lite: record({ slug: 'lite', name: 'lite.verdikt.eth', serviceId: FLAKY }) }
+      })
+    );
+
+  it('has a Requests column counting judged calls, and no Status column', async () => {
+    const html = renderApp(await build(), 'demo', 'marketplace', null);
+    expect(html).toContain('>Requests');
+    expect(html).not.toContain('>Status<');
+    expect(html).not.toContain('not yet ranked');
+    expect(html).toContain('state-flag');
+    expect(html).toContain('class="state suspended"');
+  });
+
+  it('sorts by requests, most-judged first', () => {
+    /** @param {string} slug @param {number} calls */
+    const listing = (slug, calls) => /** @type {Listing} */ (/** @type {unknown} */ ({ slug, history: new Array(calls).fill({}) }));
+    const ranked = sortListings([listing('quiet', 1), listing('busy', 9), listing('silent', 0)], { key: 'requests', direction: 'desc' });
+    expect(ranked.map((l) => l.slug)).toEqual(['busy', 'quiet', 'silent']);
+  });
+});
+
+// The service page's two standing sentences moved behind help marks, the
+// verdict table dropped the three columns nobody read, and the provenance
+// block starts closed with its two caveats on the labels they are about.
+describe('the service page after the layout change', () => {
+  const build = async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], verdicts: [verdict(HONEST, 'FAIL', '0x02')], records: { weather: record({}) } })
+    );
+    return renderDetail(services[0]);
+  };
+
+  it('puts the call and price notes behind help marks, naming the upstream generically', async () => {
+    const html = await build();
+    expect(html).toContain('for="call-help"');
+    expect(html).toContain('origin API URL');
+    expect(html).not.toContain('class="call-note">Append');
+    expect(html).toContain('for="price-help"');
+  });
+
+  it('keeps only outcome, cause and cost in the verdict table', async () => {
+    const html = await build();
+    expect(html).not.toContain('<th>Payer</th>');
+    expect(html).not.toContain('>Request</th>');
+    expect(html).not.toContain('>Block</th>');
+  });
+
+  it('closes the record by default and drops the service id', async () => {
+    const html = await build();
+    expect(html).toContain('<details class="block record">');
+    expect(html).not.toContain('Service id');
+    expect(html).toContain('for="relay-help"');
+    expect(html).toContain('for="address-help"');
   });
 });

@@ -66,7 +66,7 @@ interface Marketplace {
 }
 
 /** What a click on a marketplace column header sorts by (issue #64). */
-type MarketplaceSortKey = 'reputation' | 'conformance' | 'availability' | 'deposit';
+type MarketplaceSortKey = 'reputation' | 'conformance' | 'availability' | 'requests' | 'deposit';
 
 interface MarketplaceSort {
   key: MarketplaceSortKey;

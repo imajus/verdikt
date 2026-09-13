@@ -226,9 +226,11 @@ const byConformance = (a, b) => rankNullLast(a.published.conformance, b.publishe
 const byAvailability = (a, b) => rankNullLast(a.published.availability, b.published.availability);
 /** @param {Listing} a @param {Listing} b */
 const byDeposit = (a, b) => (a.deposit === b.deposit ? 0 : a.deposit > b.deposit ? -1 : 1);
+/** Most-judged first: one verdict per paid call, so the history's length is the request count. @param {Listing} a @param {Listing} b */
+const byRequests = (a, b) => b.history.length - a.history.length;
 
 /** @type {Record<MarketplaceSortKey, (a: Listing, b: Listing) => number>} */
-const SORTERS = { reputation: byReputation, conformance: byConformance, availability: byAvailability, deposit: byDeposit };
+const SORTERS = { reputation: byReputation, conformance: byConformance, availability: byAvailability, requests: byRequests, deposit: byDeposit };
 
 /**
  * `listings`, ranked by `sort`. Every comparator above ranks best-first; a

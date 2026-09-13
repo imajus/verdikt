@@ -124,33 +124,19 @@ describe('landing page', () => {
     expect(html).toContain('0.1 USDC');
   });
 
-  // Scoped to the figures/verdict margin onward: the try-it chat's own
-  // disclosure names Arc Testnet unconditionally above it, because that
-  // evidence is real regardless of whether this dashboard has a live RPC
-  // configured — the mode-dependent claim being tested here belongs to the
-  // platform's own figures, not to that hardcoded history.
-  it('flags seeded data as seeded and never as a live chain', () => {
-    const services = marketplace([listing('weather', [verdict({})])]);
-    const demoFull = stringify(landing(() => {}, services, 'demo'));
-    const demo = demoFull.slice(demoFull.indexOf('class="figures"'));
+  it('flags seeded data as seeded, and live data as nothing at all', () => {
+    const demo = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'demo'));
     expect(demo).toContain('seeded');
-    expect(demo).not.toContain('Arc Testnet');
-    const liveFull = stringify(landing(() => {}, services, 'live'));
-    const live = liveFull.slice(liveFull.indexOf('class="figures"'));
-    expect(live).toContain('Arc Testnet');
+    const live = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'live'));
     expect(live).not.toContain('seeded');
   });
 
-  // The margin is the page's only claim about provenance, so it must never name
-  // a chain the figures beside it did not come from.
-  it('names a chain address only where a chain was actually read', () => {
+  // The landing names no chain address in either mode: the service page's
+  // own record does that, where the address was actually read.
+  it('names no chain address in either mode', () => {
     const services = marketplace([listing('weather', [verdict({})])]);
-    const demo = stringify(landing(() => {}, services, 'demo'));
-    expect(demo).not.toMatch(/0x[0-9a-fA-F]{40}/);
-    const live = stringify(landing(() => {}, services, 'live'));
-    const addresses = live.match(/0x[0-9a-fA-F]{40}/g) ?? [];
-    expect(addresses.length).toBeGreaterThan(0);
-    expect(new Set(addresses).size).toBe(1);
+    expect(stringify(landing(() => {}, services, 'demo'))).not.toMatch(/0x[0-9a-fA-F]{40}/);
+    expect(stringify(landing(() => {}, services, 'live'))).not.toMatch(/0x[0-9a-fA-F]{40}/);
   });
 
   // The hero states the terms; the proof of them sits beside the totals it
@@ -158,7 +144,7 @@ describe('landing page', () => {
   it('puts the latest verdict beside the figures, not beside the hero', () => {
     const html = stringify(landing(() => {}, marketplace([listing('quotes', [verdict({ blockNumber: 220n })])]), 'live'));
     expect(html.indexOf('Latest verdict')).toBeGreaterThan(html.indexOf('class="figures"'));
-    expect(html.match(/class="entry-note"/g)?.length).toBe(4);
+    expect(html.match(/class="entry-note"/g)?.length).toBe(5);
   });
 
   // The hero itself carries no CTA to it any more — the chat is the very next
@@ -194,5 +180,20 @@ describe('landing page', () => {
     const html = stringify(landing(() => {}, marketplace([listing('weather', [])])));
     expect(html).toContain('presumed healthy');
     expect(html).not.toContain('note-kv');
+  });
+});
+describe('the figures after the trim', () => {
+  it('shows totals only, with the verdict split carried by the bar', () => {
+    const html = stringify(landing(() => {}, marketplace([listing('weather', [verdict({})])]), 'live'));
+    expect(html).not.toContain('active</span>');
+    expect(html).toContain('class="breakdown"');
+    expect(html).toContain('aria-label="2 pass, 1 fail, 0 down"');
+    expect(html).not.toContain('read from');
+  });
+
+  it('states where both forms go once, under both of them', () => {
+    const html = stringify(landing(() => {}));
+    expect(html.match(/nowhere else/g)?.length).toBe(1);
+    expect(html).toContain('id="landing-forms-note"');
   });
 });

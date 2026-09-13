@@ -96,8 +96,8 @@ Supporting mechanism facts that are part of the position, not decoration:
   (`web/public/favicon.svg` and the icon set); the mark plus wordmark lockup lives
   in the nav.
 - Established tagline (`TAGLINE` in `src/pages.js`): *"x402 services whose delivery
-  is verified per call. Every response is judged against the SLA its provider
-  published; a broken promise refunds the caller from the provider's bond."*
+  is verified per call. Responses are judged against the provider's SLA; a broken
+  promise refunds the caller."*
 - Voice as written today: plain, precise, and willing to explain the mechanism
   rather than sell it. It names its own limits out loud — the legal pages say
   outright they are a hackathon demo and not reviewed legal advice, and the empty

@@ -1,13 +1,13 @@
 import { LitElement, html, nothing } from 'lit';
-import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatWhen, scoreBand, shortHex } from './format.js';
+import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatWhen, scoreBand } from './format.js';
 import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { DEFAULT_MARKETPLACE_FILTERS, DEFAULT_MARKETPLACE_SORT, isListed, matchesFilters, sortListings } from './marketplace.js';
 import { resolveProviderConsole } from './provider.js';
-import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PROVIDER_PATH, REGISTER_PATH, WITHDRAW_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
-import { TAGLINE, legalFooter, pageHead, privacy, providerPrompt, terms, withdrawPrompt } from './pages.js';
+import { HOW_PATH, LANDING_PATH, MARKETPLACE_PATH, PRIVACY_PATH, PROVIDER_PATH, REGISTER_PATH, TERMS_PATH, WITHDRAW_PATH, ensExplorerUrl, manageUrl, navigateOnClick, providerUrl, serviceUrl } from './router.js';
+import { legalFooter, pageHead, privacy, providerPrompt, terms, withdrawPrompt } from './pages.js';
 import { amount, landing } from './landing.js';
 import { copyButton } from './copy.js';
 import './address-view.js';
@@ -21,6 +21,7 @@ const githubIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fi
 const xIcon = () => html`<svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M9.53 6.78 15.17.5h-1.34L8.94 5.87 5.02.5H0l5.92 8.15L0 15.5h1.34l5.19-5.7 4.15 5.7H16L9.53 6.78Zm-1.84 2.02-.6-.83L2.3 1.44h2.06l3.84 5.29.6.83 4.99 6.87h-2.06L7.69 8.8Z"></path></svg>`;
 const sunIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2.5M12 19.5V22M4.22 4.22l1.77 1.77M18.01 18.01l1.77 1.77M2 12h2.5M19.5 12H22M4.22 19.78l1.77-1.77M18.01 5.99l1.77-1.77"/></svg>`;
 const moonIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z"/></svg>`;
+const menuIcon = () => html`<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>`;
 const systemIcon = () => html`<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="4" width="18" height="13" rx="1.5"/><path d="M8 20h8M12 17v3"/></svg>`;
 /** @type {Record<'system'|'light'|'dark', 'system'|'light'|'dark'>} */
 const NEXT_PREFERENCE = { system: 'light', light: 'dark', dark: 'system' };
@@ -73,6 +74,7 @@ const SORT_COLUMNS = [
   { key: 'reputation', label: 'Service', cellClass: 'name', title: null, sortTitle: 'Sort by reputation — conformance × availability' },
   { key: 'conformance', label: 'Conformance', cellClass: 'num', title: 'Share of responses that arrived and met the SLA', sortTitle: 'Sort by conformance — share of responses that arrived and met the SLA' },
   { key: 'availability', label: 'Availability', cellClass: 'num', title: 'Share of paid calls that returned anything usable', sortTitle: 'Sort by availability — share of paid calls that returned anything usable' },
+  { key: 'requests', label: 'Requests', cellClass: 'num', title: 'Paid calls judged so far — one verdict each, read off Arc', sortTitle: 'Sort by number of judged calls' },
   { key: 'deposit', label: 'Bond', cellClass: 'num', title: null, sortTitle: 'Sort by bond size' }
 ];
 
@@ -96,7 +98,6 @@ const listingHead = (sort = null, onSort = null) => html`
             @click=${() => onSort(column.key)}>${column.label}${sortMark(sort, column.key)}</button>`
         : html`<span class="cell ${column.cellClass}" title=${column.title ?? nothing}>${column.label}</span>`
     )}
-    <span class="cell status">Status</span>
   </div>`;
 
 /** @param {string} text 0-100 as typed, clamped; blank or non-numeric reads as 0 (no floor). */
@@ -206,7 +207,6 @@ const ensLink = (name) => html`<a
 
 /** @param {Listing} listing @param {(path: string) => void} go */
 const listingRow = (listing, go) => {
-  const unranked = listing.published.conformance === null && listing.published.availability === null;
   const href = serviceUrl(listing.slug);
   // The row is a div with a stretched link inside it, not an `<a>` wrapping
   // everything: the subname carries its own link out to the ENS explorer, and
@@ -217,12 +217,12 @@ const listingRow = (listing, go) => {
         <strong><a class="row-link" href=${href} @click=${navigateOnClick(go, href)}>${listing.slug}</a></strong>
         <small>${ensLink(listing.name)}</small>
         ${listing.contested ? html`<span class="contested">contested</span>` : nothing}
-        ${unranked ? html`<span class="unranked">not yet ranked</span>` : nothing}
+        ${listing.status === 'ACTIVE' ? nothing : html`<span class="state-flag">${statusMark(listing.status)}</span>`}
       </span>
       <span class="cell num">${scoreCell(listing.published.conformance)}</span>
       <span class="cell num">${availabilityCell(listing)}</span>
+      <span class="cell num">${listing.history.length}</span>
       <span class="cell num">${amount(formatNativeUsdc(listing.deposit, 2))}</span>
-      <span class="cell status">${statusMark(listing.status)}</span>
     </div>`;
 };
 
@@ -280,10 +280,10 @@ const routingBlock = (listing) => {
 };
 
 /**
- * What a call to this service has cost, read off the ledger below rather than
- * asserted. The 402 challenge is the authority on the current price and this
- * page never fetches one, so the honest claim is the observed one — and when
- * nothing has been called yet there is no claim to make at all.
+ * What calls to this service have actually cost, read off the ledger below.
+ * The figure the page leads with is the band the price clause promises; this
+ * is the footnote that says whether the ledger agrees with it — and when
+ * nothing has been called yet there is no ledger to read.
  *
  * @param {Listing} listing
  */
@@ -292,16 +292,9 @@ const observedPrice = (listing) => {
   if (paid.length === 0) return null;
   const low = paid.reduce((a, b) => (b < a ? b : a));
   const high = paid.reduce((a, b) => (b > a ? b : a));
-  const calls = `${paid.length} recorded call${paid.length === 1 ? '' : 's'}`;
-  return {
-    low,
-    high,
-    figure: low === high ? formatMinorUsdc(low) : formatMinorRange(low, high),
-    note:
-      low === high
-        ? `What ${paid.length === 1 ? 'the one recorded call' : `all ${calls}`} paid.`
-        : `The range across ${calls}.`
-  };
+  const calls = paid.length === 1 ? 'The one recorded call' : `All ${paid.length} recorded calls`;
+  const figure = low === high ? formatMinorUsdc(low) : formatMinorRange(low, high);
+  return { low, high, figure, note: `${calls} paid ${figure}` };
 };
 
 /** @param {Listing} listing @param {SlaClause[]} clauses */
@@ -319,25 +312,26 @@ const callSection = (listing, clauses) => {
   const withinBand = Boolean(
     band && price && price.low >= BigInt(band.minMinorUnits) && price.high <= BigInt(band.maxMinorUnits)
   );
+  // The figure is the band the price clause promises — the one claim about
+  // price this page can make without fetching a 402 — and the ledger's own
+  // figures sit behind the help mark as the check on it. Only a service with
+  // no price clause falls back to leading with what was paid.
+  const priceTip = bandText
+    ? html`The band its price clause promises; the 402 challenge names the figure you actually sign for. ${price ? `${price.note}, ${withinBand ? 'inside' : 'outside'} the band.` : 'Nothing has been called yet.'}`
+    : html`No price clause is published, so this is read off the ledger below. ${price?.note}.`;
   return html`
     <section class="block call">
       <h3>Call it</h3>
       <p class="endpoint ${blocked ? 'off' : ''}">
         <code class="endpoint-url">${url}</code>
-        ${blocked ? nothing : copyButton(url)}
+        ${blocked ? nothing : html`${copyButton(url)}${helpButton('call-help', 'How a call to this URL travels')}`}
       </p>
+      ${blocked ? nothing : helpTip('call-help', 'bottom-end', html`Append a path or query and it is forwarded to the origin API URL. The first call answers <code>402</code> with the provider’s own challenge; pay it and the response is judged against the clauses, inside the enclave, before it reaches you — <a href=${HOW_PATH}>how that works</a>.`)}
       ${blocked ? html`<p class="aside warn">${blocked}</p>` : nothing}
-      ${price
-        ? html`<p class="price"><b>${figure(price.figure)}</b><span class="price-unit">a call</span>
-            <span class="price-note">${price.note}${bandText
-              ? withinBand
-                ? html` Inside the ${bandText} band its price clause promises.`
-                : html` Its price clause promises ${bandText} a call.`
-              : nothing}</span></p>`
-        : html`<p class="call-note">Nothing has been called yet, so this page has no price to report.${bandText ? html` Its price clause promises ${bandText} a call; the 402 challenge names the figure you would actually sign for.` : nothing}</p>`}
-      ${blocked
-        ? nothing
-        : html`<p class="call-note">Append a path or query and it is forwarded to <code>${listing.endpoint ?? 'the registered endpoint'}</code>. The first call answers <code>402</code> with the provider’s own challenge; pay it and the response is judged against the clauses below, inside the enclave, before it reaches you — <a href=${HOW_PATH}>how that works</a>.</p>`}
+      ${bandText || price
+        ? html`<p class="price"><b>${figure(/** @type {string} */ (bandText ?? price?.figure))}</b><span class="price-unit">a call</span>${helpButton('price-help', 'Where this price comes from')}</p>
+          ${helpTip('price-help', 'bottom-start', priceTip)}`
+        : html`<p class="call-note">No price clause is published and nothing has been called yet, so this page has no price to report.</p>`}
     </section>`;
 };
 
@@ -356,13 +350,12 @@ const promisedSection = (listing, clauses, anchors) => html`
                   ? html`<p class="promise-note">${/** @type {{description?: string}} */ (clause).description}</p>`
                   : nothing}
               </div>
-              <p class="promise-key"><span class="note-head">${clause.type}</span><code>${clause.id}</code></p>
             </li>`)}
         </ol>`}
   </section>`;
 
-/** @param {Listing} listing @param {Map<string, string>} anchors @param {'live'|'demo'} mode */
-const deliveredSection = (listing, anchors, mode) => {
+/** @param {Listing} listing @param {Map<string, string>} anchors */
+const deliveredSection = (listing, anchors) => {
   const counts = { PASS: 0, FAIL: 0, DOWN: 0 };
   for (const verdict of listing.history) counts[verdict.outcome] += 1;
   const tally = /** @type {SlaOutcome[]} */ (['PASS', 'FAIL', 'DOWN'])
@@ -380,8 +373,8 @@ const deliveredSection = (listing, anchors, mode) => {
             <span class="strip" role="img" aria-label=${`${listing.history.length} verdicts, oldest first: ${tally.length ? `${counts.PASS} PASS, ${counts.FAIL} FAIL, ${counts.DOWN} DOWN` : ''}`}>${[...listing.history].reverse().map((verdict) => html`<i class=${verdict.outcome.toLowerCase()} title=${`${verdict.outcome}${verdict.blockNumber === null ? '' : ` · block ${verdict.blockNumber}`}`}></i>`)}</span>
             <span class="strip-note">oldest first</span>
           </p>
-          <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th><th class="edge">Request</th><th>Payer</th><th class="num">Block</th></tr></thead><tbody>
-            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td><td class="edge"><code title=${verdict.requestId}>${shortHex(verdict.requestId)}</code></td><td><verdikt-address address=${verdict.payer} .resolve=${mode === 'live'}></verdikt-address></td><td class="num muted">${verdict.blockNumber ?? '—'}</td></tr>`)}
+          <div class="scroll"><table class="ledger"><thead><tr><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th></tr></thead><tbody>
+            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}" title=${verdict.blockNumber === null ? nothing : `block ${verdict.blockNumber}`}><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td></tr>`)}
           </tbody></table></div>`}
     </section>`;
 };
@@ -397,19 +390,23 @@ const deliveredSection = (listing, anchors, mode) => {
  */
 const recordSection = (listing, mode, go) => {
   const consolePath = providerUrl(listing.provider);
+  // Closed by default: this is where a reader goes to check, not to decide,
+  // and a native <details> keeps it reachable with no script and no state.
+  // The two standing notes about what each record is and is not are behind
+  // the help marks on their own labels.
   return html`
-    <section class="block record">
-      <h3>On the record</h3>
+    <details class="block record">
+      <summary><h3>On the record</h3></summary>
       <table class="kv">
-        <tr><th>Relays to</th><td>${listing.endpoint ? html`<code>${listing.endpoint}</code>` : html`<span class="muted">no <code>url</code> record published</span>`}</td></tr>
+        <tr><th><span class="kv-label">Relays to ${helpButton('relay-help', 'What the url record is to the proxy')}</span></th><td>${listing.endpoint ? html`<code>${listing.endpoint}</code>` : html`<span class="muted">no <code>url</code> record published</span>`}</td></tr>
         <tr><th>Subname</th><td><code>${ensLink(listing.name)}</code> <span class="muted">on Ethereum Sepolia</span></td></tr>
-        <tr><th>Address record</th><td>${listing.payTo ? html`<verdikt-address address=${listing.payTo} copy .resolve=${mode === 'live'}></verdikt-address>` : html`<span class="muted">none published</span>`}</td></tr>
+        <tr><th><span class="kv-label">Address record ${helpButton('address-help', 'What the address record is and is not')}</span></th><td>${listing.payTo ? html`<verdikt-address address=${listing.payTo} copy .resolve=${mode === 'live'}></verdikt-address>` : html`<span class="muted">none published</span>`}</td></tr>
         <tr><th>Provider</th><td><a href=${consolePath} @click=${navigateOnClick(go, consolePath)}><verdikt-address address=${listing.provider} .resolve=${mode === 'live'}></verdikt-address></a></td></tr>
-        <tr><th>Service id</th><td><code>${listing.serviceId}</code></td></tr>
         ${mode === 'live' ? html`<tr><th>Registry</th><td><verdikt-address address=${ARC.registry} copy></verdikt-address> <span class="muted">on Arc Testnet</span></td></tr>` : nothing}
       </table>
-      <p class="aside">The proxy’s trust anchor is the <code>url</code> record, bound to the bond by the subname’s owner and the Arc provider being the same address. The <code>address</code> record is the provider’s own declaration and is not checked against the 402 challenge.</p>
-    </section>`;
+      ${helpTip('relay-help', 'bottom-start', html`The proxy’s trust anchor is the <code>url</code> record, bound to the bond by the subname’s owner and the Arc provider being the same address.`)}
+      ${helpTip('address-help', 'bottom-start', html`The <code>address</code> record is the provider’s own declaration and is not checked against the 402 challenge.`)}
+    </details>`;
 };
 
 /** @param {Listing|null} listing @param {'live'|'demo'} [mode] @param {(path: string) => void} [go] */
@@ -445,10 +442,11 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
         // account of why it is not shown.
         ? html`<p class="aside">No scores published yet — the hourly run has not written this subname. Over the verdicts below the same computation gives ${formatScore(listing.unpublished.conformance)} conformance and ${untracked(listing) ? 'N/A' : formatScore(listing.unpublished.availability)} availability, but the marketplace ranks on what is published, not on this.</p>`
         : nothing}
-    ${callSection(listing, clauses)}
-    ${promisedSection(listing, clauses, anchors)}
-    ${deliveredSection(listing, anchors, mode)}
-    ${recordSection(listing, mode, go)}`;
+    <div class="detail-top">
+      <div>${callSection(listing, clauses)}${recordSection(listing, mode, go)}</div>
+      ${promisedSection(listing, clauses, anchors)}
+    </div>
+    ${deliveredSection(listing, anchors)}`;
 };
 
 /** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */
@@ -479,7 +477,18 @@ export const nav = (view, mode, theme, account, go, connect, disconnect, changeT
   // bare path renders a prompt, not somebody's data, so leaving it static
   // would cost a connected provider a second click for nothing.
   const providerPath = account ? providerUrl(account) : PROVIDER_PATH;
-  return html`<nav class="nav">${brand(go)}<div class="nav-links">${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${mode === 'live' ? item(WITHDRAW_PATH, 'Withdraw', 'withdraw') : nothing}${item(HOW_PATH, 'How it works', 'how')}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}</div></nav>`;
+  // One set of links, rendered twice: in the bar above 760px, and inside a
+  // Web Awesome drawer behind a menu button below it. The drawer is opened
+  // and closed by hand rather than through render state — the nav is a pure
+  // function of the route, and which panel is open is not part of the route.
+  const links = html`${item(MARKETPLACE_PATH, 'Marketplace', 'marketplace')}${mode === 'live' ? item(providerPath, 'Provider', 'provider') : nothing}${mode === 'live' ? item(WITHDRAW_PATH, 'Withdraw', 'withdraw') : nothing}${item(HOW_PATH, 'How it works', 'how')}${item(TERMS_PATH, 'Terms', 'terms')}${item(PRIVACY_PATH, 'Privacy', 'privacy')}`;
+  /** @param {boolean} open */
+  const setMenu = (open) => {
+    const drawer = /** @type {(HTMLElement & {open: boolean})|null} */ (document.getElementById('nav-drawer'));
+    if (drawer) drawer.open = open;
+  };
+  return html`<nav class="nav">${brand(go)}<div class="nav-links">${links}</div><div class="nav-external">${themeToggle}<a href=${GITHUB_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on GitHub">${githubIcon()}</a><a href=${X_URL} target="_blank" rel="noopener noreferrer" aria-label="Verdikt on X">${xIcon()}</a>${wallet}<button type="button" class="nav-menu" aria-label="Open menu" aria-controls="nav-drawer" @click=${() => setMenu(true)}>${menuIcon()}</button></div>
+    <wa-drawer id="nav-drawer" class="nav-drawer" placement="end" label="Menu" light-dismiss><div class="nav-drawer-links" @click=${() => setMenu(false)}>${links}</div></wa-drawer></nav>`;
 };
 
 /** @param {string} width @param {string} [height] when a redaction stands in for something that is not a line of text */
@@ -496,8 +505,8 @@ const skeletonRow = (nameWidth) => html`
     <span class="cell name"><strong>${bar(nameWidth)}</strong><small>${bar('58%')}</small></span>
     <span class="cell num">${bar('2.2rem')}</span>
     <span class="cell num">${bar('2.2rem')}</span>
+    <span class="cell num">${bar('1.4rem')}</span>
     <span class="cell num">${bar('2.6rem')}</span>
-    <span class="cell status">${bar('3rem')}</span>
   </div>`;
 
 const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
@@ -513,8 +522,12 @@ const SKELETON_ROW_WIDTHS = ['72%', '58%', '85%', '64%', '50%', '78%'];
 // promising a page nobody asked for and then replacing it wholesale, which is
 // the one thing a skeleton exists to avoid.
 
+// TEMPORARY (demo window): the "-day" figure tracks WINDOW_SECONDS in
+// cre/lib/reputation.js, so it reads "7-day" again when that constant does.
+const MARKET_LEAD = html`Scores are the trailing ${Math.round(WINDOW_SECONDS / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly.`;
+
 const marketplaceSkeleton = () => html`
-  ${pageHead('Marketplace', TAGLINE)}
+  ${pageHead('Marketplace', MARKET_LEAD)}
   <section class="listing flush">${listingHead()}${SKELETON_ROW_WIDTHS.map(skeletonRow)}</section>`;
 
 /**
@@ -539,20 +552,21 @@ const serviceSkeleton = (slug, go) => html`
         </dl>
       </div>
     </header>
-    <section class="block">
-      <h3>Call it</h3>
-      <p class="endpoint"><span class="endpoint-url">${bar('16rem')}</span></p>
-    </section>
-    <section class="block">
-      <h3>What it promised</h3>
-      <ol class="promises">
-        ${CLAUSE_SKELETON_WIDTHS.map((width) => html`
-          <li class="promise">
-            <div class="promise-body"><p class="promise-line">${bar('17rem')}</p><p class="promise-note">${bar(width)}</p></div>
-            <p class="promise-key"><span class="note-head">${bar('4rem')}</span>${bar('9rem')}</p>
-          </li>`)}
-      </ol>
-    </section>
+    <div class="detail-top">
+      <div><section class="block">
+        <h3>Call it</h3>
+        <p class="endpoint"><span class="endpoint-url">${bar('16rem')}</span></p>
+      </section></div>
+      <section class="block">
+        <h3>What it promised</h3>
+        <ol class="promises">
+          ${CLAUSE_SKELETON_WIDTHS.map((width) => html`
+            <li class="promise">
+              <div class="promise-body"><p class="promise-line">${bar('17rem')}</p><p class="promise-note">${bar(width)}</p></div>
+            </li>`)}
+        </ol>
+      </section>
+    </div>
   </div>
   <p class="visually-hidden" role="status">Loading ${slug}…</p>`;
 
@@ -663,8 +677,8 @@ export class VerdiktApp extends LitElement {
       <section class="figures"><div class="figure"><span class="value">${owned.length}</span><span class="label">services</span></div><div class="figure"><span class="value">${amount(formatNativeUsdc(bonded, 2))}</span><span class="label">bonded</span></div><div class="figure"><span class="value ${refunded > 0n ? 'fail' : ''}">${amount(formatNativeUsdc(refunded, 2))}</span><span class="label">${auth.ownPage ? 'refunded from your bonds' : 'refunded from these bonds'}</span></div><div class="figure"><span class="value">${verdicts}</span><span class="label">verdicts</span></div></section>
       ${owned.length === 0 ? html`<p class="empty">No services registered by this address.</p>` : html`<section class="listing">${listingHead()}${owned.map((listing) => listingRow(listing, go))}</section>`}`;
   }
-  /** @param {PlatformStats} stats @param {Listing[]} services @param {(path: string) => void} go */
-  renderMarketplace(stats, services, go) {
+  /** @param {Listing[]} services @param {(path: string) => void} go */
+  renderMarketplace(services, go) {
     // Retired services are dropped here rather than in loadMarketplace: they
     // stay in `marketplace.services` so their own page and their provider's
     // console still find them by slug. See isListed (marketplace.js).
@@ -674,13 +688,13 @@ export class VerdiktApp extends LitElement {
     // change the displayed order (issue #64). The old one-time `byReputation`
     // sort in main.js is `marketSort`'s default.
     const visible = sortListings(listed.filter((listing) => matchesFilters(listing, this.marketFilters)), this.marketSort);
-    return html`${pageHead('Marketplace', TAGLINE, html`<p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p>`)}
+    return html`${pageHead('Marketplace', MARKET_LEAD, html`<p class="source ${this.mode}"><i class="dot"></i>${this.mode === 'demo' ? 'demo data' : 'Arc Testnet'}</p>`)}
       ${this.mode === 'demo' ? html`<p class="aside warn">Showing seeded data, not a live chain. Set <code>VITE_ARC_RPC_URL</code> to read Arc directly.</p>` : nothing}
       ${listed.length ? marketControls(this.marketFilters, (patch) => this.updateMarketFilters(patch)) : nothing}
       <section class="listing flush">${listingHead(this.marketSort, (key) => this.toggleMarketSort(key))}${visible.length
         ? visible.map((listing) => listingRow(listing, go))
         : html`<p class="empty">${listed.length ? 'No services match these filters.' : 'No services registered yet.'}</p>`}</section>
-      <footer>Scores are the trailing ${Math.round(stats.windowSeconds / 86400)}-day ratios published on <code>&lt;slug&gt;.verdikt.eth</code>, recomputed hourly. Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${listed.length ? html` · <a href=${providerUrl(listed[0].provider)} @click=${navigateOnClick(go, providerUrl(listed[0].provider))}>provider view</a>` : nothing}</footer>`;
+      <footer>Per-call verdicts are Arc events. A verdict is final: there is no dispute layer, by design. As of ${formatWhen(Math.floor(Date.now() / 1000))} UTC${listed.length ? html` · <a href=${providerUrl(listed[0].provider)} @click=${navigateOnClick(go, providerUrl(listed[0].provider))}>provider view</a>` : nothing}</footer>`;
   }
   /** @param {Listing[]} services @param {string} slug @param {(path: string) => void} go */
   renderService(services, slug, go) {
@@ -742,39 +756,39 @@ export class VerdiktApp extends LitElement {
     // on a page with no navigation and no way to reach the legal pages.
     // The landing page reads the marketplace but does not need it: its figures
     // and its latest-verdict margin both have a shape for "not in yet".
-    if (this.route.view === 'landing') return html`${navBar}${landing(go, this.marketplace, this.mode, this.error)}${legalFooter(go)}`;
-    if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter(go)}`;
-    if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter(go)}`;
+    if (this.route.view === 'landing') return html`${navBar}${landing(go, this.marketplace, this.mode, this.error)}${legalFooter()}`;
+    if (this.route.view === 'terms') return html`${navBar}${terms()}${legalFooter()}`;
+    if (this.route.view === 'privacy') return html`${navBar}${privacy()}${legalFooter()}`;
     // A provider page with no address in it selects nobody, so there is
     // nothing to read off a chain either.
     if (this.route.view === 'provider' && !this.route.address) {
-      return html`${navBar}${providerPrompt(this.mode, account, this.route.rejected ?? null, () => this.connect(), go)}${legalFooter(go)}`;
+      return html`${navBar}${providerPrompt(this.mode, account, this.route.rejected ?? null, () => this.connect(), go)}${legalFooter()}`;
     }
     // /register needs no listing to be itself — like landing/terms/privacy,
     // it must survive a dead RPC or a marketplace still in flight.
     if (this.route.view === 'register') {
-      return html`${navBar}${this.renderRegister(go)}${legalFooter(go)}`;
+      return html`${navBar}${this.renderRegister(go)}${legalFooter()}`;
     }
     // /withdraw acts on the connected wallet's own credited balance, read
     // straight off the registry — it needs no marketplace listing either.
     if (this.route.view === 'withdraw') {
-      return html`${navBar}${withdrawPrompt(this.mode, account, () => this.connect())}${legalFooter(go)}`;
+      return html`${navBar}${withdrawPrompt(this.mode, account, () => this.connect())}${legalFooter()}`;
     }
     // /how is prose about the mechanism and reads nothing off either chain, so
     // it belongs with them: waiting behind the marketplace only bought it a
     // skeleton of a page it is not.
-    if (this.route.view === 'how') return html`${navBar}${how()}${legalFooter(go)}`;
-    if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter(go)}`;
-    if (!this.marketplace) return html`${navBar}${skeleton(this.route, go, this.mode)}${legalFooter(go)}`;
-    const { services, stats } = this.marketplace;
+    if (this.route.view === 'how') return html`${navBar}${how()}${legalFooter()}`;
+    if (this.error) return html`${navBar}<p class="note warn">Could not load the marketplace: ${this.error}</p>${legalFooter()}`;
+    if (!this.marketplace) return html`${navBar}${skeleton(this.route, go, this.mode)}${legalFooter()}`;
+    const { services } = this.marketplace;
     const body = this.route.view === 'service'
       ? this.renderService(services, /** @type {string} */ (this.route.slug), go)
       : this.route.view === 'manage'
         ? this.renderManage(services, /** @type {string} */ (this.route.slug), go)
         : this.route.view === 'provider'
           ? this.renderProvider(resolveProviderConsole(services, this.route.address).owned, /** @type {string} */ (this.route.address), go)
-          : this.renderMarketplace(stats, services, go);
-    return html`${navBar}${body}${legalFooter(go)}`;
+          : this.renderMarketplace(services, go);
+    return html`${navBar}${body}${legalFooter()}`;
   }
 }
 

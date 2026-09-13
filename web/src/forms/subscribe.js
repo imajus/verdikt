@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { NEWSLETTER_ENDPOINT, looksLikeEmail, postForm } from './submit.js';
 
 export class VerdiktSubscribe extends LitElement {
@@ -58,14 +58,14 @@ export class VerdiktSubscribe extends LitElement {
             autocomplete="email"
             placeholder="you@example.com"
             aria-invalid=${this.error ? 'true' : 'false'}
-            aria-describedby=${this.error ? 'subscribe-error' : 'subscribe-hint'}
+            aria-describedby=${this.error ? 'subscribe-error' : 'landing-forms-note'}
             .value=${this.email}
             @input=${this.edit} />
         </div>
         <wa-button type="submit" variant="brand" ?disabled=${this.pending} ?loading=${this.pending}>Subscribe</wa-button>
         ${this.error
           ? html`<p class="form-error" id="subscribe-error" role="alert">${this.error}</p>`
-          : html`<p class="form-hint" id="subscribe-hint">Goes to the form service named in the <a href="/privacy">privacy policy</a>, and nowhere else.</p>`}
+          : nothing}
       </form>`;
   }
 }
