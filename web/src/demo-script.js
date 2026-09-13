@@ -32,9 +32,8 @@
 // The Arc Testnet explorer is https://testnet.arcscan.app (the `use-arc`
 // skill's own reference) — not `explorer.testnet.arc.network`, which
 // web/.impeccable/surfaces/web-src-lit-app-js.md already found does not
-// resolve, even though docs/walkthrough.md still links to it. Both the
-// registry address and the verdict tx below were read back from arcscan's
-// own API before being hardcoded here.
+// resolve. Both the registry address and the verdict tx below were read back
+// from arcscan's own API before being hardcoded here.
 
 import { serviceUrl } from './router.js';
 

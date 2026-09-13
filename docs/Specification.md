@@ -57,7 +57,6 @@ a refund can only ever exist on a call the provider accepted payment for, which
 is a stronger guarantee than any address comparison the proxy can make — and the
 only one available against a provider that mints a single-use payout address per
 challenge, where a re-probed challenge never names the address the payer signed.
-The narrower challenge-level payTo check was retired for the same reason (#39).
 
 ### Fallback when the SLA can't be read
 
@@ -117,26 +116,29 @@ body is seen by one enclave plus the agent it is relayed to, not by every node
 operator as a plain workflow would expose it. The residual is that the proxy sees
 it in transit — disclosed to providers rather than papered over.
 
-Production CRE enrollment is private-beta; `cre workflow simulate` is self-serve,
-and the ETHOnline2026 Chainlink track accepts CLI simulation as sufficient
-evidence.
-
 ### Proxy request path
 
-The proxy branches on the `X-PAYMENT` header:
+The proxy branches on the payment header — `PAYMENT-SIGNATURE` in x402 v2,
+`X-PAYMENT` in v1; both are recognised, and a v2 provider sends only the new
+name:
 
 - **Absent** — plain passthrough. The provider's response, 402 challenge
   included, is relayed unchanged. The proxy's trust anchor is the service's
   registered `url` (§4, bound to the slug's bond via the ownership check);
   whatever `payTo` that URL's own challenge names is exactly as legitimate as
-  the URL itself, so the proxy does not compare it against anything (issue
-  #37 — a prior `payTo`-vs-ENS-`address` check was removed as security
-  theater: a compromised or malicious upstream can declare whatever `payTo`
-  it wants regardless of what is pinned in ENS).
-- **Present** — the proxy triggers the confidential workflow and passes the
-  header through. The enclave replays it against the provider, evaluates the paid
-  response (§1), writes the verdict to Arc (§3), and returns the payload to relay
-  back.
+  the URL itself, so the proxy does not compare it against anything. Checking
+  it against the ENS `address` record would be theater: a compromised or
+  malicious upstream can declare whatever `payTo` it wants regardless of what
+  is pinned in ENS, and a provider whose payout address rotates per challenge
+  would never match.
+- **Present** — the proxy re-fetches the provider's challenge (the header
+  names its scheme but not its asset, and the EIP-712 domain needs the asset,
+  so verification requires the live `accepts`), recovers the payer from the
+  payment signature — asking a contract account via ERC-1271 on the chain it
+  paid on — then triggers the confidential workflow and passes the header
+  through. The enclave replays it against the provider, evaluates the paid
+  response (§1), writes the verdict to Arc (§3), and returns the payload to
+  relay back.
 
 The agent signs its own payment, exactly as it would calling the provider
 directly; Verdikt holds no wallet on the payment leg and never signs on an
@@ -265,7 +267,9 @@ an accepted scope decision for a two-week build.
   `serviceId` (§3), so `provider-name.verdikt.bond/<path>` — the URL agents
   call — maps directly to `provider-name.verdikt.eth` with no lookup table.
 - At mint, EAC roles are set once: the provider's address scoped to the `sla`
-  key; the CRE signer scoped to the `conformance` and `availability` keys.
+  and `url` keys; the CRE signer scoped to the `conformance` and `availability`
+  keys. Minting is self-serve through `VerdiktSubnameRegistrar`, which holds
+  the registrar role on the subname registry and grants exactly those roles.
 - The subname carries five records:
   - **`url`** — the provider's upstream endpoint, where the proxy relays
     `<slug>.verdikt.bond/*`. Provider-authored and not consensus-significant, so
@@ -279,9 +283,8 @@ an accepted scope decision for a two-week build.
     workflows"), never per call and never a refund trigger (§3). Per-call
     `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
   - **address** — owner-controlled, set to the provider's payout wallet.
-    Surfaced in the marketplace listing; no longer compared against a 402
-    challenge's `payTo` (removed, issue #37) — it is not part of the trust
-    chain the proxy enforces.
+    Surfaced in the marketplace listing; not part of the trust chain the
+    proxy enforces (§2).
 - Because the proxy dials the `url` record from Verdikt's own network, a
   provider-authored URL is a server-side-request-forgery primitive unless it is
   constrained. Private, loopback, link-local and CGNAT hosts are refused before
@@ -335,12 +338,14 @@ Two chains, each chosen for what only it provides:
   relays the handshake and holds no wallet on the payment leg. The demo caller
   uses the Circle Agent Wallet CLI, a ready x402-capable wallet across EVM
   chains.
-- **Demo provider** — a [Proceeds](https://myproceeds.xyz) paywall accepting x402
-  on Arc Testnet stands in for a live provider. Verdikt requires no provider to
-  use Proceeds or settle on Arc — the proxy relays whatever the 402 challenge
-  advertises — but settling on Arc is the default that keeps the payment and
-  refund legs unified; independently-operated mainnet providers (e.g.
-  [Blockrun](https://blockrun.ai/docs/x402/endpoints)) are the production target.
+- **Providers** — independently-operated x402 providers (Alchemy, Allium,
+  Syntalic and others) fronted as they are, settling on whichever chain their
+  own challenge names. Verdikt requires no provider to settle on Arc: the
+  proxy relays whatever the 402 challenge advertises and reads the payer back
+  from its signature. Settling on Arc is the default that keeps the payment
+  and refund legs unified; where a provider settles elsewhere, the refund is
+  still credited on Arc to the payer the signature names, which is what the
+  signature-relayed claim path in §3 exists for.
 
 ## 7. Architecture
 
@@ -380,7 +385,8 @@ On-chain registry (Arc)
    - verdict events, deposit balance -- no SLA field
    - auto-refund on per-request FAIL or DOWN: min(fixedRefund, paidAmount), paid
      in native USDC from the bond, same chain the call was paid on
-   - requestId recorded; a second refund on the same request reverts
+   - requestId recorded; a second report on the same request emits
+     VerdictRejected and pays nothing
    - auto-suspend at zero deposit
 
 Chainlink CRE Workflow (plain, no TEE) -- separate, hourly, trailing 7 days

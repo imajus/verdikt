@@ -138,7 +138,7 @@ based on its actual track record instead of a provider's own claims.
      call.
   3. Call the chosen service through Verdikt's HTTP endpoint with any
      x402-capable client, paying exactly as they would against the
-     provider directly. Verdikt relays the 402 challenge, checks it,
+     provider directly. Verdikt relays the 402 challenge unchanged,
      verifies the response, and refunds if needed — without the caller
      needing to know multiple chains or a TEE workflow are involved.
   4. View a service's verdict/refund history and deposit balance at any
@@ -204,13 +204,6 @@ the architecture diagram live in [Specification.md](./Specification.md).
 
 ## 9. Open risks / unresolved
 
-- Payment settlement uses Circle Gateway's batched scheme
-  (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
-  balance (a `direct` on-chain deposit into the Gateway wallet) rather than
-  paying from the wallet's plain token balance. The escrow contract's refund
-  side is not yet wired to the payment leg: a FAIL or DOWN verdict must credit the
-  paying agent on Arc from the bond, and that registrar→refund path still
-  needs building and testing.
 - **Induced-failure griefing.** With no dispute layer, an agent can craft
   requests designed to push a service into violating its own SLA — a query
   hitting a slow path, or one that trips a schema edge case — and collect a
@@ -221,28 +214,22 @@ the architecture diagram live in [Specification.md](./Specification.md).
   than the payment turns griefing into a strategy, with no arbitration to
   fall back on.
 - The trust argument rests on attestation — that the enclave is running
-  the published workflow code. Production CRE enrollment is private-beta, so
-  the demo can only simulate that, and the submission should say so rather
-  than implying a live attested deployment.
+  the published workflow code. Where enrollment on production CRE
+  infrastructure is unavailable the enclave is simulated, and that has to be
+  stated rather than implied.
+- A refund is credited to the account a payment was debited from, and under
+  Circle Gateway that is not an account the agent can drive on Arc. The claim
+  path therefore cannot assume the payer transacts on Arc itself
+  ([spec §3](./Specification.md#3-on-chain-registry)).
 - Availability tier boundaries/percentages may need tuning during build.
-- ~~ENSv2's Permissioned Registry/Resolver are beta: exact Sepolia addresses,
-  ABI stability, and tooling support (viem/ethers/ENS SDK) not yet
-  verified.~~ **Resolved by Spike A**
-  ([spikes/A-ens-sepolia.md](./spikes/A-ens-sepolia.md)): addresses confirmed
-  on-chain, per-key EAC enforces, `viem` alone is sufficient. What remains is
-  that the contracts are still explicitly non-final before mainnet, so a
-  redeploy can move the addresses under us — `pnpm spike:ens --read-only`
-  re-checks them.
-- The ENSv2 resolver is per-account, so its `ROOT_RESOURCE` roles do not
-  transfer with the name — observed live when `verdikt.eth` changed hands on
-  Sepolia and the previous holder kept write access to every record. Verdikt
-  relies on holding those roles itself, which makes setting them deliberately
-  part of onboarding rather than a consequence of owning the name.
+- ENSv2's Permissioned Registry/Resolver are explicitly non-final before
+  mainnet, so a redeploy can move the contract addresses.
+- ENSv2 resolver permissions are per-account and do not transfer with the
+  name, so granting them is a deliberate onboarding step rather than a
+  consequence of owning `verdikt.eth`.
 - Identity/SLA layer runs on Sepolia (ENSv2 has no mainnet deployment),
   separate from Arc's own network — a scope decision to state explicitly
   in the submission.
-- verdikt.bond domain not yet purchased — price/listing legitimacy
-  unverified.
 - No dispute layer is a deliberate design choice — state it confidently in
   the submission.
 

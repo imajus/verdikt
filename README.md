@@ -30,24 +30,23 @@ challenge process and no arbiter: the verdict is a deterministic function of
 ## How it works
 
 ```
-agent ──no X-PAYMENT──► proxy ──► provider's 402 challenge
-                          │
-                          └─ compares the challenge's payTo against the address
-                             record on <slug>.verdikt.eth, and BLOCKS on a
-                             mismatch. This is the one check that must happen
-                             before the fact: a payment to a spoofed address
-                             leaves no bond to reclaim from.
+agent ──no payment header──► proxy ──► provider's 402 challenge, relayed
+                                       unchanged. The trust anchor is the
+                                       service's registered `url`, bound to
+                                       its bond; the challenge's payTo is not
+                                       compared against anything.
 
-agent ──with X-PAYMENT─► proxy ──► CRE Confidential Workflow (TEE)
-                                     ├─ replays the payment against the provider
-                                     ├─ evaluates the response vs the SLA
-                                     ├─ writes the verdict to Arc as a
-                                     │  DON-signed report
-                                     └─ returns the payload to relay back
+agent ──PAYMENT-SIGNATURE──► proxy ──► CRE Confidential Workflow (TEE)
+        (or X-PAYMENT, v1)       │        ├─ replays the payment against the provider
+                                 │        ├─ evaluates the response vs the SLA
+                 recovers the payer from  ├─ writes the verdict to Arc as a
+                 the signature, refuses   │  DON-signed report
+                 what it cannot verify    └─ returns the payload to relay back
 
 hourly, separately ────► CRE cron workflow (no TEE)
                            reads public VerdictWritten events, computes the
-                           trailing-7-day conformance and availability ratios,
+                           trailing-window conformance and availability ratios
+                           (7 days in the spec, cut to 1 day for the demo),
                            publishes them to ENS
 ```
 
@@ -79,12 +78,12 @@ cp .env.example .env      # then fill in what you have
 ## Usage
 
 ```bash
-pnpm test            # 305 tests: engine, SDK, proxy, workflow logic, dashboard
+pnpm test            # 776 tests: engine, SDK, proxy, workflow logic, dashboard
 pnpm lint
 pnpm typecheck       # tsc against JSDoc — the repo is JS, not TypeScript
 pnpm demo            # the whole loop end to end, on a local chain
 
-cd contracts && forge test    # 56 tests: registry and score-writer
+cd contracts && forge test    # 89 tests: registry, score writer, subname registrar
 cd web && pnpm dev            # the marketplace dashboard
 cd proxy && pnpm dev          # the x402 relay
 ```
@@ -103,9 +102,14 @@ cd cre/workflows && cre workflow simulate verify --listen
 
 Seven transcripts are in [`docs/evidence/`](docs/evidence), all real output: the
 simulate run with its TEE banner, the enclave-to-proxy callback round trip, the
-loop running live on Arc, the `payTo` mismatch being blocked, the hourly
-aggregate, per-verdict clause detail end to end, and a signed x402 payment
-settling on Base Sepolia.
+loop running live on Arc, the hourly aggregate, per-verdict clause detail end
+to end, a signed x402 payment settling on Base Sepolia, and a `payTo` check
+the proxy no longer runs (#39). They record the original demo pair, `weather`
+and `weather-lite`, since deregistered; the live listing is on the chain.
+
+The simulated workflows are hosted for the deployed proxy by
+[`runner/`](runner/README.md), a stand-in for Chainlink's gateway that also
+runs the hourly score publish as a scheduled job.
 
 ## Deploy
 
@@ -132,6 +136,10 @@ For Cloudflare Workers Builds, configure these **Build Variables**:
 |---|---|
 | `VITE_ARC_RPC_URL` | Arc Testnet JSON-RPC endpoint |
 | `VITE_SEPOLIA_RPC_URL` | Ethereum Sepolia JSON-RPC endpoint |
+
+Optional, and off unless both are set: `VITE_PLAUSIBLE_ENDPOINT` and
+`VITE_PLAUSIBLE_DOMAIN` point the dashboard at a self-hosted Plausible
+Analytics instance. `web/.env.example` documents every variable.
 
 They must be build variables, not Worker runtime Variables & Secrets: Vite
 replaces `import.meta.env.VITE_*` while producing `web/dist`, and the deployed
@@ -163,13 +171,13 @@ allow the page's origin by CORS and any key in it must be origin-restricted.
 | `cre/lib` | Everything the workflows decide, as plain JS under vitest. |
 | `cre/workflows` | The two CRE workflows — capability plumbing around `cre/lib`. |
 | `proxy` | The x402 relay. Holds no wallet and never evaluates. |
-| `web` | The marketplace dashboard. See [Deploy](#deploy) for `wrangler.jsonc` and `Dockerfile`. |
+| `runner` | The simulate-mode CRE gateway: hosts `cre workflow simulate verify --listen` for the proxy and publishes the hourly scores. |
+| `web` | The marketplace dashboard, provider console and registration wizard. See [Deploy](#deploy) for `wrangler.jsonc` and `Dockerfile`. |
+| `scripts` | Operator scripts: ENS namespace setup, service onboarding, the local demo, signing a real x402 payment. |
+| `fixtures` | Recorded challenges, payloads and the two demo SLAs everything downstream tests against. |
 | `deployments` | Verdikt's own deployed addresses, per network. Checked in: they are public and identical everywhere. |
 | `docs` | The specification, the spikes that reshaped it, and the roadmap notes for what comes after. |
-
-Start with the [walkthrough](docs/walkthrough.md) — the whole loop, on a public
-chain, with real commands and real output. The
-[shot list](docs/shot-list.md) is the same thing cut to three minutes.
+| `.claude/skills` | Agent skills, including `verdikt-paid-call-sweep`: enumerate the live registry, pay each service for real, read the verdicts back. |
 
 `docs/` takes precedence over inference from code:
 [Requirements](docs/Requirements.md) ·
@@ -177,7 +185,9 @@ chain, with real commands and real output. The
 [Tasks](docs/Tasks.md) ·
 [Spike A: ENSv2](docs/spikes/A-ens-sepolia.md) ·
 [Spike B: CRE](docs/spikes/cre.md) ·
-[Roadmap: ERC-8004 interop](docs/roadmap/erc-8004.md)
+[Spike C: the payment header](docs/spikes/C-x402-payment.md) ·
+[Roadmap: ERC-8004 interop](docs/roadmap/erc-8004.md) ·
+[Roadmap: pre-flight input validation](docs/roadmap/input-validation.md)
 
 ## What is real, and what is not
 
@@ -188,8 +198,8 @@ verification would be self-refuting.
 
 - The evaluation engine, the registry accounting, the proxy's request path and
   the dashboard's data layer all have tests, including the adversarial cases:
-  a payer that rejects transfers, a reentrant withdrawal, a spoofed `payTo`, a
-  provider URL aimed at link-local space.
+  a payer that rejects transfers, a reentrant withdrawal, a forged refund
+  claim, a tampered payment header, a provider URL aimed at link-local space.
 - ENSv2's per-key access control enforces on Sepolia — asserted against the live
   contracts, including the negative case (Spike A).
 - Both CRE workflows compile to WASM with `@verdikt/sla` bundled in, and the
@@ -199,29 +209,41 @@ verification would be self-refuting.
   in [`docs/evidence/cre-callback-roundtrip.log`](docs/evidence/cre-callback-roundtrip.log) —
   Chainlink documents no way to *read* an execution's result, so pushing is the
   mechanism (spike finding CRE-9).
+- **Payment verification covers every `exact` option a real challenge has
+  offered.** The payer is *recovered* from an ERC-3009 signature, never read
+  out of JSON, so swapping the payer or inflating the amount invalidates it.
+  Plain `eip3009`: Verdikt signs a header the USDC contract itself accepts —
+  [`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)
+  on Base Sepolia settled one ([`evidence/x402-payment-live.log`](docs/evidence/x402-payment-live.log)).
+  Circle's `GatewayWalletBatched`: the same signature shape under the Gateway
+  contract's domain, recovered against a real captured header (#41). A
+  contract-account payer such as the Circle agent wallet is asked via ERC-1271
+  on the chain it paid on (#55). A scheme nobody has seen still refuses.
 
 **Live on a public chain:**
 
 - `VerdiktRegistry` on Arc Testnet at `0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`,
   `VerdiktScoreWriter` on Sepolia at `0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA`,
-  and `weather` / `weather-lite` registered with 10 USDC bonds and their own
-  `verdikt.eth` subnames.
-- Three verdicts written by DON-signed reports through the real
-  KeystoneForwarder — a PASS, and two FAILs that each name the clause that
-  broke. One broke `price-band` and refunded the full 1 USDC; the other broke
-  `current-weather-shape` and refunded 0.0025 USDC, because the cap is what was
-  actually paid.
-- The proxy relaying a real 402 from a live Proceeds paywall with its `payTo`
-  verified, and blocking the same call once the address record was repointed.
-- The hourly aggregate computing `weather=500/1000 weather-lite=0/1000` from
-  those events and publishing both to ENS, where they can be read back off
-  `<slug>.verdikt.eth`. All of it in [`docs/evidence/`](docs/evidence).
+  and `VerdiktSubnameRegistrar` on Sepolia at
+  `0x247e46abe002c034CD99D8d81D7e6182b727ac7d`, which lets the dashboard's
+  wizard mint `<slug>.verdikt.eth` without an operator in the loop.
+- Services registered that way by their providers, each bonded with 10 USDC
+  and each fronting a real third-party x402 provider (Alchemy, Allium,
+  Syntalic and others). The registry is the source of truth for the list, and
+  `.claude/skills/verdikt-paid-call-sweep` reads it.
+- Real paid calls, judged. A Circle agent wallet pays through
+  `<slug>.verdikt.bond`; the payer on each verdict is recovered from its
+  signature, and every FAIL or DOWN takes its refund out of the provider's
+  bond — a bond below 10 USDC on the dashboard is that arithmetic.
+- The hourly aggregate, run as a scheduled job in the runner container,
+  publishing `conformance` / `availability` for every live listing to ENS,
+  where they read straight back off `<slug>.verdikt.eth`.
 
-`weather` and `weather-lite` were deregistered on Arc Testnet on 2026-09-11 —
-their bonds were returned to the provider wallet and the registry now marks
-both `DEREGISTERED`. The evidence above is the transcript from while they were
-live; a fresh recording needs both slugs re-registered under new bonds first,
-since a deregistered slug can't be reused on this deployment.
+The transcripts in [`docs/evidence/`](docs/evidence) record the original demo
+pair, `weather` and `weather-lite`, against a Proceeds paywall: three verdicts
+through the real KeystoneForwarder, two of them naming the clause they broke,
+and the aggregate scoring both. Those verdicts carry a fixture payer, from
+before the paid leg ran end to end, and the pair has since been deregistered.
 
 **Simulated or blocked, and why:**
 
@@ -231,20 +253,14 @@ since a deregistered slug can't be reused on this deployment.
   their own chain — `0x6E9EE680…` on Arc, `0x15fC6ae9…` on Sepolia, which are
   unrelated contracts. The simulator says the rest plainly: *"The simulator is
   not a real TEE."*
-- **`decodePayment` handles half of x402, and refuses the other half.** The
-  `exact`/`eip3009` scheme is implemented and *verified*: the payer is recovered
-  from an ERC-3009 signature, so swapping the payer or inflating the amount
-  invalidates it. Verdikt signs a header the USDC contract itself accepts —
-  [`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)
-  on Base Sepolia settled one, which is what proves the binding rather than
-  asserting it ([`evidence/x402-payment-live.log`](docs/evidence/x402-payment-live.log)).
-  Circle's `GatewayWalletBatched` is not published, so it refuses rather than
-  guessing.
-- **No paid call runs end to end, and that gap is the provider's.** The demo
-  paywall advertises `eip3009` and then answers 402 to a payment the token
-  contract accepts. So the verdicts above carry a fixture payer. The proxy also
-  does not yet keep the challenge a payment answers, which verification needs —
-  the header names its scheme but not its asset.
+- **A Gateway-paid refund can be earned but not yet claimed.** Under
+  `GatewayWalletBatched` the account debited is the agent wallet's *backing
+  EOA*, so that is the payer a verdict credits — correctly, since it names who
+  paid — and it has no way to call `withdraw()` on Arc. The contract now has
+  `withdrawWithAuthorization`, a claim the payer signs and anyone relays, but
+  the live registry pins its forwarder immutably and predates it, so closing
+  this is a redeploy (Tasks.md 2.4). Until then those credits are visible in
+  `getOwed` and stranded.
 
 ## Design decisions worth knowing
 
