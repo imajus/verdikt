@@ -65,6 +65,27 @@ describe('routing', () => {
     const { deps } = harness();
     expect((await call(deps, { method: 'GET', url: '/healthz' })).statusCode).toBe(200);
   });
+
+  // A slug that is shaped like a service but Arc never registered is the
+  // caller's mistake, not ours. `www` is one of those — it reaches here
+  // because the wildcard route catches it — and it must not be reported as a
+  // gateway failure, or every typo looks like Verdikt is down.
+  it('404s a well-formed slug Arc never registered', async () => {
+    const { deps, upstreamFetch } = harness({ status: 'NONE', serviceRecord: { url: null } });
+    const response = await call(deps, { method: 'GET', url: '/', headers: { host: 'www.verdikt.bond' } });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('unknown_service');
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  // The status that used to swallow the case above, and still has to mean
+  // what it says for a service Arc does know.
+  it('still 502s a registered service that published no url', async () => {
+    const { deps } = harness({ serviceRecord: { url: null } });
+    const response = await call(deps, { method: 'GET', url: '/current', headers: { host: 'weather.verdikt.bond' } });
+    expect(response.statusCode).toBe(502);
+    expect(response.json().error).toBe('no_endpoint');
+  });
 });
 
 describe('passthrough — the unpaid leg relays unchanged', () => {
@@ -120,9 +141,14 @@ describe('refusals before any upstream call', () => {
     expect(upstreamFetch).not.toHaveBeenCalled();
   });
 
+  // 404, not the 503 this asserted before: `NONE` is not a service having a
+  // bad day, it is a slug Arc has never heard of, and a retry will never make
+  // it exist.
   it('refuses a service that was never registered', async () => {
     const { deps } = harness({ status: 'NONE' });
-    expect((await getWeather(deps)).statusCode).toBe(503);
+    const response = await getWeather(deps);
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('unknown_service');
   });
 
   it('reports an unreachable naming layer as our outage, not a missing service', async () => {

@@ -207,16 +207,30 @@ export async function handleRequest(request, deps = {}) {
     return json({ error: 'naming_layer_unavailable', detail: /** @type {Error} */ (error).message }, 503);
   }
 
-  if (!record.url) {
-    return json({ error: 'no_endpoint', detail: `${record.name} has published no url record` }, 502);
-  }
-
+  // Read Arc before judging the ENS records, not after. The registry is the
+  // only authority on whether a slug is a service at all, and `Status.NONE`
+  // is how it says no. Checking `url` first meant an unregistered slug was
+  // reported as a broken gateway — `www.verdikt.bond` answered 502, and so
+  // did every typo — when the honest answer is that there is no such service.
+  // A registered service still resolves both records, so this costs the
+  // normal path nothing; only a slug that is not a service pays for the extra
+  // read, and that is the one we were answering wrongly.
   /** @type {ServiceState} */
   let state;
   try {
     state = await registry.getService(record.serviceId);
   } catch (error) {
     return json({ error: 'registry_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
+
+  if (state.status === 'NONE') {
+    return json({ error: 'unknown_service', slug, detail: `${slug} is not a registered service` }, 404);
+  }
+
+  // Reached only for a slug Arc does know, so this now means what it says: a
+  // real service whose provider has published no endpoint to relay to.
+  if (!record.url) {
+    return json({ error: 'no_endpoint', detail: `${record.name} has published no url record` }, 502);
   }
 
   const ownership = checkOwnership(record.owner, state.provider);
