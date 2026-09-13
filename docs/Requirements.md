@@ -138,7 +138,7 @@ based on its actual track record instead of a provider's own claims.
      call.
   3. Call the chosen service through Verdikt's HTTP endpoint with any
      x402-capable client, paying exactly as they would against the
-     provider directly. Verdikt relays the 402 challenge, checks it,
+     provider directly. Verdikt relays the 402 challenge unchanged,
      verifies the response, and refunds if needed — without the caller
      needing to know multiple chains or a TEE workflow are involved.
   4. View a service's verdict/refund history and deposit balance at any
@@ -204,13 +204,17 @@ the architecture diagram live in [Specification.md](./Specification.md).
 
 ## 9. Open risks / unresolved
 
-- Payment settlement uses Circle Gateway's batched scheme
-  (`GatewayWalletBatched`), which requires the caller to pre-fund a Gateway
-  balance (a `direct` on-chain deposit into the Gateway wallet) rather than
-  paying from the wallet's plain token balance. The escrow contract's refund
-  side is not yet wired to the payment leg: a FAIL or DOWN verdict must credit the
-  paying agent on Arc from the bond, and that registrar→refund path still
-  needs building and testing.
+- Payment settlement under Circle Gateway's batched transfer method
+  (`GatewayWalletBatched`) requires the caller to pre-fund a Gateway balance
+  (a `direct` on-chain deposit into the Gateway wallet) rather than paying
+  from the wallet's plain token balance. ~~The escrow contract's refund side
+  is not yet wired to the payment leg.~~ **Built and exercised**: a FAIL or
+  DOWN credits the payer the payment signature names, on Arc, from the bond.
+  What remains is on the claim side: under Gateway the debited account is the
+  agent wallet's *backing EOA*, which cannot transact on Arc, so the credit is
+  collected through a signed authorization anyone may relay
+  ([spec §3](./Specification.md#3-on-chain-registry)) — in the contract, not
+  yet on the live deployment.
 - **Induced-failure griefing.** With no dispute layer, an agent can craft
   requests designed to push a service into violating its own SLA — a query
   hitting a slow path, or one that trips a schema edge case — and collect a
@@ -241,8 +245,9 @@ the architecture diagram live in [Specification.md](./Specification.md).
 - Identity/SLA layer runs on Sepolia (ENSv2 has no mainnet deployment),
   separate from Arc's own network — a scope decision to state explicitly
   in the submission.
-- verdikt.bond domain not yet purchased — price/listing legitimacy
-  unverified.
+- ~~verdikt.bond domain not yet purchased.~~ Registered 2026-09-06; the
+  Cloudflare zone is live and `*.verdikt.bond` routes to the proxy
+  (Tasks.md 0.6).
 - No dispute layer is a deliberate design choice — state it confidently in
   the submission.
 

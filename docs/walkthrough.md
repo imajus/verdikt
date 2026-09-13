@@ -8,15 +8,28 @@ Arc Testnet and Ethereum Sepolia; the transcripts are in
 Tasks.md 6.3 stays open for that. What this is, is the script for one: the same
 order, with the commands and the numbers to expect.
 
-**`weather` and `weather-lite` were deregistered on 2026-09-11**, after this
+**This is the record of the original demo pair, not of today's listing.**
+`weather` and `weather-lite` were deregistered on 2026-09-11, after this
 walkthrough and its evidence were captured. Steps 1–7 below are an accurate
 record of what happened and every number is still readable from the chain —
 `getService` reports both `DEREGISTERED` with a zero bond, and `getVerdict`
-still returns every verdict below. But the two surfaces that show a *live
-listing* now show nothing: step 6's marketplace is empty, and step 7 scores
-neither service. A retired service is delisted (Specification.md §3), so
-both the dashboard and the aggregate drop it. Recording a fresh video needs
-both slugs re-registered first.
+still returns every verdict below. A retired service is delisted
+(Specification.md §3), so neither appears in step 6's marketplace nor in
+step 7's aggregate any more.
+
+What the marketplace lists instead, as of 2026-09-13, is ten services
+(`portfolio`, `pnl`, `flights`, `enrich`, `product`, `domain`, `people`,
+`companies`, `reddit`, `prices`) registered self-serve through the dashboard's
+wizard, each fronting a real third-party x402 provider, with 44 verdicts and 23
+refunds on the registry from real paid calls — see
+[README](../README.md#what-is-real-and-what-is-not). Read the current list off
+the chain with `.claude/skills/verdikt-paid-call-sweep`; it changes. Recording
+a video against those needs the slugs in [`shot-list.md`](./shot-list.md)
+substituted, not the pair below re-registered.
+
+Two mechanics have changed since this was captured, and are flagged where
+they appear: the proxy no longer checks a challenge's `payTo` (step 3), and
+the aggregate's window is temporarily one day rather than seven (step 7).
 
 ## What is deployed
 
@@ -24,7 +37,8 @@ both slugs re-registered first.
 |---|---|
 | `VerdiktRegistry` | [`0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`](https://explorer.testnet.arc.network/address/0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af) on Arc Testnet, block 60860488 |
 | `VerdiktScoreWriter` | `0x542Cb024D71e0Cd0Ef40AB7603779C89895EFfAA` on Sepolia |
-| Namespace | `verdikt.eth` on Sepolia ENSv2, with `weather` and `weather-lite` subnames |
+| `VerdiktSubnameRegistrar` | `0x247e46abe002c034CD99D8d81D7e6182b727ac7d` on Sepolia — mints `<slug>.verdikt.eth` for the dashboard's wizard; deployed after this walkthrough, which used `pnpm onboard` |
+| Namespace | `verdikt.eth` on Sepolia ENSv2, with `weather` and `weather-lite` subnames (plus one per service registered since) |
 | Provider | a live [Proceeds](https://myproceeds.xyz) x402 paywall, paying to `0x5c33f235…16505` |
 
 Both receivers are pinned to the **CRE simulation** forwarder for their own
@@ -71,32 +85,30 @@ The provider gets the subname token and **no registry roles**. One with
 `ROLE_SET_RESOLVER` could repoint its own name at a resolver it controls and
 write its own scores.
 
-## 3. An agent calls, and the proxy checks where the money goes
+## 3. An agent calls, and gets the provider's own challenge
 
 ```bash
-$ curl -sD - http://localhost:8403/weather | grep -iE '^HTTP|x-verdikt'
+$ curl -sD - http://localhost:8403/weather | grep -iE '^HTTP'
 HTTP/1.1 402 Payment Required
-x-verdikt-pay-to-verified: true
 ```
 
-The proxy relayed to the provider, got its real 402, resolved
-`weather.verdikt.eth`'s address record on Sepolia, and compared it against
-**every** payment option the challenge offers — three of them, on Arc and Base.
-Only then did it pass the challenge on.
+The proxy resolved `weather.verdikt.eth`'s `url` record, checked the slug is
+bonded and `ACTIVE`, relayed the request to that URL and passed the provider's
+real 402 back unchanged. The trust anchor is that `url`: it is bound to the
+slug's bond, so whatever `payTo` the challenge names is exactly as legitimate
+as the provider itself.
 
-Repoint that record and the same call is refused:
-
-```bash
-$ curl -sD - http://localhost:8403/weather-lite | grep -iE '^HTTP|x-verdikt-block'
-HTTP/1.1 502 Bad Gateway
-x-verdikt-block: pay_to_mismatch
-```
-
-The body names both addresses for an operator but carries no `accepts` at all,
-so no signable challenge reaches the agent. This is the one Verdikt check that
-must happen *before* the fact: a payment to a spoofed address never touches the
-bonded service, so there is nothing to reclaim it from. Full transcript in
-[`evidence/payto-check-live.log`](./evidence/payto-check-live.log).
+**What this step used to show, and no longer does.** When the transcript in
+[`evidence/payto-check-live.log`](./evidence/payto-check-live.log) was captured,
+the proxy also compared every `payTo` in the challenge against the ENS
+`address` record and refused the call on a mismatch (`x-verdikt-block:
+pay_to_mismatch`). That check was removed in #39 as security theater: an
+upstream that authors the challenge can declare any `payTo` regardless of what
+ENS pins, and the check produced false positives on providers whose payout
+address rotates per challenge. What actually anchors the payer's side is that a
+402 on the enclave's replay writes no verdict at all (Specification.md §1) —
+a refund can only exist on a call the provider took payment for. The log stays
+as a record of what was demonstrated, not of what the proxy does.
 
 ## 4. The enclave judges the paid call
 
@@ -204,6 +216,14 @@ Computed from the same three `VerdictWritten` events: conformance is
 of each, so 500. It reads only public events, needs no enclave, writes no
 verdict and settles no refund.
 
+The `604800s` is the seven-day window Specification.md §1 specifies. A run today
+prints `86400s`: the window was cut to one day for the hackathon demo, because
+it is also the block range fetched and Arc mints two blocks a second
+(`TEMPORARY (demo window)` in `cre/lib/reputation.js`). In production the run
+is a scheduled job in the `runner` container — a simulated cron never fires on
+its own — and it reads every score back afterwards, since the forwarder mines a
+receiver revert as success (`runner/README.md`).
+
 Both numbers are then on ENS, and can be read straight back:
 
 ```bash
@@ -220,13 +240,19 @@ and a forwarder that swallows receiver reverts will report success either way.
 
 ## What this does not show
 
-- **A paid call end to end.** Verdikt's own half works: it builds and signs a
-  real `exact`/`eip3009` header from the live challenge, and Base Sepolia USDC
-  accepted the authorization inside it
-  ([`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)).
-  The paywall then answers 402 to that same header — it advertises the scheme
-  and appears not to implement it. So the verdicts above carry a fixture payer,
-  and the gap is on the provider's side, not in the decoding.
+- **A paid call end to end, in this transcript.** The verdicts above carry a
+  fixture payer (`0x1111…1111`): Verdikt signed a real `exact`/`eip3009` header
+  that Base Sepolia USDC accepted
+  ([`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)),
+  and the Proceeds paywall answered 402 to it anyway. That gap closed on
+  2026-09-11 with Circle's `GatewayWalletBatched` verified (#41) and
+  contract-account payers asked via ERC-1271 (#55): the services registered
+  since have been paid by a real Circle agent wallet through
+  `<slug>.verdikt.bond`, and their verdicts on Arc name that payer. The one
+  remaining gap on that leg is the claim — a Gateway-paid refund is credited to
+  the wallet's backing EOA, which cannot call `withdraw()`, and the
+  `withdrawWithAuthorization` path that fixes it needs a registry redeploy
+  (Tasks.md 2.4).
 - **A deployed workflow.** Simulation, not production enrollment.
 - **A real attested enclave.** The simulator says so itself: *"The simulator is
   not a real TEE, and is meant to debug."*

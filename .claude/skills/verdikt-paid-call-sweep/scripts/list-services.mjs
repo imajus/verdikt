@@ -1,6 +1,6 @@
 // Every service the Arc registry knows, with its live status.
 //
-//   node .claude/skills/paid-call-sweep/scripts/list-services.mjs [--all] [--json]
+//   node .claude/skills/verdikt-paid-call-sweep/scripts/list-services.mjs [--all] [--json]
 //
 // Default output is the listed services only — the ones an agent could
 // actually call. `--all` adds the DEREGISTERED rows, which stay in the event

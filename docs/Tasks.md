@@ -21,7 +21,8 @@ third party to act, or a person at a screen:
 
 | Needs | Task | The step |
 |---|---|---|
-| A provider that honours `eip3009` | 0.4 — a paid call end to end | Verdikt's side is done: it signs a header the USDC contract itself accepts (`0xc2e071e6…`). The demo paywall advertises the scheme and then refuses it, so this needs Proceeds to implement it, another x402 provider, or the Circle wallet for their own scheme |
+| *(done, 2026-09-11)* | 0.4 — a paid call end to end | Closed from the other side: Circle's `GatewayWalletBatched` verified against a real captured header (#41), contract-account payers asked via ERC-1271 (#55), and a real Circle agent wallet has since paid ten real providers through `<slug>.verdikt.bond` with the verdicts on Arc naming it |
+| A registry redeploy | 2.4 — `withdrawWithAuthorization` on chain | The contract has it; the live registry predates it and pins its forwarder immutably. Until the redeploy, a Gateway-paid refund (credited to the agent wallet's backing EOA) is visible in `getOwed` and unclaimable |
 | A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
 | *(done)* | 6.1 — two paywalls, one per service | Configured, and the ENS `url` records now point each service at its own |
 | A person at a screen | 6.3 — the recorded walkthrough | [`shot-list.md`](./shot-list.md) is the 3-minute cut: seven shots, timed, with the lines to say. [`walkthrough.md`](./walkthrough.md) is the long version |
@@ -32,10 +33,10 @@ detail (5.2) and the discovery API (5.3, now
 [#21](https://github.com/imajus/verdikt/issues/21)). Neither is waiting on
 work; both record a decision.
 
-None of these are marked `[x]`, because none of them have happened. A plan that
-claims a video was recorded, or that a payment settled, is worth less than one
-that says plainly what is outstanding — which is the same argument the system
-itself rests on.
+The open ones are not marked `[x]`, because they have not happened. A plan that
+claims a video was recorded, or that a workflow was deployed, is worth less
+than one that says plainly what is outstanding — which is the same argument
+the system itself rests on.
 
 ## Phase 0 — Scaffold and de-risk (days 1–2)
 
@@ -168,26 +169,38 @@ Every refund depends on recovering the payer and the amount from the header.
       > one: `name` and `version` straight from the challenge's `extra`, `chainId`
       > from the CAIP-2 network, `verifyingContract` = the asset.
 
-- [ ] **A paid call end-to-end is blocked on the provider, not on us.** The
-      demo paywall advertises `eip3009` in its `accepts` and then refuses a
-      cryptographically valid one — the same header whose authorization the USDC
-      contract accepted above still comes back 402. It is not the request shape:
-      `POST` answers 405 so `GET` is right, and `x402Version` 1 and 2 behave
-      identically. The reasonable reading is that Proceeds implements only
-      `GatewayWalletBatched` and advertises `eip3009` regardless.
+- [x] **A paid call end-to-end — closed on 2026-09-11, from the third of the
+      three routes below.** For days this was blocked on the provider: the
+      demo paywall advertised `eip3009` in its `accepts` and then refused a
+      cryptographically valid one — the same header whose authorization the
+      USDC contract accepted above still came back 402, with `GET` vs `POST`
+      and `x402Version` 1 vs 2 ruled out. The reading was that Proceeds
+      implements only `GatewayWalletBatched` and advertises `eip3009`
+      regardless, so the last mile needed one of: Proceeds honouring the
+      scheme, a different provider that does, or the Circle agent wallet for
+      `GatewayWalletBatched` — whose payload was believed unpublished.
 
-      So the last mile needs one of: Proceeds honouring the scheme it
-      advertises, a different x402 provider that does, or the Circle-managed
-      wallet (`circle wallet create` + `login`, email + OTP, plus a
-      Terms-of-Use acceptance that is the operator's to give) for
-      `GatewayWalletBatched` — whose payload Circle does not publish, so
-      inventing it would still prove nothing.
+      It was not unpublished, only uncaptured. A real `PAYMENT-SIGNATURE`
+      header from a live provider (Alchemy) showed `GatewayWalletBatched` to
+      be the same ERC-3009 `TransferWithAuthorization` signature under the
+      Gateway contract's EIP-712 domain, with `name`/`version` already in the
+      challenge's `extra` ([#41](https://github.com/imajus/verdikt/issues/41),
+      #43). Two more things fell out of paying for real: x402 v2 renamed the
+      header to `PAYMENT-SIGNATURE` and a v2 provider sends only that (#40),
+      and a Circle agent wallet is a *contract* account whose signature
+      recovers to an owner key, so the proxy asks the account itself via
+      ERC-1271 over the payment chain's RPC (#55). Since then a real agent
+      wallet has paid every registered provider through
+      `<slug>.verdikt.bond`, and the verdicts on Arc name it —
+      `.claude/skills/verdikt-paid-call-sweep` is the procedure.
 
-- [x] Decode it; extract payer address and paid amount — **done for `eip3009`**,
-      against the spec rather than a capture. The envelope is x402's own
-      (base64 of `{x402Version, scheme, network, payload}`) and the payload is
-      ERC-3009's `{signature, authorization}`. `GatewayWalletBatched` still
-      refuses rather than guessing
+- [x] Decode it; extract payer address and paid amount — done for every
+      `exact` option a real challenge has offered, through one verifier. The
+      envelope is x402's own (base64 of `{x402Version, scheme, network,
+      payload}`, or v2's `{x402Version, resource, accepted, payload}`) and the
+      payload is ERC-3009's `{signature, authorization}` whether the domain is
+      the token or the Gateway contract. A scheme nobody has seen still refuses
+      rather than guessing
 - [x] **Verify those fields are cryptographically bound** — **answered, and
       enforced.** For `eip3009` the payer is *recovered* from an ERC-3009
       signature over the exact
@@ -195,9 +208,13 @@ Every refund depends on recovering the payer and the amount from the header.
       of a JSON field. `payment.test.js` proves it by signing real headers and
       then editing them: swapping the payer, inflating the amount, or moving the
       validity window each invalidates the signature. A payment validly signed
-      to a *different* recipient is refused too — that is a good signature over
-      the wrong payment, and crediting it would let an agent claim a refund on a
-      call the provider was never paid for.
+      to a *different* recipient is **not** refused, and deliberately so
+      (Specification.md §1, "A payment the provider refuses"): the comparison
+      never stopped the attack it looked like it stopped, and it made a
+      provider that mints a single-use payout address per challenge unpayable.
+      What anchors that side is that a 402 on the enclave's replay writes no
+      verdict — a refund can only exist on a call the provider took payment
+      for.
 
       Two constraints fell out of doing it, both real rather than incidental:
 
@@ -207,12 +224,12 @@ Every refund depends on recovering the payer and the amount from the header.
         the *challenge*, so verification requires the matching `accepts` entry
         in hand — which is why `decodePayment` takes it as a required argument
         and refuses without it, rather than trusting an unverified payer.
-      - **The proxy therefore cannot verify a paid call today**, because it does
-        not keep the challenge it relayed. Wiring that up means either caching
-        challenges per service or re-fetching one per paid call, which is a real
-        cost for a path the demo does not exercise — the demo's Arc option is
-        `GatewayWalletBatched`. Left as an explicit follow-on rather than
-        decided here
+      - **The proxy therefore re-fetches the challenge on every paid call**
+        rather than keeping the one it relayed: a paid request costs one extra
+        unpaid round trip to the provider, and `decodePayment` gets the live
+        `accepts`. Chosen over a per-service cache because a provider that
+        rotates its payout address per challenge would make a cached one
+        stale, and the unpaid leg is cheap
 - [x] Confirm the amount is in known minor units — **answered from the
       challenge alone**, without a paid call. The captured
       `GatewayWalletBatched` option carries
@@ -233,7 +250,8 @@ and then tampers with it.
 
 - [x] 402 challenge JSON — **real**, captured from the demo Proceeds paywall
       into `fixtures/x402/`, with the provider's `payment-required` header
-      beside it. `proxy/src/app.test.js` runs the payTo check against it
+      beside it. The proxy tests relay it unchanged (the payTo check that once
+      ran against it was removed in #39)
 - [x] Provider 200 response — `PROVIDER_RESPONSE` in `fixtures/`, the Open-Meteo
       `current` block the demo SLAs are written against
 - [x] `X-PAYMENT` header and settlement receipt — for `eip3009`, both exist and
@@ -254,8 +272,9 @@ and then tampers with it.
       which is strong circumstantial evidence it is ours — RDAP redacts the
       registrant, so ownership is not provable from outside and is worth a
       one-line confirmation. No fallback host needed; `PROXY_PUBLIC_HOST`
-      stands as-is. What remains is DNS: a wildcard `*.verdikt.bond` record
-      pointing at the proxy
+      stands as-is. The zone is active in Cloudflare with the wildcard CNAME,
+      and `proxy/wrangler.jsonc` binds the `*.verdikt.bond/*` route (#27);
+      `cre.verdikt.bond` fronts the runner
 - [x] **ENS parent name.** `verdikt.eth` is registered on Sepolia ENSv2
       (expires 2027-09-06) with a `PermissionedResolver` attached, so
       the parent name in `deployments/sepolia.json` stands as-is. Its subregistry is not deployed yet —
@@ -567,7 +586,11 @@ paid amount, and the raw `sla` record.
 
 ### 3.2 Hourly aggregate workflow (plain, cron)
 
-- [x] Read `VerdictWritten` over the trailing 7 days from Arc
+- [x] Read `VerdictWritten` over the trailing 7 days from Arc — **temporarily
+      one day** for the hackathon demo, since the window is also the block
+      range fetched and Arc mints two blocks a second (`TEMPORARY (demo
+      window)` in `cre/lib/reputation.js` is the revert list). The spec is
+      unchanged
 - [x] Conformance = `PASS ÷ (PASS + FAIL) × 1000`; unreachable
       calls excluded from the denominator
 - [x] Availability = `(PASS + FAIL) ÷ all verdicts × 1000`
@@ -635,7 +658,9 @@ store.
 
 - [x] `<slug>.verdikt.bond/*` **and** `/:slug/*` — the host form is how agents
       actually call; the path form keeps local development off wildcard DNS
-- [x] Branch on the presence of `X-PAYMENT`
+- [x] Branch on the presence of a payment header — `PAYMENT-SIGNATURE` (x402
+      v2) first, then `X-PAYMENT` (v1); a real v2 provider sends only the new
+      name (#40)
 - [x] Refuse a SUSPENDED, DEREGISTERED or unregistered service before any
       upstream call — on the unpaid leg too, since an agent that never sees a
       challenge cannot pay one
@@ -653,16 +678,18 @@ store.
 
 ### 4.2 Passthrough branch
 
-- [x] Forward the request; capture the 402 challenge
-- [x] Resolve the slug's ENS address record (cached, TTL from
-      `PROXY_ENS_CACHE_TTL_MS`)
-- [x] Compare against the challenge's `payTo` — **every** option in `accepts`,
-      since the agent may pick any of them
-- [x] On mismatch: return an error and **do not relay the challenge** — the
-      agent must never see a spoofed `payTo` to sign against. Also blocks when
-      the challenge will not parse, offers no `payTo`, or the service has
-      published no address to compare against
-- [x] Otherwise relay the challenge unchanged
+- [x] Forward the request; relay the response, 402 challenge included,
+      unchanged
+- [x] ~~Resolve the slug's ENS address record and compare it against every
+      `payTo` in the challenge's `accepts`, blocking on mismatch~~ — built,
+      demonstrated live (`evidence/payto-check-live.log`), then **removed in
+      #39** as security theater. The trust anchor is the registered `url`,
+      bound to the slug's bond; an upstream that authors the challenge can
+      declare any `payTo` regardless of what ENS pins, and the check produced
+      false positives on providers whose payout address rotates per challenge.
+      The `address` record is now surfaced in the listing and compared against
+      nothing. What anchors the payer's side instead is that a 402 on the
+      replay writes no verdict (Specification.md §1)
 - [x] Refuse a provider `url` pointed at a private or link-local host. The
       record is provider-authored and the proxy dials it from Verdikt's own
       network, so without this it is a server-side-request-forgery primitive;
@@ -836,10 +863,14 @@ day saved in Phase 4 here.
 > deployment, alongside whatever else needs one; not worth doing to a live
 > deployment for half a display feature.
 
-> **Decision — no UI framework.** The whole surface is a list, a detail panel
-> and a stats strip. A framework would be the largest dependency in the repo for
-> markup that fits in one file, and the data layer — the part with the logic —
-> is separated and unit-tested without a DOM.
+> **Decision — no UI framework, since reversed.** The first cut was a list, a
+> detail panel and a stats strip in one file, and a framework would have been
+> the largest dependency in the repo. Once the surface grew a landing page,
+> real routes, a provider console, a four-step registration wizard and a
+> clause-by-clause SLA composer, the view moved to Lit (#30, 2026-09-10). The
+> part of the decision that survived is the boundary: the chain-facing modules
+> (`marketplace.js`, `source.js`, `actions.js`) stay framework-free and are
+> tested without a DOM; Lit owns the view and event bindings only.
 
 > **Bug the screenshot caught.** Ranking by availability first put a service
 > that answered every call and broke its SLA on every one of them *above* one
@@ -849,9 +880,15 @@ day saved in Phase 4 here.
 
 ### 5.3 Stretch, in the spec's priority order
 
-- [x] Provider self-serve dashboard — `?provider=0x…` on the same dashboard:
-      a filter, not a second app. Shows that provider's services, total bonded,
-      **what has been refunded out of their own bonds**, and an SLA editor
+- [x] Provider self-serve dashboard — began as a `?provider=0x…` filter on the
+      same page, now real routes on the same app: `/provider` lists the
+      connected wallet's services with total bonded and **what has been
+      refunded out of their own bonds** (#47); `/register` is a four-step
+      wizard that claims `<slug>.verdikt.eth` through `VerdiktSubnameRegistrar`
+      *before* posting the Arc bond, so a service can never start life with
+      conflicting ownership, and resumes from whichever transaction failed;
+      and the SLA is composed clause by clause rather than as raw JSON (#53).
+      Every service now on the live registry was registered this way
 
 > **The editor validates with the engine's own parser and sends nothing.** It
 > calls `parseSla` against the same `schema.json` the verifier enforces, so a
@@ -931,11 +968,19 @@ day saved in Phase 4 here.
       record. Both demo subnames are live on Sepolia with real records
 - [x] Dashboard reads it live — the registry is deployed and recorded, so
       `VITE_ARC_RPC_URL` alone switches it off demo data
-- [x] `payTo` mismatch → proxy blocks before payment. Demonstrated against
-      live data on both chains: the ENS address record repointed at `0x…dEaD`
-      while the provider's real challenge paid to `0x5c33f2…`, and the agent got
-      a 502 carrying no `accepts` at all. Captured in
-      [evidence/payto-check-live.log](./evidence/payto-check-live.log)
+- [x] ~~`payTo` mismatch → proxy blocks before payment~~ — demonstrated
+      against live data on both chains
+      ([evidence/payto-check-live.log](./evidence/payto-check-live.log)), then
+      removed in #39; see 4.2. The transcript stays as a record of what was
+      shown
+- [x] **The live demo is no longer this pair.** `weather` and `weather-lite`
+      were deregistered on 2026-09-11. Ten services fronting real third-party
+      x402 providers (Alchemy, Allium, Syntalic, …) were registered through the
+      dashboard's wizard between 2026-09-11 and 2026-09-13, paid for real by a
+      Circle agent wallet via `.claude/skills/verdikt-paid-call-sweep`, and
+      judged: 44 verdicts and 23 refunds on the registry as of 2026-09-13, and
+      hourly scores on ENS for every live listing. The registry is the source
+      of truth for the list; it changes daily
 
 ### 6.3 Submission
 
@@ -953,6 +998,6 @@ day saved in Phase 4 here.
       3-minute submission cut — seven timed shots, what is on screen, the lines
       to say, and the one sentence about what is simulated — and
       [`walkthrough.md`](./walkthrough.md) is the long version it was cut from.
-      `weather` and `weather-lite` were deregistered on 2026-09-11, so
-      `shot-list.md`'s setup step needs both slugs re-registered under new
-      bonds before this can be shot
+      `weather` and `weather-lite` were deregistered on 2026-09-11, so the
+      slugs in `shot-list.md` need substituting with two of the live services
+      (its header names a pair with contrasting scores) before this can be shot

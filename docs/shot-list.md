@@ -5,12 +5,18 @@ submission. This is the cut: seven shots, ~3:00, ordered so the strongest claim
 lands first and every number on screen is one you can re-read off a public
 chain afterwards.
 
-**Blocked as written.** `weather` and `weather-lite` were deregistered on Arc
-Testnet on 2026-09-11 — the dashboard now shows both `DEREGISTERED` with a
-zero bond, not the conformance numbers this script points at. Before shooting:
-re-register both slugs under new bonds (`pnpm onboard`), re-publish their SLAs,
-and generate enough PASS/FAIL traffic for the hourly aggregate to produce fresh
-`weather`/`weather-lite` conformance numbers on ENS.
+**Substitute the slugs before shooting.** `weather` and `weather-lite` were
+deregistered on Arc Testnet on 2026-09-11 — the dashboard shows both
+`DEREGISTERED` with a zero bond, not the numbers this script points at. But the
+marketplace is not empty: ten services fronting real x402 providers are live
+(read the current list with `.claude/skills/verdikt-paid-call-sweep`), with
+verdicts and refunds from real paid calls. Pick a pair with contrasting scores
+— on 2026-09-13, `pnl` read conformance 250 / availability 800 and `portfolio`
+1000 / 500 — and swap them in for `weather-lite` / `weather` below, including
+the `cast namehash` in shot 6. Their verdicts name real clauses from their own
+SLAs, so shot 3's "Broke" column reads off whatever they actually broke. The
+alternative is registering a fresh pair through the dashboard's wizard and
+driving traffic with the sweep skill until the hourly job publishes scores.
 
 **Before you start**
 
@@ -98,18 +104,26 @@ cast call $RESOLVER 'text(bytes32,string)(string)' \
 
 **Say what isn't real.** One line, and it buys more credit than it costs:
 
-> "The enclave is simulated — CRE deploy access is still early access — and
-> these verdicts carry a fixture payer, because the demo paywall advertises the
-> open payment scheme and then refuses it. Everything else is on a public
-> testnet."
+> "The enclave is simulated — CRE deploy access is still early access. The
+> payments are not: these verdicts name a real agent wallet that paid a real
+> provider through Verdikt. Everything else is on a public testnet."
 
 **If a judge asks about the payment leg** — this is a strong answer, so have it
 ready rather than in the cut:
 
-> "We sign a real x402 header, and Base Sepolia USDC accepted the authorization
-> inside it — that transaction is in the repo. The payer is *recovered* from
-> that signature, not read out of JSON, which matters because it decides who a
-> refund goes to. Our provider just doesn't honour the scheme it advertises."
+> "The payer is *recovered* from the payment signature, not read out of JSON,
+> which matters because it decides who a refund goes to. That covers both
+> transfer methods a real challenge offers, including Circle's Gateway one, and
+> a Circle agent wallet is a contract account, so we ask it directly over
+> ERC-1271. Base Sepolia USDC accepted an authorization we signed — that
+> transaction is in the repo."
+
+**If a judge asks who can collect a refund** — say it before they find it:
+
+> "A payer that can transact on Arc calls `withdraw()`. A Gateway-paid refund
+> is credited to the wallet's backing EOA, which can't — so the contract now
+> has a signed claim anyone can relay. The live registry predates it and needs
+> a redeploy, so those credits are visible on chain and not yet collected."
 
 **Avoid on camera:** `.env`, any private key, the `cre` login. Verdict request
 ids are fine — they're public.
