@@ -8,7 +8,7 @@
 // to landing.js; TAGLINE stays because every page's head uses it.
 
 import { html, nothing } from 'lit';
-import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, TERMS_PATH, navigateOnClick, providerUrl } from './router.js';
+import { HOW_PATH, MARKETPLACE_PATH, navigateOnClick, providerUrl } from './router.js';
 import './address-view.js';
 
 export const TAGLINE = 'x402 services whose delivery is verified per call. Responses are judged against the provider’s SLA; a broken promise refunds the caller.';
@@ -108,16 +108,15 @@ export const privacy = () => html`
     <p>Your theme preference and, if you sign in as a provider, a short-lived proof of address control (<a href=${HOW_PATH}>how it works</a>) are kept in your browser's local storage. Neither ever leaves your device.</p>
   </section>`;
 
-// The people and systems the loop runs on. Each mark is its owner's own
+// The systems the loop runs on. Each mark is its owner's own
 // artwork, fetched from the owner's site and shipped from web/public/thanks
 // as a CSS mask so all six take the footer's one muted colour and go ink on
 // hover — identification, not a row of badges. `ratio` is the mark's own
-// width over height; `height` is set per mark, because six wordmarks drawn
-// with six different amounts of air in their boxes do not land at one optical
+// width over height; `height` is set per mark, because five wordmarks drawn
+// with five different amounts of air in their boxes do not land at one optical
 // size from one shared height.
 /** @type {{href: string, name: string, file: string, ratio: number, height: number}[]} */
 const THANKS = [
-  { href: 'https://www.majus.org', name: 'majus.org', file: 'majus', ratio: 100 / 100, height: 17 },
   { href: 'https://cre.chain.link', name: 'Chainlink CRE', file: 'chainlink', ratio: 143 / 36, height: 19 },
   { href: 'https://arc.io', name: 'Arc', file: 'arc', ratio: 146 / 50, height: 21 },
   { href: 'https://ens.domains', name: 'ENS', file: 'ens', ratio: 300 / 94, height: 19 },
@@ -125,15 +124,11 @@ const THANKS = [
   { href: 'https://ns.com', name: 'ns.com', file: 'ns', ratio: 129 / 20, height: 15 }
 ];
 
-/** @param {(path: string) => void} go */
-export const legalFooter = (go) => html`
+// Terms and Privacy moved into the nav; the footer is the thanks row alone.
+export const legalFooter = () => html`
   <footer class="legal">
     <p class="thanks">
       <span class="thanks-lead">Made thanks to</span>
       ${THANKS.map((it) => html`<a class="thanks-logo" href=${it.href} target="_blank" rel="noopener noreferrer" aria-label=${it.name} title=${it.name}><i style=${`--logo:url(/thanks/${it.file}.svg);--ratio:${it.ratio};--h:${it.height}px`}></i></a>`)}
-    </p>
-    <p class="legal-links">
-      <a href=${TERMS_PATH} @click=${navigateOnClick(go, TERMS_PATH)}>Terms</a>
-      <a href=${PRIVACY_PATH} @click=${navigateOnClick(go, PRIVACY_PATH)}>Privacy</a>
     </p>
   </footer>`;

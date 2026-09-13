@@ -167,12 +167,25 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .nav-item.active { color: var(--ink); border-bottom-color: var(--ink); }
 .nav-external { margin-left: auto; display: flex; gap: 14px; align-items: center; }
 .nav-external wa-button { margin-top: 0; }
-.nav-external a, .nav-external .theme-toggle {
+.nav-external a, .nav-external .theme-toggle, .nav-external .nav-menu {
   color: var(--muted); display: inline-flex; align-items: center; justify-content: center; height: 30px;
   background: none; border: 0; padding: 0; margin: 0; cursor: pointer; font: inherit;
 }
-.nav-external a:hover, .nav-external .theme-toggle:hover { color: var(--ink); }
+.nav-external a:hover, .nav-external .theme-toggle:hover, .nav-external .nav-menu:hover { color: var(--ink); }
 .nav-account::part(label) { font-family: var(--mono); font-size: 14px; white-space: nowrap; }
+/* The phone menu: a button in the icon row and a Web Awesome drawer holding
+   the same links stacked, repainted to paper and rules — a sheet sliding in
+   from the edge, not a floating panel. Hidden entirely above 760px, where
+   the links fit in the bar. */
+.nav-menu { display: none; }
+.nav-drawer { --size: 18rem; --spacing: 20px; }
+.nav-drawer::part(dialog) { background: var(--paper); color: var(--ink); border-left: 1px solid var(--rule); box-shadow: none; }
+.nav-drawer::part(header) { border-bottom: 1px solid var(--rule); }
+.nav-drawer::part(title) { font: 600 20px/1.2 var(--display); letter-spacing: -0.01em; }
+.nav-drawer::part(close-button__base) { color: var(--muted); }
+.nav-drawer-links { display: flex; flex-direction: column; }
+.nav-drawer-links .nav-item { padding: 12px 0; border-bottom: 1px solid var(--rule); font-size: 17px; }
+.nav-drawer-links .nav-item.active { color: var(--ink); font-weight: 500; border-bottom-color: var(--rule); }
 .wallet-menu { flex: none; }
 .wallet-menu::part(menu) { width: 248px; max-width: calc(100vw - 36px); }
 .wallet-menu-heading { padding: 8px 12px; display: grid; gap: 5px; }
@@ -180,20 +193,14 @@ i.dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; back
 .wallet-menu-heading code { color: var(--ink); font-size: 13px; white-space: normal; }
 
 @media (max-width: 760px) {
-  .nav { flex-wrap: wrap; align-items: center; gap: 12px; }
-  .nav-links { gap: 16px; min-width: 0; }
-  .nav-item { white-space: nowrap; }
+  .nav { gap: 12px; }
+  .nav-links { display: none; }
+  .nav-menu { display: inline-flex; }
   .nav-external { gap: 12px; }
 }
 
 @media (max-width: 560px) {
   #app { padding: 20px 18px 56px; }
-  /* Two rows, not three: the wordmark and the icons share the first, the links
-     take the second. Spreading three icons edge-to-edge across the full width
-     reads as a flex rule nobody decided on. */
-  .nav { row-gap: 10px; }
-  .nav-links { order: 2; width: 100%; overflow-x: auto; padding-bottom: 2px; }
-  .nav-external { order: 1; width: auto; margin-left: auto; justify-content: flex-end; }
 }
 
 /* Standing notes: a rule down the left, no fill. A tinted box is how every
@@ -464,12 +471,12 @@ wa-tooltip.help-tip code { color: var(--ink); }
    vertical divider the platform figures are set with. Below 1040px the sheet
    is one column and they stack in reading order. */
 .detail-top { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-.detail-top > .block:first-child { padding-right: 36px; }
-.detail-top > .block + .block { padding-left: 36px; border-left: 1px solid var(--rule); }
+.detail-top > :first-child { padding-right: 36px; }
+.detail-top > :first-child + * { padding-left: 36px; border-left: 1px solid var(--rule); }
 @media (max-width: 1040px) {
   .detail-top { grid-template-columns: minmax(0, 1fr); }
-  .detail-top > .block:first-child { padding-right: 0; }
-  .detail-top > .block + .block { padding-left: 0; border-left: 0; }
+  .detail-top > :first-child { padding-right: 0; }
+  .detail-top > :first-child + * { padding-left: 0; border-left: 0; }
 }
 
 /* Call it ---------------------------------------------------------------------
@@ -672,12 +679,9 @@ footer.legal {
   display: flex; flex-direction: column; align-items: center; gap: 18px;
   margin: 40px auto 0; max-width: none; text-align: center;
 }
-footer.legal a { color: var(--muted); text-decoration: none; }
-footer.legal a:hover { color: var(--ink); }
-.legal-links { margin: 0; display: flex; gap: 16px; }
-/* Six marks, each its owner's own artwork (web/public/thanks), all drawn in
+/* Five marks, each its owner's own artwork (web/public/thanks), all drawn in
    the footer's one muted colour through a mask so they read as one line of
-   identification rather than six badges in six palettes; ink on hover, the
+   identification rather than five badges in five palettes; ink on hover, the
    same two steps every quiet control here moves through. Each mark keeps its
    own aspect ratio at one shared height. */
 .thanks { margin: 0; display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 12px 26px; }
@@ -1016,9 +1020,13 @@ verdikt-subscribe, verdikt-contact { display: block; }
 }
 
 @media (max-width: 560px) {
-  .entry { grid-template-columns: 1.75rem minmax(0, 1fr); column-gap: 14px; padding: 24px 0 26px; }
+  /* The index rail goes: on a phone its 1.75rem is a tenth of the measure,
+     and a ledger's line numbers are the first thing a narrow column drops. */
+  .entry { grid-template-columns: minmax(0, 1fr); column-gap: 0; padding: 24px 0 26px; }
+  .entry-index { display: none; }
+  .entry-body, .entry-note, .entry-wide .entry-body, .entry-wide .entry-note { grid-column: 1; }
   .entry-body h2 { font-size: 22px; }
-  .entry-wide .diagram { margin-left: calc(-1.75rem - 14px); width: calc(100% + 1.75rem + 14px); }
+  .entry-wide .diagram { margin-left: 0; width: 100%; }
   .tagline.lead { font-size: 17.5px; }
   .landing-cta { gap: 10px; }
   .landing-cta wa-button { width: 100%; }

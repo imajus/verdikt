@@ -10,10 +10,10 @@ describe('static pages', () => {
     expect(stringify(terms())).toContain('Terms of Service');
     expect(stringify(privacy())).toContain('Privacy Policy');
   });
-  it('renders a footer with both legal links', () => {
-    const html = stringify(legalFooter(() => {}));
-    expect(html).toContain('/terms');
-    expect(html).toContain('/privacy');
+  it('keeps the legal links out of the footer — they live in the nav', () => {
+    const html = stringify(legalFooter());
+    expect(html).not.toContain('/terms');
+    expect(html).not.toContain('/privacy');
   });
   // The landing page now posts an email address to a third-party service, so
   // "we collect nothing" stopped being true and the policy has to say where it
@@ -44,10 +44,11 @@ describe('withdrawPrompt', () => {
   });
 });
 describe('the footer', () => {
-  it('names the six systems the loop runs on, each linked and labelled', () => {
-    const html = stringify(legalFooter(() => {}));
-    expect(html.match(/class="thanks-logo"/g)?.length).toBe(6);
-    for (const name of ['majus.org', 'Chainlink CRE', 'Arc', 'ENS', 'ETHGlobal', 'ns.com']) expect(html).toContain(`aria-label="${name}"`);
+  it('names the five systems the loop runs on, each linked and labelled', () => {
+    const html = stringify(legalFooter());
+    expect(html.match(/class="thanks-logo"/g)?.length).toBe(5);
+    for (const name of ['Chainlink CRE', 'Arc', 'ENS', 'ETHGlobal', 'ns.com']) expect(html).toContain(`aria-label="${name}"`);
+    expect(html).not.toContain('majus');
     expect(html).toContain('/thanks/ens.svg');
   });
 });

@@ -91,6 +91,16 @@ describe('the nav withdraw link', () => {
   });
 });
 
+describe('the nav menu', () => {
+  it('carries the legal links, in the bar and in the phone drawer', () => {
+    const markup = stringify(nav('marketplace', 'demo', 'system', null, noop, noop, noop, noop));
+    expect(markup.match(/href="\/terms"/g)?.length).toBe(2);
+    expect(markup.match(/href="\/privacy"/g)?.length).toBe(2);
+    expect(markup).toContain('<wa-drawer id="nav-drawer"');
+    expect(markup).toContain('aria-controls="nav-drawer"');
+  });
+});
+
 describe('the nav theme toggle', () => {
   it('shows a monitor icon and offers Light next when following the system preference', () => {
     const markup = stringify(nav('landing', 'demo', 'system', null, noop, noop, noop, noop));

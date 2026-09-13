@@ -752,9 +752,8 @@ describe('the endpoint a service is called at', () => {
   });
 });
 
-// Read off the ledger rather than asserted: this page never fetches a 402
-// challenge, so the only price it can honestly report is the one its own
-// verdicts recorded.
+// The figure is the band the price clause promises; what the ledger recorded
+// is the footnote behind it, and whether the two agree is said outright.
 describe('what the page says a call costs', () => {
   /** @param {bigint[]} paid */
   const detail = async (paid) => {
@@ -771,32 +770,29 @@ describe('what the page says a call costs', () => {
     return renderDetail(services[0]);
   };
 
-  it('reports the one figure every recorded call paid', async () => {
+  // The honest fixture's price clause promises 1 to 10000 minor units.
+  it('leads with the band the price clause promises, not the last price paid', async () => {
     const html = await detail([2500n, 2500n]);
-    expect(html).toContain('0.0025');
-    expect(html).toContain('What all 2 recorded calls paid');
+    expect(html).toMatch(/class="price"><b>(<!--[^>]*-->)*0\.000001 to 0\.01</);
+    expect(html).toContain('All 2 recorded calls paid 0.0025 USDC');
   });
 
-  it('reports a range when they differ, rather than picking one', async () => {
+  it('reports the ledger as a range when the recorded prices differ', async () => {
     const html = await detail([1n, 2_500_000n]);
-    // The asset is set apart from the figure, so the range reads as far as its
-              // upper bound — the split that used to drop everything after "0.000001".
-              expect(html).toContain('0.000001 to 2.5');
-    expect(html).toContain('The range across 2 recorded calls');
+    expect(html).toContain('All 2 recorded calls paid 0.000001 to 2.5 USDC');
   });
 
-  // The honest fixture's price clause promises 1 to 10000 minor units. A
-  // ledger running outside that is exactly what the FAIL below it records,
-  // and the page must not talk over its own table.
-  it('claims the price sits inside the declared band only when it does', async () => {
-    expect(await detail([2500n])).toContain('Inside the');
-    expect(await detail([2_500_000n])).not.toContain('Inside the');
+  // A ledger running outside the band is exactly what the FAIL below it
+  // records, and the page must not talk over its own table.
+  it('says whether the ledger sits inside the declared band', async () => {
+    expect(await detail([2500n])).toContain('The one recorded call paid 0.0025 USDC, inside the band.');
+    expect(await detail([2_500_000n])).toContain('outside the band.');
   });
 
-  it('reports no price at all before the first call, rather than guessing one', async () => {
+  it('still shows the band before the first call, and says nothing has been paid', async () => {
     const html = await detail([]);
+    expect(html).toContain('class="price"');
     expect(html).toContain('Nothing has been called yet');
-    expect(html).not.toContain('class="price"');
   });
 });
 
@@ -955,11 +951,12 @@ describe('the provenance block', () => {
     return renderDetail(services[0]);
   };
 
-  it('keeps the upstream and the address record below the promise and the record', async () => {
+  it('folds the record under the call section, ahead of the promise and the ledger', async () => {
     const html = await build();
     expect(html).toContain('On the record');
-    expect(html.indexOf('What it delivered')).toBeLessThan(html.indexOf('On the record'));
-    expect(html.indexOf('Relays to')).toBeGreaterThan(html.indexOf('What it delivered'));
+    expect(html.indexOf('Call it')).toBeLessThan(html.indexOf('On the record'));
+    expect(html.indexOf('On the record')).toBeLessThan(html.indexOf('What it promised'));
+    expect(html.indexOf('Relays to')).toBeLessThan(html.indexOf('What it delivered'));
   });
 
   it('does not call the address record a payout, because nothing checks it', async () => {
