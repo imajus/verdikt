@@ -57,7 +57,6 @@ a refund can only ever exist on a call the provider accepted payment for, which
 is a stronger guarantee than any address comparison the proxy can make — and the
 only one available against a provider that mints a single-use payout address per
 challenge, where a re-probed challenge never names the address the payer signed.
-The narrower challenge-level payTo check was retired for the same reason (#39).
 
 ### Fallback when the SLA can't be read
 
@@ -117,10 +116,6 @@ body is seen by one enclave plus the agent it is relayed to, not by every node
 operator as a plain workflow would expose it. The residual is that the proxy sees
 it in transit — disclosed to providers rather than papered over.
 
-Production CRE enrollment is private-beta; `cre workflow simulate` is self-serve,
-and the ETHOnline2026 Chainlink track accepts CLI simulation as sufficient
-evidence.
-
 ### Proxy request path
 
 The proxy branches on the payment header — `PAYMENT-SIGNATURE` in x402 v2,
@@ -131,10 +126,11 @@ name:
   included, is relayed unchanged. The proxy's trust anchor is the service's
   registered `url` (§4, bound to the slug's bond via the ownership check);
   whatever `payTo` that URL's own challenge names is exactly as legitimate as
-  the URL itself, so the proxy does not compare it against anything (issue
-  #37 — a prior `payTo`-vs-ENS-`address` check was removed as security
-  theater: a compromised or malicious upstream can declare whatever `payTo`
-  it wants regardless of what is pinned in ENS).
+  the URL itself, so the proxy does not compare it against anything. Checking
+  it against the ENS `address` record would be theater: a compromised or
+  malicious upstream can declare whatever `payTo` it wants regardless of what
+  is pinned in ENS, and a provider whose payout address rotates per challenge
+  would never match.
 - **Present** — the proxy re-fetches the provider's challenge (the header
   names its scheme but not its asset, and the EIP-712 domain needs the asset,
   so verification requires the live `accepts`), recovers the payer from the
@@ -287,9 +283,8 @@ an accepted scope decision for a two-week build.
     workflows"), never per call and never a refund trigger (§3). Per-call
     `PASS`/`FAIL`/`DOWN` verdicts stay Arc-only events (§1).
   - **address** — owner-controlled, set to the provider's payout wallet.
-    Surfaced in the marketplace listing; no longer compared against a 402
-    challenge's `payTo` (removed, issue #37) — it is not part of the trust
-    chain the proxy enforces.
+    Surfaced in the marketplace listing; not part of the trust chain the
+    proxy enforces (§2).
 - Because the proxy dials the `url` record from Verdikt's own network, a
   provider-authored URL is a server-side-request-forgery primitive unless it is
   constrained. Private, loopback, link-local and CGNAT hosts are refused before
@@ -343,17 +338,14 @@ Two chains, each chosen for what only it provides:
   relays the handshake and holds no wallet on the payment leg. The demo caller
   uses the Circle Agent Wallet CLI, a ready x402-capable wallet across EVM
   chains.
-- **Demo providers** — the first pair of services fronted a
-  [Proceeds](https://myproceeds.xyz) paywall accepting x402 on Arc Testnet. The
-  services registered since front independently-operated x402 providers
-  (Alchemy, Allium, Syntalic and others), which settle on the chains their own
-  challenges name — Base, mostly — rather than on Arc. Verdikt requires no
-  provider to settle on Arc: the proxy relays whatever the 402 challenge
-  advertises and reads the payer back from its signature. Settling on Arc
-  remains the default that keeps the payment and refund legs unified; where a
-  provider settles elsewhere, the refund is still credited on Arc to the
-  payer the signature names, which is what the signature-relayed claim path
-  in §3 exists for.
+- **Providers** — independently-operated x402 providers (Alchemy, Allium,
+  Syntalic and others) fronted as they are, settling on whichever chain their
+  own challenge names. Verdikt requires no provider to settle on Arc: the
+  proxy relays whatever the 402 challenge advertises and reads the payer back
+  from its signature. Settling on Arc is the default that keeps the payment
+  and refund legs unified; where a provider settles elsewhere, the refund is
+  still credited on Arc to the payer the signature names, which is what the
+  signature-relayed claim path in §3 exists for.
 
 ## 7. Architecture
 

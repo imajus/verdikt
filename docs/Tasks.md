@@ -21,7 +21,7 @@ third party to act, or a person at a screen:
 
 | Needs | Task | The step |
 |---|---|---|
-| *(done, 2026-09-11)* | 0.4 — a paid call end to end | Closed from the other side: Circle's `GatewayWalletBatched` verified against a real captured header (#41), contract-account payers asked via ERC-1271 (#55), and a real Circle agent wallet has since paid ten real providers through `<slug>.verdikt.bond` with the verdicts on Arc naming it |
+| *(done, 2026-09-11)* | 0.4 — a paid call end to end | Closed from the other side: Circle's `GatewayWalletBatched` verified against a real captured header (#41), contract-account payers asked via ERC-1271 (#55), and a real Circle agent wallet pays real providers through `<slug>.verdikt.bond` with the verdicts on Arc naming it |
 | A registry redeploy | 2.4 — `withdrawWithAuthorization` on chain | The contract has it; the live registry predates it and pins its forwarder immutably. Until the redeploy, a Gateway-paid refund (credited to the agent wallet's backing EOA) is visible in `getOwed` and unclaimable |
 | A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
 | *(done)* | 6.1 — two paywalls, one per service | Configured, and the ENS `url` records now point each service at its own |
@@ -974,13 +974,12 @@ day saved in Phase 4 here.
       removed in #39; see 4.2. The transcript stays as a record of what was
       shown
 - [x] **The live demo is no longer this pair.** `weather` and `weather-lite`
-      were deregistered on 2026-09-11. Ten services fronting real third-party
-      x402 providers (Alchemy, Allium, Syntalic, …) were registered through the
-      dashboard's wizard between 2026-09-11 and 2026-09-13, paid for real by a
-      Circle agent wallet via `.claude/skills/verdikt-paid-call-sweep`, and
-      judged: 44 verdicts and 23 refunds on the registry as of 2026-09-13, and
-      hourly scores on ENS for every live listing. The registry is the source
-      of truth for the list; it changes daily
+      were deregistered on 2026-09-11. The services on the registry since are
+      registered by their providers through the dashboard's wizard, front real
+      third-party x402 providers (Alchemy, Allium, Syntalic, …), are paid for
+      real by a Circle agent wallet via `.claude/skills/verdikt-paid-call-sweep`,
+      and carry hourly scores on ENS. The registry is the source of truth for
+      the list
 
 ### 6.3 Submission
 

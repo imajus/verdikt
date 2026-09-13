@@ -34,7 +34,7 @@ agent ──no payment header──► proxy ──► provider's 402 challenge,
                                        unchanged. The trust anchor is the
                                        service's registered `url`, bound to
                                        its bond; the challenge's payTo is not
-                                       compared against anything (#39).
+                                       compared against anything.
 
 agent ──PAYMENT-SIGNATURE──► proxy ──► CRE Confidential Workflow (TEE)
         (or X-PAYMENT, v1)       │        ├─ replays the payment against the provider
@@ -103,10 +103,9 @@ cd cre/workflows && cre workflow simulate verify --listen
 Seven transcripts are in [`docs/evidence/`](docs/evidence), all real output: the
 simulate run with its TEE banner, the enclave-to-proxy callback round trip, the
 loop running live on Arc, the hourly aggregate, per-verdict clause detail end
-to end, a signed x402 payment settling on Base Sepolia, and the `payTo` check
-blocking a repointed address — kept as history, since that check was retired
-in #39. They were captured against the original `weather` / `weather-lite`
-pair, deregistered on 2026-09-11; the live registry has moved on (below).
+to end, a signed x402 payment settling on Base Sepolia, and a `payTo` check
+the proxy no longer runs (#39). They record the original demo pair, `weather`
+and `weather-lite`, since deregistered; the live listing is on the chain.
 
 The simulated workflows are hosted for the deployed proxy by
 [`runner/`](runner/README.md), a stand-in for Chainlink's gateway that also
@@ -232,31 +231,25 @@ verification would be self-refuting.
   and `VerdiktSubnameRegistrar` on Sepolia at
   `0x247e46abe002c034CD99D8d81D7e6182b727ac7d`, which lets the dashboard's
   wizard mint `<slug>.verdikt.eth` without an operator in the loop.
-- Ten services registered that way between 2026-09-11 and 2026-09-13 —
-  `portfolio`, `pnl`, `flights`, `enrich`, `product`, `domain`, `people`,
-  `companies`, `reddit`, `prices` — each with a 10 USDC bond and each fronting a
-  real third-party x402 provider (Alchemy, Allium, Syntalic and others). The
-  list changes; the registry is the source of truth, and
+- Services registered that way by their providers, each bonded with 10 USDC
+  and each fronting a real third-party x402 provider (Alchemy, Allium,
+  Syntalic and others). The registry is the source of truth for the list, and
   `.claude/skills/verdikt-paid-call-sweep` reads it.
-- Real paid calls, judged: as of 2026-09-13 the registry holds 44 verdicts
-  (21 PASS, 16 FAIL, 7 DOWN) and 23 credited refunds. The paying agent was a
-  Circle agent wallet calling `<slug>.verdikt.bond`; the payer on each verdict
-  was recovered from its signature, and every FAIL or DOWN took its refund out
-  of the provider's bond — the bonds sitting below 10 USDC on the dashboard
-  are that arithmetic.
+- Real paid calls, judged. A Circle agent wallet pays through
+  `<slug>.verdikt.bond`; the payer on each verdict is recovered from its
+  signature, and every FAIL or DOWN takes its refund out of the provider's
+  bond — a bond below 10 USDC on the dashboard is that arithmetic.
 - The hourly aggregate, run as a scheduled job in the runner container,
   publishing `conformance` / `availability` for every live listing to ENS,
   where they read straight back off `<slug>.verdikt.eth`.
 
-The transcripts in [`docs/evidence/`](docs/evidence) predate all of that. They
-record the original demo pair, `weather` and `weather-lite`, against a Proceeds
-paywall: three verdicts through the real KeystoneForwarder (a PASS and two
-FAILs naming `price-band` and `current-weather-shape`, refunding 1 USDC and
-0.0025 USDC — the cap binding from both sides), and the aggregate computing
-`weather=500/1000 weather-lite=0/1000`. Both were deregistered on 2026-09-11;
-the registry marks them `DEREGISTERED` and a retired slug cannot be reused, so
-[`docs/walkthrough.md`](docs/walkthrough.md) is a faithful record of a period
-rather than of the live listing.
+[`docs/walkthrough.md`](docs/walkthrough.md) and the transcripts in
+[`docs/evidence/`](docs/evidence) record the original demo pair, `weather` and
+`weather-lite`, against a Proceeds paywall: three verdicts through the real
+KeystoneForwarder, two of them naming the clause they broke, and the aggregate
+scoring both. Those verdicts carry a fixture payer, from before the paid leg
+ran end to end. The pair has since been deregistered, so the walkthrough is a
+record of a period, not of the live listing.
 
 **Simulated or blocked, and why:**
 
@@ -274,10 +267,6 @@ rather than of the live listing.
   the live registry pins its forwarder immutably and predates it, so closing
   this is a redeploy (Tasks.md 2.4). Until then those credits are visible in
   `getOwed` and stranded.
-- **The evidence transcripts carry a fixture payer.** They were captured when
-  the only demo paywall advertised `eip3009` and refused it, so the payer on
-  those three verdicts is `0x1111…1111`. The verdicts written since carry real
-  payers.
 
 ## Design decisions worth knowing
 

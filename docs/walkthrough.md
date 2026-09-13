@@ -17,15 +17,11 @@ still returns every verdict below. A retired service is delisted
 (Specification.md §3), so neither appears in step 6's marketplace nor in
 step 7's aggregate any more.
 
-What the marketplace lists instead, as of 2026-09-13, is ten services
-(`portfolio`, `pnl`, `flights`, `enrich`, `product`, `domain`, `people`,
-`companies`, `reddit`, `prices`) registered self-serve through the dashboard's
-wizard, each fronting a real third-party x402 provider, with 44 verdicts and 23
-refunds on the registry from real paid calls — see
-[README](../README.md#what-is-real-and-what-is-not). Read the current list off
-the chain with `.claude/skills/verdikt-paid-call-sweep`; it changes. Recording
-a video against those needs the slugs in [`shot-list.md`](./shot-list.md)
-substituted, not the pair below re-registered.
+The live listing has moved on — read it off the chain
+(`.claude/skills/verdikt-paid-call-sweep`) or the dashboard, and see the
+[README](../README.md#what-is-real-and-what-is-not) for what is on it.
+Recording a video needs the slugs in [`shot-list.md`](./shot-list.md)
+substituted with live ones, not the pair below re-registered.
 
 Two mechanics have changed since this was captured, and are flagged where
 they appear: the proxy no longer checks a challenge's `payTo` (step 3), and
@@ -240,19 +236,12 @@ and a forwarder that swallows receiver reverts will report success either way.
 
 ## What this does not show
 
-- **A paid call end to end, in this transcript.** The verdicts above carry a
-  fixture payer (`0x1111…1111`): Verdikt signed a real `exact`/`eip3009` header
-  that Base Sepolia USDC accepted
-  ([`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)),
-  and the Proceeds paywall answered 402 to it anyway. That gap closed on
-  2026-09-11 with Circle's `GatewayWalletBatched` verified (#41) and
-  contract-account payers asked via ERC-1271 (#55): the services registered
-  since have been paid by a real Circle agent wallet through
-  `<slug>.verdikt.bond`, and their verdicts on Arc name that payer. The one
-  remaining gap on that leg is the claim — a Gateway-paid refund is credited to
-  the wallet's backing EOA, which cannot call `withdraw()`, and the
-  `withdrawWithAuthorization` path that fixes it needs a registry redeploy
-  (Tasks.md 2.4).
+- **A paid call end to end, in this transcript.** These verdicts carry a
+  fixture payer (`0x1111…1111`): the Proceeds paywall answered 402 to a real
+  `exact`/`eip3009` header that Base Sepolia USDC accepted
+  ([`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061)).
+  The services on the registry since are paid by a real Circle agent wallet,
+  and their verdicts name it — see the README.
 - **A deployed workflow.** Simulation, not production enrollment.
 - **A real attested enclave.** The simulator says so itself: *"The simulator is
   not a real TEE, and is meant to debug."*

@@ -5,18 +5,15 @@ submission. This is the cut: seven shots, ~3:00, ordered so the strongest claim
 lands first and every number on screen is one you can re-read off a public
 chain afterwards.
 
-**Substitute the slugs before shooting.** `weather` and `weather-lite` were
-deregistered on Arc Testnet on 2026-09-11 — the dashboard shows both
-`DEREGISTERED` with a zero bond, not the numbers this script points at. But the
-marketplace is not empty: ten services fronting real x402 providers are live
-(read the current list with `.claude/skills/verdikt-paid-call-sweep`), with
-verdicts and refunds from real paid calls. Pick a pair with contrasting scores
-— on 2026-09-13, `pnl` read conformance 250 / availability 800 and `portfolio`
-1000 / 500 — and swap them in for `weather-lite` / `weather` below, including
-the `cast namehash` in shot 6. Their verdicts name real clauses from their own
-SLAs, so shot 3's "Broke" column reads off whatever they actually broke. The
-alternative is registering a fresh pair through the dashboard's wizard and
-driving traffic with the sweep skill until the hourly job publishes scores.
+**Substitute the slugs before shooting.** `weather` and `weather-lite`, the
+pair this script names, have been deregistered — the dashboard shows both
+`DEREGISTERED` with a zero bond. Pick two live services with contrasting
+conformance from the marketplace (or `.claude/skills/verdikt-paid-call-sweep`)
+and swap them in for `weather-lite` / `weather` below, including the
+`cast namehash` in shot 6. Their verdicts name clauses from their own SLAs, so
+shot 3's "Broke" column reads off whatever they actually broke. The alternative
+is registering a fresh pair through the dashboard's wizard and driving traffic
+with the sweep skill until the hourly job publishes scores.
 
 **Before you start**
 
