@@ -179,10 +179,6 @@ allow the page's origin by CORS and any key in it must be origin-restricted.
 | `docs` | The specification, the spikes that reshaped it, and the roadmap notes for what comes after. |
 | `.claude/skills` | Agent skills, including `verdikt-paid-call-sweep`: enumerate the live registry, pay each service for real, read the verdicts back. |
 
-Start with the [walkthrough](docs/walkthrough.md) — the whole loop, on a public
-chain, with real commands and real output. The
-[shot list](docs/shot-list.md) is the same thing cut to three minutes.
-
 `docs/` takes precedence over inference from code:
 [Requirements](docs/Requirements.md) ·
 [Specification](docs/Specification.md) ·
@@ -243,13 +239,11 @@ verification would be self-refuting.
   publishing `conformance` / `availability` for every live listing to ENS,
   where they read straight back off `<slug>.verdikt.eth`.
 
-[`docs/walkthrough.md`](docs/walkthrough.md) and the transcripts in
-[`docs/evidence/`](docs/evidence) record the original demo pair, `weather` and
-`weather-lite`, against a Proceeds paywall: three verdicts through the real
-KeystoneForwarder, two of them naming the clause they broke, and the aggregate
-scoring both. Those verdicts carry a fixture payer, from before the paid leg
-ran end to end. The pair has since been deregistered, so the walkthrough is a
-record of a period, not of the live listing.
+The transcripts in [`docs/evidence/`](docs/evidence) record the original demo
+pair, `weather` and `weather-lite`, against a Proceeds paywall: three verdicts
+through the real KeystoneForwarder, two of them naming the clause they broke,
+and the aggregate scoring both. Those verdicts carry a fixture payer, from
+before the paid leg ran end to end, and the pair has since been deregistered.
 
 **Simulated or blocked, and why:**
 

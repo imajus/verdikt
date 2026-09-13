@@ -25,7 +25,7 @@ third party to act, or a person at a screen:
 | A registry redeploy | 2.4 — `withdrawWithAuthorization` on chain | The contract has it; the live registry predates it and pins its forwarder immutably. Until the redeploy, a Gateway-paid refund (credited to the agent wallet's backing EOA) is visible in `getOwed` and unclaimable |
 | A Chainlink onboarding decision | 2.4 — a production workflow deployment | `cre account access` to request it. `cre whoami` reports *Deploy Access: Not enabled*, and `link-key` refuses on that basis |
 | *(done)* | 6.1 — two paywalls, one per service | Configured, and the ENS `url` records now point each service at its own |
-| A person at a screen | 6.3 — the recorded walkthrough | [`shot-list.md`](./shot-list.md) is the 3-minute cut: seven shots, timed, with the lines to say. [`walkthrough.md`](./walkthrough.md) is the long version |
+| A person at a screen | 6.3 — the recorded walkthrough | The script is kept outside this repo |
 
 Two items are marked `[~]` rather than `[ ]`, meaning *delivered, with a
 boundary that is deliberate and documented at the task*: per-verdict failure
@@ -854,7 +854,7 @@ day saved in Phase 4 here.
 > dashboard already holds the clause list to map the hash back. But both
 > receivers are immutable, so it means **redeploying the registry and
 > re-registering both services** — which moves the addresses that
-> `README.md`, `walkthrough.md` and three files in `evidence/` now cite, and
+> `README.md` and three files in `evidence/` now cite, and
 > tears down a demo that currently works end to end on a public chain.
 >
 > It also only half-closes the item: the failing clause *id* would be on-chain,
@@ -989,14 +989,10 @@ day saved in Phase 4 here.
       dispute layer is a design choice; ENS on Sepolia is a deployment
       constraint; attestation is simulated because CRE production
       enrollment is private-beta
-- [x] Written walkthrough — [walkthrough.md](./walkthrough.md). Every command
-      in it has been run and every output is real, with the transcripts in
+- [x] Written walkthrough — was `walkthrough.md`, a tour of the original
+      `weather` / `weather-lite` pair with real commands and output. Dropped
+      once that pair was deregistered; the transcripts it cited stay in
       `evidence/`
-- [ ] **Recorded walkthrough** — needs a human at a screen. Two scripts exist so
-      that is the only part left: [`shot-list.md`](./shot-list.md) is the
-      3-minute submission cut — seven timed shots, what is on screen, the lines
-      to say, and the one sentence about what is simulated — and
-      [`walkthrough.md`](./walkthrough.md) is the long version it was cut from.
-      `weather` and `weather-lite` were deregistered on 2026-09-11, so the
-      slugs in `shot-list.md` need substituting with two of the live services
-      (its header names a pair with contrasting scores) before this can be shot
+- [ ] **Recorded walkthrough** — needs a human at a screen. The script is
+      written and kept outside this repo; shoot it against two of the live
+      services with contrasting scores
