@@ -26,6 +26,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 import { sepolia } from 'viem/chains';
 import { SEPOLIA } from '@verdikt/sdk/deployments';
 import { dnsEncode, resolverRecordsAbi, serviceName } from '@verdikt/sdk/ens';
+import { parseSla } from '@verdikt/sla';
 import { DEFAULT_SEPOLIA_RPC, readNameState, registryAbi, resolverAbi } from './ens-sepolia.mjs';
 
 /** One year. The subname outliving the demo is not interesting; expiring mid-demo is. */
@@ -54,11 +55,25 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.slug) throw new Error('--slug is required');
 
+  // The dashboard wizard gates on this already; this script didn't, which is
+  // how two live services ended up with an unparseable SLA — `judge` falls
+  // back to status-only and their clauses are never enforced.
+  if (args.sla) {
+    try {
+      parseSla(args.sla);
+    } catch (error) {
+      throw new Error(`--sla is not a valid SLA, refusing to publish it: ${/** @type {Error} */ (error).message}`, {
+        cause: error
+      });
+    }
+  }
+
   const operatorKey = process.env.ENS_DEPLOYER_PRIVATE_KEY;
   const providerKey = process.env.PROVIDER_PRIVATE_KEY;
   if (!operatorKey || !providerKey) {
     throw new Error('set ENS_DEPLOYER_PRIVATE_KEY and PROVIDER_PRIVATE_KEY');
   }
+
   const operator = privateKeyToAccount(operatorKey);
   const provider = privateKeyToAccount(providerKey);
 

@@ -414,6 +414,21 @@ describe('the verified branch — outcomes that are not PASS', () => {
     expect(response.headers['x-verdikt-fallback-reason']).toBe('sla record unreadable');
   });
 
+  it('flattens a fallback reason that quotes the SLA, rather than emitting a raw header value', async () => {
+    const { deps } = harness({
+      result: verdict({
+        outcome: null,
+        mode: 'status-only',
+        reason: 'sla unusable: invalid SLA at /clauses/0 — expected\r\nX-Injected: yes',
+        status: 404,
+        tx: null
+      })
+    });
+    const reason = (await paidCall(deps)).headers['x-verdikt-fallback-reason'];
+    expect(reason).not.toMatch(/[\r\n]/);
+    expect(reason).toBe('sla unusable: invalid SLA at /clauses/0 ? expected X-Injected: yes');
+  });
+
   it('flags a truncated payload rather than letting it look complete', async () => {
     const { deps } = harness({ result: verdict({ bodyTruncated: true }) });
     expect((await paidCall(deps)).headers['x-verdikt-body-truncated']).toBe('true');
