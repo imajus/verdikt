@@ -415,12 +415,6 @@ describe('the verified branch — outcomes that are not PASS', () => {
   });
 
   it('flattens a fallback reason that quotes the SLA, rather than emitting a raw header value', async () => {
-    // The reason embeds the engine's parse error, which quotes a
-    // provider-authored document — so it carries whatever that document
-    // contains. A real one on Arc reached the agent with an em dash in it,
-    // which Workers rejects as a non-ASCII header value; a newline would be
-    // worse, splitting the header and letting the rest be read as one of the
-    // agent's own. Same treatment as the clause detail headers.
     const { deps } = harness({
       result: verdict({
         outcome: null,

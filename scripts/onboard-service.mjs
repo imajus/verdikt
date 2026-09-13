@@ -55,26 +55,16 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (!args.slug) throw new Error('--slug is required');
 
-  // Refuse an SLA the verifier cannot parse, before it reaches ENS.
-  //
-  // The dashboard's wizard already gates on exactly this (`describeSlaValidity`);
-  // this script did not, which is how two live services ended up publishing an
-  // SLA whose first clause carries a `description` longer than the schema's 256
-  // characters. Nothing surfaces that: `judge` falls back to status-only and
-  // scores every call on the HTTP status alone, so the provider's real clauses
-  // are never enforced and the service still looks healthy. The record is
-  // provider-authored and permanent enough to matter, so it is checked here
-  // rather than discovered from a verdict months later.
+  // The dashboard wizard gates on this already; this script didn't, which is
+  // how two live services ended up with an unparseable SLA — `judge` falls
+  // back to status-only and their clauses are never enforced.
   if (args.sla) {
     try {
       parseSla(args.sla);
     } catch (error) {
-      throw new Error(
-        `--sla is not a valid SLA, refusing to publish it: ${/** @type {Error} */ (error).message}\n` +
-          '  An unparseable SLA does not fail loudly — the verifier silently falls back to judging\n' +
-          '  on HTTP status alone, and none of the clauses below are ever enforced.',
-        { cause: error }
-      );
+      throw new Error(`--sla is not a valid SLA, refusing to publish it: ${/** @type {Error} */ (error).message}`, {
+        cause: error
+      });
     }
   }
 

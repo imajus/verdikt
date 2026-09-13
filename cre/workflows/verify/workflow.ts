@@ -138,12 +138,8 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
         // provider receives an empty request and answers 4xx — which the
         // status-only fallback then correctly refuses to blame it for, so the
         // agent pays and no verdict is written.
-        //
-        // Spread, never assigned: `body: undefined` is rejected by the
-        // capability's decoder before the request is sent, and the catch below
-        // cannot tell that apart from a dead provider — which scored every GET
-        // a false DOWN and refunded it out of the provider's bond. See
-        // `requestBodyField`.
+        // See requestBodyField: `body: undefined` throws in the capability's
+        // decoder, which used to be scored as a dead provider (DOWN + refund).
         ...requestBodyField(request.bodyHex),
         // Replayed under whichever header name the agent actually sent
         // (`payment-signature` in x402 v2, `x-payment` in v1) — a v2
