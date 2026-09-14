@@ -399,24 +399,83 @@ on-chain `getVerdict` gate and the deadline/bond checks are the actual
 security boundary and need the read-mechanics verification above before
 landing. Tracked as its own issue given the scope and severity.
 
+### A second, independent judgment — not an appeal of CRE's verdict
+
+Language earlier in this document and in issue #83 ("the verdict upholds the
+original outcome") wrongly implied GenLayer's semantic judgment reverses or
+appeals CRE's PASS/FAIL/DOWN. It doesn't, and can't: a response can
+legitimately pass every deterministic clause and still breach a semantic
+one, or the reverse — schema/latency/price and "does this content actually
+satisfy what was promised" are orthogonal questions. GenLayer adds a second,
+independent judgment dimension on clauses CRE never touches at all, on the
+same call. Correcting the framing everywhere it appears.
+
+That correction has real consequences, checked against the actual contract
+rather than assumed:
+
+**A GenLayer semantic verdict cannot reuse `VerdictWritten`.**
+`VerdiktRegistry.sol`'s `_recordVerdict` rejects outright: `if
+(_verdicts[requestId].writtenAt != 0) { emit VerdictRejected(...,
+DUPLICATE_REQUEST); return; }`. CRE already wrote a verdict for this
+`request_id` — attempting to relay GenLayer's outcome through the same path
+is silently rejected as a duplicate, not merged, not overwritten. The relay
+(#84) needs a genuinely new event and a new record, e.g. `_semanticSettlements[requestId][clauseId]`
+and `SemanticSettlementWritten(...)`, keyed the same composite way the
+GenLayer contract already keys claims — not a second write to `_verdicts`.
+
+**Refund must account for what CRE already credited, or the per-call cap
+breaks.** `_recordVerdict` already caps CRE's own refund at
+`min(FIXED_REFUND, paidNative, service.deposit)`
+(`VerdiktRegistry.sol:194-200`) — the invariant this protects is explicit
+elsewhere in the repo: "a refund larger than the payment makes
+induced-failure griefing profitable with no arbitration to fall back on." A
+call can get a CRE `FAIL` (refund already credited) *and* a semantic
+`BREACH` (a second, independent judgment) — settling the semantic refund as
+a fresh, uncapped allowance would let one paid call collect two refunds and
+blow through that cap. The settlement path must read the existing
+`getVerdict(requestId).refundCredited` (the same on-chain read the
+eligibility gate, #90, already needs) and cap the *additional* semantic
+credit at `FIXED_REFUND - existingCredited`, clamped to zero — never assume
+the semantic refund starts from a clean allowance.
+
+**Dashboard must show both, not collapse them.** A call's full record is now
+one CRE verdict plus zero or more semantic settlements (one per disputed
+clause), each independently outcome-bearing. Folding them into a single
+displayed status would misrepresent exactly the case that motivated this
+whole feature — CRE PASS, semantic BREACH.
+
+**Reputation: a separate score, not folded into `conformance`.** The
+existing `conformance`/`availability` ENS text records are computed purely
+from `VerdictWritten` (Specification.md §1) and are already referenced in
+the frozen ETHOnline submission's evidence — silently changing what they
+measure would misrepresent those already-published numbers. Recommend a
+third score, e.g. `semanticConformance`, written by its own signer
+(mirroring the existing per-key EAC pattern `sla`/`conformance`/
+`availability` already uses) from `SemanticSettlementWritten` events, same
+1000-when-empty convention. Leaving it unaggregated anywhere means semantic
+failures never affect a provider's advertised standing at all — defeating
+the point of judging them.
+
 ### Economics: symmetric bonded deposits
 
 Verdict isn't known before GenLayer executes, so cost has to be bonded
 upfront by whoever might owe it:
 
-- **Provider** already has a bonded deposit on Arc (existing registry/escrow
-  pattern, refund capped at `min(FIXED_REFUND, paidAmount, remaining
-  deposit)`). If GenLayer's verdict finds against the provider, that deposit
-  covers the x402 refund plus the GenLayer execution cost.
+- **Provider** already has a bonded deposit on Arc. If GenLayer's semantic
+  verdict is `BREACH`, that deposit covers the x402 refund (capped as above,
+  accounting for what CRE already credited) plus the GenLayer execution
+  cost.
 - **Consumer** posts a new bond at `submit_claim` time, symmetric with the
-  provider's existing pattern — not a new paradigm, the same
-  bonded-deposit/pull-payment shape applied to the other side. If GenLayer's
-  verdict upholds the original outcome (claim rejected), the consumer's bond
-  covers the GenLayer execution cost instead — deters frivolous claims.
+  provider's existing pattern. If GenLayer's semantic verdict is `MET`
+  (claim rejected — not "CRE upheld"), the consumer's bond covers the
+  GenLayer execution cost instead, deterring frivolous claims. If
+  `UNDETERMINED`, neither bond is charged (evidence-envelope section above).
 
 Settlement itself is applied back to Arc by the relay, reading the GenLayer
-verdict and calling a new bonded-settlement path on the escrow contract (not
-yet built — Day 2/3 scope, tracked in the GitHub issue).
+verdict and calling the new `SemanticSettlementWritten` path (not
+`VerdictWritten`) on the escrow contract — not yet built, tracked in the
+GitHub issue, and now specified precisely enough to build correctly rather
+than reopening the refund-cap invariant by accident.
 
 ## What's built vs. not (as of Sep 14, 2026)
 
