@@ -315,6 +315,90 @@ same poll-and-claim shape, reads the GenLayer verdict and applies settlement
 back to Arc. Mainnet migration to the official bridge is a natural post-
 hackathon step, not in scope now.
 
+### Claim eligibility gate: the part that was missing entirely
+
+Every section above assumed `submit_claim` is called by someone entitled to
+dispute that specific `request_id`. It wasn't checking that at all. Since
+`request_id` is public (every `VerdictWritten` event), the contract as
+written let **anyone** call `submit_claim` against **anyone else's** call,
+triggering real GenLayer execution cost with nothing bonded and no
+relationship to the original transaction — free spam of the expensive
+machinery, and a way to force evidence disclosure (once dispute-gated
+serving unlocks it, per above) against a provider or consumer who never
+opened anything.
+
+**What a claim must be bound to**, checked on-chain before any GenLayer
+execution cost is spent:
+
+- **Registry address** — fixed in contract config, never caller-supplied, so
+  a caller cannot point the check at a fake registry that returns whatever
+  `Verdict` they want.
+- **A verdict that actually exists.** `VerdiktRegistry.getVerdict(requestId)`
+  (`contracts/src/VerdiktRegistry.sol:251`) is a plain Solidity mapping read —
+  checked directly, `_verdicts[requestId]` for an unset key returns the
+  **zero-valued struct**, not a revert: `outcome: PASS(0), payer: 0x0,
+  writtenAt: 0`. A bogus or never-written `request_id` silently looks like a
+  real `PASS` from a zero address unless the caller explicitly checks
+  `writtenAt != 0` (or `payer != address(0)`). This is exactly the gate for
+  the "replay-402 / fallback-4xx / missing verdict" cases: a fallback 4xx
+  writes no verdict at all (existing invariant), and a replay-402 is a
+  transport/payment issue, not a content dispute — both must fail this check
+  and be rejected before reaching any judgment logic, undetermined outcome
+  included, since there is nothing to judge in the first place.
+- **Verified payer.** `verdict.payer`, from the on-chain read above, must
+  match the claimant — **not** trusted from a cached response or a payment
+  signature alone, since neither actually proves the caller is who they
+  claim against *this specific verdict*. Plain-EOA case: `verdict.payer ==
+  gl.message.sender_address` works directly, since GenLayer and Arc are both
+  standard EVM address spaces and the same key derives the same address on
+  either. **Open, not solved here:** Circle Gateway's SCA/backing-EOA case
+  (`proxy/.agents/skills/recover-eco-funds/SKILL.md`) — a payer that is a
+  Circle Smart Contract Account has a *different* address than its backing
+  EOA, and that relationship is resolved through Circle's wallet API
+  (`eoaOwnerAddress`), not from on-chain data alone. GenVM has no documented
+  way to hold Circle API credentials safely, so this case is unhandled for
+  now — plain-EOA payers work, SCA-backed payers currently cannot open a
+  claim without some trusted intermediary attesting the relationship, which
+  reintroduces exactly the kind of trust assumption this gate exists to
+  avoid. Needs its own design pass before the hackathon deadline if SCA
+  payers are in scope for the demo.
+- **Service/slug correlation.** `verdict.serviceId` should match
+  `keccak256(slug)` for the `slug` argument, so a caller cannot claim against
+  one service while citing another's SLA.
+- **Evidence/SLA version.** `submit_claim`'s criteria-freeze (above) protects
+  everything *after* the claim opens, but not the gap between the original
+  call (`verdict.writtenAt`) and `submit_claim` being called — a provider
+  could still edit their SLA in that window. Fully closing this needs Arc's
+  `Verdict` struct (or a companion write) to carry a hash of the SLA content
+  that was live at verdict-write time, which it does not today
+  (`IVerdiktRegistry.sol:46-56` has no such field) — an Arc-side contract
+  change, out of scope for this note, tracked separately.
+- **Bond.** `submit_claim` should verify a consumer bond was actually posted
+  for this `request_id` (economics section below) before proceeding — not
+  trust the caller, for the same reason as the payer check.
+- **Deadline.** Reject if called after the filing window (two-clocks design,
+  above) has lapsed since `verdict.writtenAt`.
+- **Duplicate protection, corrected.** The claim key must be `(request_id,
+  clause_id)`, not `request_id` alone — a single verdict can have multiple
+  semantic clauses, each independently disputable. Keying on `request_id`
+  alone (the original scaffold) would silently allow only one semantic claim
+  per call, ever, even when an SLA declares several semantic clauses.
+
+**Read mechanics, confirmed available:** `genlayer-studio-bridge-boilerplate`
+uses `gl.evm.MethodEncoder(name, abi, return_type)` from within a GenLayer
+contract to build EVM calldata (`intelligent-contracts/BridgeSender.py`) —
+the building block for encoding `getVerdict(bytes32)` and reading Arc via a
+raw JSON-RPC `eth_call` through `gl.nondet.web.post`, mirroring the ENS-read
+pattern already used for SLA criteria. The decode side needs a bit more
+verification before implementation — noted as the concrete next step, not
+assumed correct here.
+
+**Status:** specified, not yet implemented — the composite `(request_id,
+clause_id)` claim key is a safe, low-risk fix and should land first; the
+on-chain `getVerdict` gate and the deadline/bond checks are the actual
+security boundary and need the read-mechanics verification above before
+landing. Tracked as its own issue given the scope and severity.
+
 ### Economics: symmetric bonded deposits
 
 Verdict isn't known before GenLayer executes, so cost has to be bonded
@@ -340,14 +424,24 @@ yet built — Day 2/3 scope, tracked in the GitHub issue).
       types, test vector) — mixed SLAs parse and CRE's deterministic verdict
       is unaffected; 88 tests pass
 - [x] Contract scaffold, generic claim-type engine (`genlayer/contracts/sla_claim_judge.py`)
+- [x] Evidence envelope, frozen criteria, `UNDETERMINED` outcome, image
+      support — reasoned through against confirmed API patterns, not yet
+      test-executed (no PyPI/GitHub access in this sandbox)
+- [x] Composite `(request_id, clause_id)` claim key — a verdict can carry
+      several disputable semantic clauses
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
       `genlayer-studio-bridge-boilerplate`
+- [ ] **Claim eligibility gate** — on-chain `getVerdict` check (registry
+      address, real verdict exists, verified payer, service/slug match,
+      bond posted, filing deadline), currently entirely missing; anyone can
+      call `submit_claim` against anyone's public `request_id` today
 - [ ] Provider opt-in flag for semantic claims (ENS text record)
 - [ ] Proxy response cache for opted-in services, `GET /internal/sla/<slug>`,
       and the dispute-gated `GET /internal/evidence/<request_id>` (returns
       nothing until `submit_claim` has opened a claim for that id)
-- [ ] Consumer bonding + relay settlement back to Arc
+- [ ] Consumer bonding + relay settlement back to Arc (including
+      `UNDETERMINED` releasing both bonds unspent)
 - [ ] Deploy to Bradbury testnet
 - [ ] Submission assets (live demo URL — required, logo, 180-char one-liner,
       1000-char description, how-to steps, private verification notes,

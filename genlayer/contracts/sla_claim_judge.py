@@ -25,6 +25,20 @@ Two GenLayer web fetches, two different jobs:
   `request_id` (dispute-gated, not cache-gated — see the roadmap doc). An
   incomplete or unsupported envelope resolves to `UNDETERMINED`, never a
   forced `MET`/`BREACH` against either party.
+
+Claims are keyed by `(request_id, clause_id)`, not `request_id` alone — one
+verdict can carry several semantic clauses, each independently disputable;
+keying on `request_id` alone would silently allow only one semantic claim
+per call ever. Evidence stays keyed by `request_id` alone (one envelope per
+call, shared across however many of its clauses get disputed).
+
+**Not yet in this contract, tracked separately (docs/roadmap/genlayer.md,
+"Claim eligibility gate"):** nothing here verifies the caller is actually
+the payer of the underlying Arc verdict, that a real verdict was even
+written (vs. the zero-valued struct Solidity returns for an unset request
+id), that a bond was posted, or that the filing deadline hasn't passed.
+`submit_claim` as written can be called by anyone against any public
+`request_id`.
 """
 
 import json
@@ -72,10 +86,13 @@ class SlaClaimJudge(gl.Contract):
         `request_id` correlates back to the Arc-side verdict/escrow entry for
         the same x402 call. Opening a claim is also the act that unlocks the
         evidence envelope on the proxy — nothing is servable before this call
-        succeeds for this `request_id` (dispute-gated design).
+        succeeds for this `request_id` (dispute-gated design). Keyed by
+        `(request_id, clause_id)`: a verdict can carry several semantic
+        clauses, each independently disputable.
         """
-        if request_id in self.claims:
-            raise Exception("Claim already submitted for this request")
+        key = _claim_key(request_id, clause_id)
+        if key in self.claims:
+            raise Exception("Claim already submitted for this request and clause")
 
         sla_url = f"{self.sla_api_base}/internal/sla/{slug}"
 
@@ -101,7 +118,7 @@ class SlaClaimJudge(gl.Contract):
 
         criteria = glvm.run_nondet_unsafe(leader_fn, validator_fn)
 
-        self.claims[request_id] = Claim(
+        self.claims[key] = Claim(
             request_id=request_id,
             slug=slug,
             clause_id=clause_id,
@@ -113,10 +130,11 @@ class SlaClaimJudge(gl.Contract):
         )
 
     @gl.public.write
-    def resolve_claim(self, request_id: str) -> None:
-        if request_id not in self.claims:
+    def resolve_claim(self, request_id: str, clause_id: str) -> None:
+        key = _claim_key(request_id, clause_id)
+        if key not in self.claims:
             raise Exception("Unknown claim")
-        claim = self.claims[request_id]
+        claim = self.claims[key]
         if claim.resolved:
             raise Exception("Claim already resolved")
 
@@ -198,13 +216,14 @@ JSON without any formatting prefix or suffix.
         claim.resolved = True
         claim.outcome = result["outcome"]
         claim.reasoning = result["reasoning"]
-        self.claims[request_id] = claim
+        self.claims[key] = claim
 
     @gl.public.view
-    def get_claim(self, request_id: str) -> dict:
-        if request_id not in self.claims:
+    def get_claim(self, request_id: str, clause_id: str) -> dict:
+        key = _claim_key(request_id, clause_id)
+        if key not in self.claims:
             raise Exception("Unknown claim")
-        c = self.claims[request_id]
+        c = self.claims[key]
         return {
             "request_id": c.request_id,
             "slug": c.slug,
@@ -215,6 +234,12 @@ JSON without any formatting prefix or suffix.
             "outcome": c.outcome,
             "reasoning": c.reasoning,
         }
+
+
+def _claim_key(request_id: str, clause_id: str) -> str:
+    # One verdict can carry several semantic clauses; each is independently
+    # disputable, so the claim key must include both, not request_id alone.
+    return f"{request_id}:{clause_id}"
 
 
 def _envelope_unsupported_reason(envelope: dict) -> str | None:
