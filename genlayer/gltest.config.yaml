@@ -1,0 +1,17 @@
+networks:
+  default: localnet
+
+  localnet:
+    url: "http://127.0.0.1:4000/api"
+
+  testnet_bradbury:
+    url: "https://rpc-bradbury.genlayer.com"
+    accounts:
+      - ${GENLAYER_DEPLOYER_PRIVATE_KEY}
+
+  studionet: {}
+
+paths:
+  contracts: "contracts"
+
+environment: .env
