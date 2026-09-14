@@ -175,13 +175,19 @@ deliverable satisfies a clause needs the request that produced it too, and a
 truncated or unsupported body must not be silently judged as if it were
 complete. Checked against the real code rather than assumed:
 
-- `proxy/src/router.js`'s `verified()` builds the CRE trigger payload from
-  `providerUrl` (full path + query, via `upstream.toString()`), `method`,
-  the payment, and `sla` — **no request body field is passed to the workflow
-  at all today**, even though the proxy has it (`await request.arrayBuffer()`
-  for non-GET/HEAD). The envelope reflects this honestly (`request.body:
-  null`) rather than inventing data that was never captured; fixing that gap
-  is a separate, larger change to the CRE trigger payload, not assumed here.
+- **Correction:** an earlier version of this document said the CRE trigger
+  never receives a request body at all. That was true when written, and is
+  no longer true — `main` shipped "Replay the agent's request body to the
+  provider" (#45, commit `57a3eb9`) after this design was drafted but before
+  it was re-checked. This local checkout had gone stale (~2.5 days, 40+
+  commits behind `origin/main`) without being re-fetched — caught only when
+  reconciling `feat/genlayer` with the actual remote branch, not by design.
+  Current state, re-verified directly against `origin/main`:
+  `proxy/src/router.js`'s `verified()` now passes `bodyHex: bodyToHex(body)`
+  into `workflow.verify({...})`, and `cre/workflows/verify/workflow.ts`'s
+  `VerifyRequest` carries `bodyHex: string | null`, replayed to the provider.
+  The envelope's `request.body` should be populated from this, not left
+  `null` — Day 2 work, not yet done in the scaffold.
 - `cre/workflows/verify/workflow.ts:162` truncates the relayed body to
   20,000 chars. The comment attributes this to "the DON consensus observation
   is capped (25kb in simulation)" — but the DON-signed report
@@ -210,6 +216,10 @@ complete. Checked against the real code rather than assumed:
   "cachedAt": 1234567890
 }
 ```
+
+`request.body` is `null` for GET/HEAD; for other methods it should now be
+populated from `bodyHex` (`workflow.ts`'s `VerifyRequest.bodyHex`), not left
+unconditionally `null` — see the correction above.
 
 Supported `contentType`s: `application/json`, `text/plain`, `text/html`
 (judged as text) and `image/png`, `image/jpeg` (judged via
