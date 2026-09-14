@@ -135,23 +135,101 @@ surface at authoring time, not a schema-level constraint.
 
 A GenLayer Intelligent Contract, `SlaClaimJudge`, scaffolded on `feat/genlayer`
 (direct-mode tests included, mocked web/LLM — see `genlayer/README.md` for
-status and commands). Two writes:
+status and commands). **Caveat, stated plainly:** unlike the `packages/sla`
+fix below, this contract could not be executed in this environment — the
+sandbox has no real PyPI/GitHub network access, so `pip install -r
+genlayer/requirements.txt` fails on SSL/DNS. The tests are written against
+the same API patterns already confirmed working in
+`genlayer-project-boilerplate` (`run_nondet_unsafe`, `direct_vm.mock_web`,
+`mock_llm`), but treat this as reasoned-through, not test-verified, until it
+actually runs against real tooling — that's still Day 2/3 work.
 
-- `submit_claim(request_id, slug, evidence)` — opens a claim. `request_id`
-  correlates to the Arc-side verdict/escrow entry for the same x402 call.
-- `resolve_claim(request_id)` — the leader fetches the provider's SLA
-  criteria *live* from ENS (never duplicated into GenLayer storage — same
-  "single source of truth" rule Arc already follows for SLA, per
-  `Specification.md` §3-4), builds a judgment prompt by interpolating the
-  fetched criteria (generic: any provider-defined SLA text works, not one
-  hardcoded claim type), and reaches a verdict via a custom
-  `run_nondet_unsafe` leader/validator pair that compares only the decision
-  field (`verdict: bool`), not free-text `reasoning` — GenLayer's own
+Two writes, redesigned twice after review (see below for why):
+
+- `submit_claim(request_id, slug, clause_id)` — opens a claim for one
+  specific semantic clause and **freezes its `criteria` text** from ENS at
+  this moment, via an exact-match (`strict_eq`-equivalent) nondet fetch. Not
+  re-fetched later: a provider editing their SLA mid-dispute must not be able
+  to retroactively change what is being judged — the same failure mode
+  `packages/sdk/registry.js`'s `failedClause` hash already guards against on
+  the deterministic side ("a non-zero hash matching nothing, meaning the
+  provider has edited its SLA since"). No more free-text `evidence` argument
+  here — see the evidence envelope below for where that content now comes
+  from and why.
+- `resolve_claim(request_id)` — fetches the evidence envelope (below), and
+  either returns `UNDETERMINED` with a reason (envelope missing, unsupported
+  content type, transport failure) or builds a judgment prompt from the
+  *frozen* criteria plus the envelope's request/response fields, routing to
+  `exec_prompt(images=[...])` for image evidence or plain text otherwise.
+  Reaches a verdict via a custom `run_nondet_unsafe` leader/validator pair
+  comparing only the decision field (`outcome: "MET"|"BREACH"|"UNDETERMINED"`
+  now, not a bare `bool`), never free-text `reasoning` — GenLayer's own
   recommended pattern for settlement decisions, and the only pattern
   confirmed to work in direct-mode tests (`eq_principle.strict_eq` uses
   `spawn_sandbox` internally, unsupported in direct-mode pytest).
 
-### Evidence: proxy-cached, opt-in, disclosed as public once a claim opens
+### Evidence envelope: what gets judged, and what doesn't
+
+A response body alone isn't sufficient evidence — judging whether a
+deliverable satisfies a clause needs the request that produced it too, and a
+truncated or unsupported body must not be silently judged as if it were
+complete. Checked against the real code rather than assumed:
+
+- `proxy/src/router.js`'s `verified()` builds the CRE trigger payload from
+  `providerUrl` (full path + query, via `upstream.toString()`), `method`,
+  the payment, and `sla` — **no request body field is passed to the workflow
+  at all today**, even though the proxy has it (`await request.arrayBuffer()`
+  for non-GET/HEAD). The envelope reflects this honestly (`request.body:
+  null`) rather than inventing data that was never captured; fixing that gap
+  is a separate, larger change to the CRE trigger payload, not assumed here.
+- `cre/workflows/verify/workflow.ts:162` truncates the relayed body to
+  20,000 chars. The comment attributes this to "the DON consensus observation
+  is capped (25kb in simulation)" — but the DON-signed report
+  (`VERDICT_REPORT_PARAMS`) never carries the body at all, only
+  `outcome/payer/amount/clauseHash`, and the truncation is applied to
+  `finish()`'s payload, a direct enclave→proxy POST via `callbackUrl` that
+  never crosses DON consensus. The stated reason doesn't match the code path
+  being constrained. Flagging precisely rather than fixing blind: this needs
+  its own look at `workflow.ts` before the evidence cache can safely assume
+  it has the full body — caching a pre-truncated body would silently omit
+  exactly the material a semantic clause turns on.
+
+**Envelope shape** (served only once a claim unlocks it — see below):
+
+```json
+{
+  "requestId": "0x…",
+  "slug": "acme-flights",
+  "request": { "method": "GET", "url": "https://…", "body": null },
+  "response": {
+    "status": 200,
+    "contentType": "application/json",
+    "body": "…",
+    "bodyEncoding": "utf8"
+  },
+  "cachedAt": 1234567890
+}
+```
+
+Supported `contentType`s: `application/json`, `text/plain`, `text/html`
+(judged as text) and `image/png`, `image/jpeg` (judged via
+`exec_prompt(images=[...])`, confirmed to accept raw bytes). Anything else —
+missing fields, `response.status: null` (a transport failure, not a semantic
+dispute), an unrecognized content type, a body the truncation bug may have
+cut mid-content — makes the envelope **unsupported**, and `resolve_claim`
+returns `UNDETERMINED` with a stated reason rather than defaulting to
+`MET` or `BREACH` against either party. `_envelope_unsupported_reason` is a
+pure function of the fetched envelope, so every validator reaches the same
+determination without adding its own source of disagreement.
+
+**Bonding interaction (connects to the economics section below, #83):** an
+`UNDETERMINED` outcome must not charge either bond — the failure to judge is
+an evidence-completeness problem upstream, not a finding against the
+consumer's claim or the provider's delivery. Both bonds release unspent.
+Not yet reflected in #83's issue text; needs updating before that work
+starts.
+
+### Evidence access: opt-in, dispute-gated, two separate clocks
 
 Original design had the claimant submit evidence as free text — trivially
 gameable (fabricated evidence either direction). Second design cached every
