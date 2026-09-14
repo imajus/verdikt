@@ -110,25 +110,52 @@ status and commands). Two writes:
   confirmed to work in direct-mode tests (`eq_principle.strict_eq` uses
   `spawn_sandbox` internally, unsupported in direct-mode pytest).
 
-### Evidence: proxy-cached, not claimant-submitted
+### Evidence: proxy-cached, opt-in, disclosed as public once a claim opens
 
 Original design had the claimant submit evidence as free text — trivially
-gameable (fabricated evidence either direction). Revised design: the proxy
-caches every CRE-evaluated response body for a bounded TTL (24h), keyed by
-`request_id`. This is a deliberate, accepted reversal of the current stated
-invariant ("the proxy relays only — it does not evaluate, retain, or log
-response bodies", `Specification.md:71`) — worth flagging wherever this is
-described, since retention becomes default for *all* traffic during the TTL
-window, not just disputed calls (you cannot know in advance which call will
-be disputed). `resolve_claim` fetches the cached evidence directly by
-`request_id` — no secret token: `request_id` is already public via Arc's
-`VerdictWritten` events, so a token embedded in a GenLayer call argument adds
-no real secrecy once it is public calldata anyway (GenLayer has no
-confidential compute — see above). The only available mitigation is a short
-TTL plus invalidate-on-first-fetch, narrowing exposure to a race rather than
-a standing public leak. This is explicitly obscurity/rate-limiting, not
-access control, and should be described that way, not as "GenLayer-only
-access."
+gameable (fabricated evidence either direction). Second design cached every
+CRE-evaluated response for 24h regardless of dispute status, keyed by
+`request_id`, with "invalidate-on-first-fetch" as the access mitigation.
+**Rejected** — two independent problems, not one:
+
+1. `request_id` is emitted publicly in every `VerdictWritten` event, for
+   every call, whether disputed or not. Caching-by-default means anyone
+   watching Arc — not just GenLayer validators — can construct the evidence
+   URL and read the paid content for free, for every transaction, during the
+   whole TTL window. That is not a privacy tradeoff scoped to disputes; it
+   defeats the paywall for all traffic.
+2. Invalidate-on-first-fetch is incompatible with GenLayer's own consensus:
+   the leader *and every committee member* must independently re-fetch the
+   same URL and get matching content to reach agreement. A single-use
+   invalidation starves the second fetch and breaks the equivalence-principle
+   check itself — and, separately, lets an outside party race ahead of the
+   legitimate validators to consume (and deny) the evidence before the claim
+   can actually be judged.
+
+**Current design:** evidence is never servable by default. Two gates, both
+required:
+
+- **Opt-in at the provider level.** A service must explicitly declare
+  semantic-claims support (an ENS text record alongside `sla`, same per-key
+  ACL pattern) before its responses are cached at all. Providers who never
+  opt in carry zero exposure from this feature.
+- **Gated by dispute, not by cache.** The proxy still holds each opted-in
+  call's response internally for a bounded window, but `GET
+  /internal/evidence/<request_id>` returns nothing until `submit_claim` has
+  actually been called for that `request_id` on GenLayer. Opening a claim is
+  itself the authenticated, on-chain, attributable act that unlocks
+  disclosure — not knowledge of a public identifier.
+- Once unlocked, evidence is fetchable for the duration of the
+  claim-resolution round (leader, full committee, any appeal), then expires.
+  During that window it actually is public — no token, no identity check,
+  because none is enforceable against GenVM's plain outbound fetches — so
+  this must be disclosed plainly wherever semantic-claims opt-in is
+  described, not framed as "GenLayer-only access." Same disclosure posture as
+  the CRE proxy's existing "seen by the enclave and the agent, not by every
+  node operator" — restated here because the audience is bigger and the
+  identifier is public, so the honest description is: **filing a
+  semantic-claims dispute makes that one response publicly readable, by
+  design.**
 
 ### Cross-chain: pull-only, no bridge for the hackathon window
 
@@ -174,9 +201,10 @@ yet built — Day 2/3 scope, tracked in the GitHub issue).
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
       `genlayer-studio-bridge-boilerplate`
-- [ ] Proxy 24h response cache keyed by `request_id`, and the
-      `GET /internal/sla/<slug>` + evidence-read endpoints the contract
-      assumes
+- [ ] Provider opt-in flag for semantic claims (ENS text record)
+- [ ] Proxy response cache for opted-in services, `GET /internal/sla/<slug>`,
+      and the dispute-gated `GET /internal/evidence/<request_id>` (returns
+      nothing until `submit_claim` has opened a claim for that id)
 - [ ] Consumer bonding + relay settlement back to Arc
 - [ ] Deploy to Bradbury testnet
 - [ ] Submission assets (live demo URL — required, logo, 180-char one-liner,
