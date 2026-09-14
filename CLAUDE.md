@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository. `AGENTS.md` is a symlink to it, so the instructions are the same whichever tool loads them.
 
 ## What Verdikt is
 
@@ -13,6 +13,10 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/Tasks.md` — the phased build plan, ordered by risk
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
+
+## Working branch
+
+Work happens on `feat/genlayer`, never on `main`. Branch from it, commit to it, and open every new PR with `feat/genlayer` as the **base** — not `main`. `main` is only ever fast-forwarded from the remote. Drop this section once `feat/genlayer` merges.
 
 ## Current state
 
