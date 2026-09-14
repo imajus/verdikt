@@ -307,13 +307,101 @@ pattern — `genlayer-studio-bridge-boilerplate` (cloned at
 `hackathon/genlayer-studio-bridge-boilerplate/`), LayerZero V2, Python
 `BridgeSender`/`BridgeReceiver` ICs + Solidity mailbox contracts + a Node.js
 polling relay through a ZKsync Era hub — but LayerZero V2 only has **Arc
-Mainnet** deployed (chain ID 5042, endpoint 30417), no Arc Testnet endpoint
-(confirmed 404 on LayerZero's docs), so it cannot be used as-is against
-Verdikt's Arc Testnet deployment within this build window. For the
-hackathon: a simpler custom pull-based relay (no LayerZero), following the
-same poll-and-claim shape, reads the GenLayer verdict and applies settlement
-back to Arc. Mainnet migration to the official bridge is a natural post-
-hackathon step, not in scope now.
+Mainnet** deployed (chain ID 5042, endpoint 30417). **Evidence standard,
+corrected:** the original claim rested on one 404 against one guessed URL —
+not good enough on its own. Re-checked across LayerZero's V1 and V2 deployed-
+contracts pages, several per-chain pages that list all known networks, and a
+web search for "Arc testnet LayerZero" specifically: Arc Mainnet is the only
+Arc entry anywhere in LayerZero's documented surface. That's a real, multi-
+source check now, not a single dead link — but it is still absence of
+evidence, not a documented "Arc Testnet is unsupported" statement, since no
+source asserts the negative directly. Treat "no Arc Testnet endpoint" as
+well-supported, not proven, and re-verify before committing to mainnet
+migration.
+
+Given no bridge either way, the hackathon path is a custom pull-based relay
+(no LayerZero) that reads GenLayer's finalized claim state and applies
+settlement back to Arc — specified in full below, since a naive version of
+this relay turns out to hide a real, undisclosed centralization of trust.
+Mainnet migration to the official bridge is a natural post-hackathon step,
+not in scope now.
+
+### Relay: finality, trust model, and failure handling
+
+#83/#84 said "the relay polls resolved claims and settles." That sentence
+was hiding three separate, serious gaps — checked against GenLayer's actual
+finality documentation and this repo's own hard-won lessons about exactly
+this class of bug, not assumed.
+
+**"Resolved" is not "final."** GenLayer's own finality docs
+(`understand-genlayer-protocol/core-concepts/optimistic-democracy/finality`)
+are explicit: *"An Accepted receipt can influence the contract's provisional
+execution chain, but a successful appeal can require it and later
+non-finalized transactions for the same Intelligent Contract to be
+recomputed. Applications that need irreversible settlement should wait for
+`Finalized`."* The contract's own `claim.resolved = True` flag flips at
+**Accepted** time (inside the same transaction that runs
+`run_nondet_unsafe`), not at Finalized — an appeal during the Finality
+Window can still overturn it. Settling real Arc-side funds against a merely-
+Accepted result is settling against a result that can still change. The
+relay must poll GenLayer's transaction-level status (`gen_getTransactionStatus`
+or `gen_getTransactionLifecycle`, not just the contract's own state) and wait
+for `Finalized` before settling anything.
+
+**"Accepted" doesn't mean "succeeded," either.** Same doc: *"Accepted also
+does not mean 'execution succeeded.' It means the committee agreed on the
+receipt. The agreed receipt can contain a user error or a GenVM error."* The
+relay must check that the finalized state's `outcome` field is one of the
+four recognized values (`MET`/`BREACH`/`UNDETERMINED`/`CANCELLED`) before
+settling — not just that the transaction didn't revert. A committee can
+validly agree that execution errored.
+
+**Bind settlement to the exact deployed judge and claim.** The relay's
+config pins the `SlaClaimJudge` contract address (not derived from caller
+input, same principle as pinning the Arc registry address in the eligibility
+gate), and a settlement transaction carries the exact `(requestId,
+clauseId, outcome)` read from that pinned contract's finalized state — never
+a generic event feed that could originate from an unrelated deployment.
+
+**The actual trust model, named rather than hidden.** Dropping LayerZero
+also drops whatever message authentication a real bridge would have
+provided (LayerZero's DVNs cryptographically verify a message's origin
+before delivery). This design has no equivalent: nothing cryptographically
+proves to Arc that GenLayer actually decided what the relay claims it
+decided. Concretely — **the relay's signing key is a settlement authority**,
+full stop, the same way `authorizedKeys` already is for CRE's reports
+(`cre/workflows/verify/workflow.ts`'s `Config.authorizedKeys` — "the gateway
+rejects any trigger request not signed by a key listed here... which is what
+stops a third party manufacturing verdicts by calling the workflow
+directly"). Pull payments settling on the relay's say-so do not authenticate
+that assertion on their own. Minimum mitigation, reusing that exact existing
+pattern rather than inventing a new one: gate the new
+`SemanticSettlementWritten` write path behind the same kind of
+registry-side `authorizedKeys` allowlist, so at least *who* holds settlement
+authority is a known, revocable, named key — not full compromise mitigation
+(there is still no cryptographic proof of what GenLayer actually decided),
+but the difference between an unbounded and a bounded, disclosed trust
+assumption is real and worth stating plainly in the submission rather than
+implying this is trustless when it isn't.
+
+**Replay protection, durable progress, retries, read-back — same shape as
+existing patterns in this repo, not new ones:**
+- Replay: `_semanticSettlements[requestId][clauseId].writtenAt != 0` gate,
+  mirroring `_recordVerdict`'s existing `DUPLICATE_REQUEST` check exactly.
+- Durable polling progress: the relay's "last processed claim" cursor must
+  survive a restart — reuse the Durable Object pattern already established
+  in this codebase (`proxy/src/pending-do.js`'s `PendingVerification`)
+  rather than an in-memory cursor that a restart silently resets.
+- Retries: settlement submission needs retry-with-backoff on transient
+  failure; safe by construction once replay protection exists (a retried
+  settlement for an already-written claim is a harmless no-op, not a double
+  write).
+- Read-back: **this repo already documented this exact failure mode** —
+  CLAUDE.md's "Two silent failures" section: "The KeystoneForwarder
+  swallows a receiver revert and mines anyway... read the value back." The
+  relay must read the resulting on-chain state after submitting a
+  settlement, not just check that the transaction didn't revert, for
+  exactly the reason already proven true once in this codebase.
 
 ### Claim eligibility gate: the part that was missing entirely
 
