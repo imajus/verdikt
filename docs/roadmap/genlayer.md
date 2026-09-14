@@ -145,17 +145,37 @@ required:
   actually been called for that `request_id` on GenLayer. Opening a claim is
   itself the authenticated, on-chain, attributable act that unlocks
   disclosure — not knowledge of a public identifier.
-- Once unlocked, evidence is fetchable for the duration of the
-  claim-resolution round (leader, full committee, any appeal), then expires.
-  During that window it actually is public — no token, no identity check,
-  because none is enforceable against GenVM's plain outbound fetches — so
-  this must be disclosed plainly wherever semantic-claims opt-in is
+- Once unlocked, evidence is fetchable — plainly, publicly, no token or
+  identity check, because none is enforceable against GenVM's plain outbound
+  fetches — so this must be disclosed wherever semantic-claims opt-in is
   described, not framed as "GenLayer-only access." Same disclosure posture as
   the CRE proxy's existing "seen by the enclave and the agent, not by every
   node operator" — restated here because the audience is bigger and the
   identifier is public, so the honest description is: **filing a
   semantic-claims dispute makes that one response publicly readable, by
   design.**
+
+**Two separate clocks, not one.** "Fetchable for the resolution round, then
+expires" conflates the deadline to *file* a claim with the runway
+*adjudication itself* needs once filed — a claim filed near the filing
+deadline must not have its evidence expire mid-execution. Concretely:
+
+- **Filing window** — e.g. 24h from the original call. The proxy retains an
+  opted-in call's response internally for this long; if no claim is filed
+  before it lapses, the response is deleted, unclaimed and never disclosed.
+  This window bounds retention for the (much larger) set of calls nobody
+  disputes.
+- **Adjudication window** — starts fresh the moment a claim is confirmed
+  filed, independent of how much of the filing window remained. The relay
+  that already watches GenLayer for verdicts (#84) also watches for
+  `submit_claim` and, on seeing one, promotes that `request_id`'s cache entry
+  to a new, generous TTL (e.g. 48h) from that moment — padded well past
+  GenLayer's own stated appeal ceiling (~3 hours end to end, per GenLayer's
+  public figures) to safely cover the leader fetch, every committee member's
+  independent re-fetch, retries, and a full appeal escalation. Evidence stays
+  immutable and repeatedly GET-able (no consumption, no invalidation) for the
+  whole window — a claim opened at hour 23.9 of the filing window still gets
+  the full fresh adjudication runway, not six minutes.
 
 ### Cross-chain: pull-only, no bridge for the hackathon window
 
