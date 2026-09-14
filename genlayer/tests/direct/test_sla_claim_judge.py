@@ -62,10 +62,11 @@ def _mock_verdict(vm, outcome, reasoning="because the evidence says so"):
     )
 
 
-def _deploy(direct_deploy):
-    return direct_deploy(
-        "contracts/sla_claim_judge.py", args=[SLA_API_BASE, EVIDENCE_API_BASE]
-    )
+def _deploy(direct_deploy, resolution_timeout_hours=None):
+    args = [SLA_API_BASE, EVIDENCE_API_BASE]
+    if resolution_timeout_hours is not None:
+        args.append(resolution_timeout_hours)
+    return direct_deploy("contracts/sla_claim_judge.py", args=args)
 
 
 def test_submit_claim_freezes_criteria(direct_vm, direct_deploy, direct_alice):
@@ -258,3 +259,51 @@ def test_resolve_claim_unknown_request_fails(direct_vm, direct_deploy, direct_al
 
     with direct_vm.expect_revert("Unknown claim"):
         contract.resolve_claim("does-not-exist", CLAUSE_ID)
+
+
+def test_cancel_claim_before_timeout_fails(direct_vm, direct_deploy, direct_alice):
+    # Default 48h timeout, called immediately after submit -- must not cancel.
+    contract = _deploy(direct_deploy)
+    direct_vm.sender = direct_alice
+    _mock_sla(direct_vm)
+    contract.submit_claim("req-1", SLUG, CLAUSE_ID)
+
+    with direct_vm.expect_revert("Resolution timeout has not elapsed yet"):
+        contract.cancel_claim("req-1", CLAUSE_ID)
+
+
+def test_cancel_claim_after_timeout_returns_bond_path(direct_vm, direct_deploy, direct_alice):
+    # Zero-hour timeout makes the deadline deterministic without mocking
+    # datetime.now() across the SDK's execution boundary.
+    contract = _deploy(direct_deploy, resolution_timeout_hours=0)
+    direct_vm.sender = direct_alice
+    _mock_sla(direct_vm)
+    contract.submit_claim("req-1", SLUG, CLAUSE_ID)
+
+    contract.cancel_claim("req-1", CLAUSE_ID)
+
+    claim = contract.get_claim("req-1", CLAUSE_ID)
+    assert claim["resolved"] is True
+    assert claim["outcome"] == "CANCELLED"
+    assert "infrastructure failure" in claim["reasoning"]
+
+
+def test_cancel_claim_already_resolved_fails(direct_vm, direct_deploy, direct_alice):
+    contract = _deploy(direct_deploy, resolution_timeout_hours=0)
+    direct_vm.sender = direct_alice
+    _mock_sla(direct_vm)
+    contract.submit_claim("req-1", SLUG, CLAUSE_ID)
+    _mock_evidence(direct_vm, _envelope())
+    _mock_verdict(direct_vm, "MET")
+    contract.resolve_claim("req-1", CLAUSE_ID)
+
+    with direct_vm.expect_revert("Claim already resolved"):
+        contract.cancel_claim("req-1", CLAUSE_ID)
+
+
+def test_cancel_claim_unknown_request_fails(direct_vm, direct_deploy, direct_alice):
+    contract = _deploy(direct_deploy)
+    direct_vm.sender = direct_alice
+
+    with direct_vm.expect_revert("Unknown claim"):
+        contract.cancel_claim("does-not-exist", CLAUSE_ID)

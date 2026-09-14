@@ -503,20 +503,70 @@ settlement — not a flaw specific to this design's other pieces.
   regardless of whether funds were available to back it. Same separation
   CRE already has between "the verdict" and "the payout."
 
-### Economics: symmetric bonded deposits
+### Economics: two separate accounting lines, not one "refund + cost" blob
 
-Verdict isn't known before GenLayer executes, so cost has to be bonded
-upfront by whoever might owe it:
+"Refund plus GenLayer execution cost," used loosely up to this point, was
+never actually specified — who fronts execution costs, who gets reimbursed,
+how a GEN-denominated cost is priced in USDC, what caps apply, and what
+happens to a claimant's own bond were all left open. Left underspecified,
+the execution-cost side in particular is a real drain vector: an unbounded
+or self-reported cost claim against a provider's deposit is the same shape
+of attack the refund cap already exists to prevent.
 
-- **Provider** already has a bonded deposit on Arc. If GenLayer's semantic
-  verdict is `BREACH`, that deposit covers the x402 refund (capped as above,
-  accounting for what CRE already credited) plus the GenLayer execution
-  cost.
-- **Consumer** posts a new bond at `submit_claim` time, symmetric with the
-  provider's existing pattern. If GenLayer's semantic verdict is `MET`
-  (claim rejected — not "CRE upheld"), the consumer's bond covers the
-  GenLayer execution cost instead, deterring frivolous claims. If
-  `UNDETERMINED`, neither bond is charged (evidence-envelope section above).
+**Two lines, two independent caps, never merged:**
+
+- **Refund** — the existing shape, extended: `min(FIXED_REFUND, paidAmount,
+  remaining deposit)`, minus what CRE already credited (above). Tied to the
+  size of the original x402 payment, exactly like today.
+- **GenLayer execution-cost reimbursement** — a **fixed USDC bounty**
+  (e.g. `GENLAYER_COST_BOUNTY`, a protocol constant), *not* metered against
+  actual GEN gas spent. Metering would need a GEN/USDC price oracle and would
+  let whoever reports the cost claim an arbitrary amount — a fixed bounty
+  sidesteps both. Same cap regardless of whether the claim escalated to
+  GenLayer's own internal appeal jury (a bigger, more expensive round) — the
+  bounty does not grow with actual cost, it simply covers less of it.
+
+**Who fronts vs. who's reimbursed.** Someone needs GEN in a GenLayer wallet
+*before* any Arc-side settlement can happen — the two chains settle on
+different timelines, and Arc reimbursement is necessarily after the fact.
+Realistically the relay (#84) fronts this, not the consumer directly
+(requiring end users to hold GEN defeats the point of a USDC-native
+marketplace). The relay is reimbursed the fixed bounty from whichever side's
+funds are liable once Arc-side settlement completes.
+
+**Bond disposition, fully specified:**
+
+- **Consumer wins (`BREACH`):** consumer's bond returned in full, untouched
+  — they were right. Provider's deposit pays the refund plus the fixed
+  bounty (reimbursing the relay).
+- **Consumer loses (`MET`):** consumer's bond pays the fixed bounty
+  (reimbursing the relay); any **surplus** above that fixed amount is
+  returned to the consumer, never kept as a default. Deters frivolous claims
+  without turning a lost claim into an uncapped penalty.
+- **`UNDETERMINED`:** neither party's bond is charged — an evidence-envelope
+  failure is upstream of both parties. The relay still fronted real gas for
+  the attempt; for now that's an absorbed operating cost, not passed to
+  either party. Flagging as a business-model decision to revisit, not
+  settling it unilaterally here.
+- **`CANCELLED`** (new — see below): consumer's bond returned in full. A
+  resolution that never happens is an infrastructure failure, not a
+  judgment against the consumer.
+
+**Timeout / cancellation path for infrastructure failure.** Nothing
+previously defined what happens if `resolve_claim` simply never succeeds —
+relay down, evidence expired before adjudication finished, ENS unreachable,
+GenLayer consensus itself failing to reach agreement. Without an explicit
+path, the consumer's bond would sit locked indefinitely with no judgment and
+no return — not forfeited, but not returned either, worse than either
+resolution. Fixed with a fourth outcome, `CANCELLED`, and a permissionless
+`cancel_claim(request_id, clause_id)`: anyone may call it once a resolution
+timeout has elapsed since `submit_claim` (sized past the filing +
+adjudication window with margin, mirroring the deregistration cooldown
+above), marking the claim `CANCELLED` and returning the consumer's bond in
+full. Mirrors GenLayer's own permissionless idleness-call pattern for
+stalled validator rounds, rather than inventing a new access-control shape.
+Implemented and reasoned through the same way as the rest of this contract
+(no PyPI/GitHub access in this sandbox to execute it) — `genlayer/contracts/sla_claim_judge.py`.
 
 Settlement itself is applied back to Arc by the relay, reading the GenLayer
 verdict and calling the new `SemanticSettlementWritten` path (not
@@ -535,6 +585,9 @@ than reopening the refund-cap invariant by accident.
       test-executed (no PyPI/GitHub access in this sandbox)
 - [x] Composite `(request_id, clause_id)` claim key — a verdict can carry
       several disputable semantic clauses
+- [x] `CANCELLED` outcome + permissionless `cancel_claim` timeout path —
+      configurable `resolution_timeout_hours`, so an unresolved claim
+      doesn't lock the claimant's bond forever
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
       `genlayer-studio-bridge-boilerplate`

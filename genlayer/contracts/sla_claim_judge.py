@@ -32,6 +32,13 @@ keying on `request_id` alone would silently allow only one semantic claim
 per call ever. Evidence stays keyed by `request_id` alone (one envelope per
 call, shared across however many of its clauses get disputed).
 
+A fourth outcome, `CANCELLED`, exists alongside `MET`/`BREACH`/
+`UNDETERMINED`: if `resolve_claim` never succeeds (relay down, evidence
+expired, ENS unreachable, GenLayer consensus never completing),
+`cancel_claim` lets anyone close the claim permissionlessly once
+`RESOLUTION_TIMEOUT_HOURS` has elapsed since `submit_claim` — an unresolved
+claim must not lock the claimant's bond forever with no path back.
+
 **Not yet in this contract, tracked separately (docs/roadmap/genlayer.md,
 "Claim eligibility gate"):** nothing here verifies the caller is actually
 the payer of the underlying Arc verdict, that a real verdict was even
@@ -43,12 +50,20 @@ id), that a bond was posted, or that the filing deadline hasn't passed.
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from genlayer import *
 import genlayer.gl.vm as glvm
 
 OUTCOME_MET = "MET"
 OUTCOME_BREACH = "BREACH"
 OUTCOME_UNDETERMINED = "UNDETERMINED"
+OUTCOME_CANCELLED = "CANCELLED"
+
+# Generous margin past the filing + adjudication window described in
+# docs/roadmap/genlayer.md, so a slow-but-working resolution never races a
+# premature cancellation. datetime.now() inside a contract follows the same
+# precedent as genlayer-studio-bridge-boilerplate's BridgeSender.py.
+RESOLUTION_TIMEOUT_HOURS = 48
 
 # Content types this contract knows how to hand to an LLM. Anything else in
 # an evidence envelope makes that envelope unsupported, not silently coerced.
@@ -64,6 +79,7 @@ class Claim:
     clause_id: str
     claimant: str
     criteria: str
+    submitted_at: str
     resolved: bool
     outcome: str
     reasoning: str
@@ -73,11 +89,18 @@ class SlaClaimJudge(gl.Contract):
     claims: TreeMap[str, Claim]
     sla_api_base: str
     evidence_api_base: str
+    resolution_timeout_hours: u256
 
-    def __init__(self, sla_api_base: str, evidence_api_base: str):
+    def __init__(
+        self,
+        sla_api_base: str,
+        evidence_api_base: str,
+        resolution_timeout_hours: u256 = u256(RESOLUTION_TIMEOUT_HOURS),
+    ):
         self.claims = TreeMap()
         self.sla_api_base = sla_api_base
         self.evidence_api_base = evidence_api_base
+        self.resolution_timeout_hours = resolution_timeout_hours
 
     @gl.public.write
     def submit_claim(self, request_id: str, slug: str, clause_id: str) -> None:
@@ -124,6 +147,7 @@ class SlaClaimJudge(gl.Contract):
             clause_id=clause_id,
             claimant=gl.message.sender_address.as_hex,
             criteria=criteria,
+            submitted_at=datetime.now().isoformat(),
             resolved=False,
             outcome="",
             reasoning="",
@@ -218,6 +242,32 @@ JSON without any formatting prefix or suffix.
         claim.reasoning = result["reasoning"]
         self.claims[key] = claim
 
+    @gl.public.write
+    def cancel_claim(self, request_id: str, clause_id: str) -> None:
+        """Permissionless cancellation once the resolution timeout has
+        elapsed — for infrastructure failure (relay down, evidence expired,
+        ENS unreachable, GenLayer consensus never completing), not a
+        judgment. Without this, an unresolved claim would lock the
+        claimant's bond indefinitely with no return path. Anyone may call
+        this, mirroring GenLayer's own permissionless idleness-call pattern
+        for stalled validator rounds — not a new access-control shape.
+        """
+        key = _claim_key(request_id, clause_id)
+        if key not in self.claims:
+            raise Exception("Unknown claim")
+        claim = self.claims[key]
+        if claim.resolved:
+            raise Exception("Claim already resolved")
+
+        deadline = datetime.fromisoformat(claim.submitted_at) + timedelta(hours=int(self.resolution_timeout_hours))
+        if datetime.now() < deadline:
+            raise Exception(f"Resolution timeout has not elapsed yet (deadline {deadline.isoformat()})")
+
+        claim.resolved = True
+        claim.outcome = OUTCOME_CANCELLED
+        claim.reasoning = "resolution timeout elapsed — infrastructure failure, not a judgment"
+        self.claims[key] = claim
+
     @gl.public.view
     def get_claim(self, request_id: str, clause_id: str) -> dict:
         key = _claim_key(request_id, clause_id)
@@ -230,6 +280,7 @@ JSON without any formatting prefix or suffix.
             "clause_id": c.clause_id,
             "claimant": c.claimant,
             "criteria": c.criteria,
+            "submitted_at": c.submitted_at,
             "resolved": c.resolved,
             "outcome": c.outcome,
             "reasoning": c.reasoning,
