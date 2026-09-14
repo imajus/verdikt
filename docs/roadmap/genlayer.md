@@ -601,6 +601,63 @@ settlement — not a flaw specific to this design's other pieces.
   regardless of whether funds were available to back it. Same separation
   CRE already has between "the verdict" and "the payout."
 
+### Deployment: a companion contract, not an extension of the live registry
+
+Every prior section said "extend the Arc registry" as if it were a source
+edit. It isn't. `VerdiktRegistry` is already deployed and live on Arc
+Testnet (`0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`, per `CLAUDE.md`) with
+real state: registered services, bonded deposits, owed refunds, configured
+consumers. Solidity contracts are immutable — there is no "add a function to
+the live one." The real choices are redeploy-and-migrate, or don't touch it
+at all. Neither the eligibility gate, the withdrawal cooldown, nor the
+settlement issues specified what happens to existing bonds, owed refunds, or
+registrations under either path, which they need to before any of this is
+buildable.
+
+**Worse, a shared bond breaks the stated goal on its own.** The design so
+far has semantic settlement drawing from the *same* `service.deposit` CRE's
+own refund already draws from. Checked `_recordVerdict` directly: `if
+(service.deposit == 0 && service.status == Status.ACTIVE) { ... suspend
+... }` — draining the deposit to zero auto-suspends the service, blocking
+*every* future paid call, CRE-judged ones included. A semantic `BREACH`
+large enough to zero the shared deposit would suspend a service over a
+dimension CRE never touched, directly contradicting "CRE stays untouched" —
+true of the code path, false of the operational consequence.
+
+**Fix: a separate companion contract, not a modification.** A new
+`SemanticEscrow` (name TBD) contract, freshly deployed, holding its *own*
+provider deposits — opt-in, and now a real bond a provider posts *into this
+contract specifically*, not a flag. It reads `VerdiktRegistry.getVerdict()`
+(already a public view function, no changes needed to the live registry) for
+eligibility (#90) and writes its own `SemanticSettlementWritten` event and
+its own `_semanticSettlements` mapping, entirely independent of `_verdicts`
+and `service.deposit`. This resolves both problems in one move: the live
+registry is never touched, so there is no migration question for existing
+bonds/refunds/registrations at all; and semantic settlement can never
+suspend a service over CRE's own deposit, because it never shares the pool.
+The tradeoff, stated plainly: a provider now posts two separate deposits if
+they want both deterministic and semantic coverage, not one — a real
+UX/capital cost, not free.
+
+### Claimant interface: not yet owned by any issue
+
+#85 correctly treats a live settlement as optional for a first smoke test.
+But #86 (submission assets) only asked for a deployed judge — a hackathon
+reviewer needs to actually *use* the claim flow, not take deployment on
+faith. Nothing currently owns: a claimant-facing CLI (mirroring
+`scripts/pay-x402.mjs`'s existing pattern — a real interactive script, not a
+UI, given the time remaining) for opening a claim, posting a bond, checking
+status, and withdrawing a refund once settled. Tracked as its own issue.
+
+**Acceptance criteria for the demo, explicit:**
+- A claim that resolves `BREACH` (successful claimant) *and* one that
+  resolves `MET` (rejected claimant) — not just one happy path.
+- Actual Arc balance read-back before and after settlement, not "the
+  transaction didn't revert" — the same lesson already learned once in this
+  codebase about the KeystoneForwarder swallowing failures silently.
+- A demonstrated `CANCELLED` / infrastructure-failure recovery — the timeout
+  path actually exercised, not just present in the contract.
+
 ### Economics: two separate accounting lines, not one "refund + cost" blob
 
 "Refund plus GenLayer execution cost," used loosely up to this point, was
