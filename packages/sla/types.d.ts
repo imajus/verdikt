@@ -86,7 +86,7 @@ interface SlaStatusOnlyEvaluation {
   clauses: [];
 }
 
-type SlaClauseType = 'schema' | 'latency' | 'priceRange';
+type SlaClauseType = 'schema' | 'latency' | 'priceRange' | 'semantic';
 
 /**
  * The provider-authored SLA, read verbatim from the `sla` ENS text record.
@@ -101,7 +101,7 @@ interface SlaDocument {
   clauses: SlaClause[];
 }
 
-type SlaClause = SlaSchemaClause | SlaLatencyClause | SlaPriceRangeClause;
+type SlaClause = SlaSchemaClause | SlaLatencyClause | SlaPriceRangeClause | SlaSemanticClause;
 
 interface SlaClauseBase {
   id: string;
@@ -125,6 +125,17 @@ interface SlaPriceRangeClause extends SlaClauseBase {
   minMinorUnits: string;
   maxMinorUnits: string;
   asset: string;
+}
+
+/**
+ * Judged by a GenLayer Intelligent Contract on dispute, never by this engine
+ * (docs/roadmap/genlayer.md) — `evaluateClause` always passes it. `criteria`
+ * is the binding judgment text; unlike every other clause type, `description`
+ * here stays decorative and is never what GenLayer judges against.
+ */
+interface SlaSemanticClause extends SlaClauseBase {
+  type: 'semantic';
+  criteria: string;
 }
 
 /** The two marketplace ratios plus the tallies they came from (Specification.md §1). */

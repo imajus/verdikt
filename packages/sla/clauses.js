@@ -83,6 +83,19 @@ export function evaluateClause(clause, observation) {
         actual: `${observation.paidAmount} ${clause.asset} minor units`
       };
     }
+    case 'semantic':
+      // CRE cannot judge this — it is schema-valid but deliberately never
+      // evaluated here (docs/roadmap/genlayer.md). Always passes so a mixed
+      // SLA's other clauses still get a real deterministic verdict; a
+      // semantic clause is judged separately by GenLayer, on dispute, never
+      // by this per-call PASS/FAIL.
+      return {
+        id: clause.id,
+        type: 'semantic',
+        pass: true,
+        expected: 'judged by GenLayer on dispute, not by this per-call check',
+        actual: 'not evaluated by CRE'
+      };
     default:
       // Unreachable: the SLA is validated against schema.json first. Kept so a
       // new clause type cannot be added without failing loudly here.

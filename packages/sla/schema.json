@@ -57,6 +57,24 @@
               "maxMinorUnits": { "type": "string", "minLength": 1, "maxLength": 78 },
               "asset": { "type": "string", "minLength": 1, "maxLength": 16 }
             }
+          },
+          {
+            "title": "semantic clause",
+            "description": "Judged by GenLayer on dispute (docs/roadmap/genlayer.md), never by this engine — evaluateClause always passes it so a provider's other clauses keep evaluating deterministically. `criteria` is the binding text a claim is judged against; `description` here stays decorative like every other clause type, never binding.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "criteria"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "description": { "type": "string", "maxLength": 256 },
+              "type": { "const": "semantic" },
+              "criteria": {
+                "description": "The binding judgment text. Not `description` — that field is decorative on every clause type and must not silently become enforceable here.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2000
+              }
+            }
           }
         ]
       }

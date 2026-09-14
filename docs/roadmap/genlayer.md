@@ -90,6 +90,47 @@ actual gap CRE cannot cover.
 
 ## Architecture
 
+### SLA schema compatibility: a new clause type, not a new document
+
+"CRE stays untouched" needed a defined compatibility strategy before any of
+this could be built — it wasn't automatic. `packages/sla/schema.json` uses
+`oneOf` across exactly three known clause types (`schema`, `latency`,
+`priceRange`), each `additionalProperties: false`. A clause with an unknown
+`type` matches none of the three branches, so the whole SLA document fails
+validation, and `evaluate()`'s own doc comment is explicit about the
+consequence: "Throws on a malformed SLA... so the caller falls back to
+`evaluateStatusOnly`" — losing every deterministic clause, not just failing
+to add the new one. Adding a semantic clause naively would have broken every
+provider's existing enforcement the moment they added one.
+
+**Fix, implemented and tested on `feat/genlayer`:** a fourth `oneOf` branch,
+`"type": "semantic"`, with its own dedicated field, `criteria` (string, the
+binding judgment text) — not the existing `description` field, which stays
+decorative on every clause type including this one; reusing it would have
+made the same field name mean "decoration" on three clause types and
+"binding promise" on the fourth. `clauses.js`'s `evaluateClause` gained a
+`case 'semantic'` that always returns `pass: true` — CRE recognizes the
+clause as schema-valid and includes it in the per-call clause-result list,
+but never enforces it, so a mixed SLA's deterministic clauses still get a
+real PASS/FAIL/DOWN verdict unaffected by whether the semantic clause would
+actually hold. GenLayer's `resolve_claim` (below) filters `sla.clauses` for
+`type === 'semantic'` and judges each one's `criteria` on dispute — the two
+engines partition the same document by clause type, neither touches the
+other's clauses. Verified: `packages/sla`'s 88-test suite (20 vectors,
+including a new mixed-SLA case) passes unchanged plus the new case, and the
+package's own self-check (`assertSchema(META_SCHEMA)` at module load) accepts
+the new branch without touching the supported-keyword subset.
+
+**Provider opt-in stays a separate concern from schema validity.** A provider
+can publish a syntactically valid `semantic` clause without ever setting the
+evidence-caching opt-in flag (below) — schema/parse validation must stay pure
+and dependency-free (`packages/sla` bundles into the CRE workflow, no I/O),
+so it cannot check an ENS flag to decide whether a clause is *allowed*, only
+whether it is *well-formed*. A semantic clause published without the opt-in
+flag is well-formed but unenforceable — no evidence will ever be cached to
+adjudicate a dispute against it. That is a dashboard/SLA-editor warning to
+surface at authoring time, not a schema-level constraint.
+
 ### Claim contract (`genlayer/contracts/sla_claim_judge.py`)
 
 A GenLayer Intelligent Contract, `SlaClaimJudge`, scaffolded on `feat/genlayer`
@@ -217,6 +258,9 @@ yet built — Day 2/3 scope, tracked in the GitHub issue).
 
 ## What's built vs. not (as of Sep 14, 2026)
 
+- [x] `semantic` clause type added to `packages/sla` (schema, evaluator,
+      types, test vector) — mixed SLAs parse and CRE's deterministic verdict
+      is unaffected; 88 tests pass
 - [x] Contract scaffold, generic claim-type engine (`genlayer/contracts/sla_claim_judge.py`)
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
