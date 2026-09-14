@@ -686,6 +686,15 @@ than reopening the refund-cap invariant by accident.
 - [x] `CANCELLED` outcome + permissionless `cancel_claim` timeout path —
       configurable `resolution_timeout_hours`, so an unresolved claim
       doesn't lock the claimant's bond forever
+- [x] Judge acceptance criteria made explicit: bounded structured outcome
+      (already had), independent validation (already had), prompt-injection
+      delimiting + disclosure (new — untrusted content fenced, not a full
+      solve), explicit `INCONCLUSIVE` path distinct from envelope-support
+      failures (new)
+- [x] `feat/genlayer` actually pushed to `origin` — was 10 commits local-only
+      until reconciled with the real remote branch (which already existed,
+      independently created); local checkout was also ~2.5 days stale
+      against `origin/main`, corrected where it mattered (#82)
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
       `genlayer-studio-bridge-boilerplate`

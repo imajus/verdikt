@@ -240,6 +240,25 @@ def test_resolve_claim_transport_failure_is_undetermined(direct_vm, direct_deplo
     assert "DOWN" in claim["reasoning"] or "transport" in claim["reasoning"]
 
 
+def test_resolve_claim_model_inconclusive_is_undetermined(direct_vm, direct_deploy, direct_alice):
+    # The model's own honest "I can't tell" — distinct cause from an
+    # unsupported/missing envelope, same UNDETERMINED outcome.
+    contract = _deploy(direct_deploy)
+    direct_vm.sender = direct_alice
+    _mock_sla(direct_vm)
+    contract.submit_claim("req-1", SLUG, CLAUSE_ID)
+
+    _mock_evidence(direct_vm, _envelope())
+    _mock_verdict(direct_vm, "INCONCLUSIVE", "the response is ambiguous about whether a reference was issued")
+
+    contract.resolve_claim("req-1", CLAUSE_ID)
+
+    claim = contract.get_claim("req-1", CLAUSE_ID)
+    assert claim["resolved"] is True
+    assert claim["outcome"] == "UNDETERMINED"
+    assert "ambiguous" in claim["reasoning"]
+
+
 def test_resolve_claim_already_resolved_fails(direct_vm, direct_deploy, direct_alice):
     contract = _deploy(direct_deploy)
     direct_vm.sender = direct_alice
