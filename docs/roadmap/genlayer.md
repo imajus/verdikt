@@ -456,6 +456,53 @@ third score, e.g. `semanticConformance`, written by its own signer
 failures never affect a provider's advertised standing at all — defeating
 the point of judging them.
 
+### Withdrawal cooldown: the pre-filing escape route
+
+Every mechanism above assumes the provider's deposit is still there when a
+semantic settlement needs it. Nothing currently guarantees that. Checked
+`VerdiktRegistry.sol`'s `deregister()` directly: while `ACTIVE`, a provider
+can deregister and receive their **entire remaining deposit, immediately,
+unconditionally** — `returned = service.deposit; service.deposit = 0; ...
+_send(msg.sender, returned)`, no cooldown, no pending-claim check.
+
+CRE's own refund never had this problem because it's synchronous — the
+verdict is written, and any refund credited, inside the same call that
+evaluates the response, with no window for the provider to react in between.
+Semantic claims are the opposite by design: up to a 24-hour filing window
+plus adjudication time. A provider who suspects a semantic dispute is coming
+(or simply exits routinely) can deregister and withdraw before a consumer
+ever files — the claim can still resolve `BREACH`, but there is nothing left
+to draw a refund or the GenLayer-cost reimbursement from. This is a
+consequence of adding *any* delayed dispute mechanism on top of a
+deposit-return path that was built assuming only instant, synchronous
+settlement — not a flaw specific to this design's other pieces.
+
+**Fix, specified, not yet implemented:**
+
+- **Deregistration cooldown.** `deregister()` should stop returning funds
+  immediately. Move the service to a new `DEREGISTERING` status and start a
+  timer; the deposit becomes withdrawable only after a cooldown that safely
+  exceeds the filing window plus adjudication time (e.g. 72h, well past the
+  24h + ~3h GenLayer appeal figures already in play elsewhere in this doc —
+  pick with margin, not exactly at the boundary). A pending semantic claim
+  can still settle against the locked-but-not-yet-withdrawn deposit during
+  that window.
+- **Concurrent liabilities, re-checked at settlement, not just at
+  claim-open.** The refund-cap fix above (read `refundCredited`, cap the
+  additional semantic credit) is necessary but not sufficient on its own —
+  the deposit can shrink further between claim-submission and actual
+  settlement if other verdicts or other semantic settlements draw on the
+  same pool concurrently. Settlement must re-clamp against the *current*
+  `service.deposit` at the moment funds are actually credited, the same way
+  `_recordVerdict` already does for CRE (`credited = min(FIXED_REFUND,
+  paidNative, service.deposit)`) — not trust a balance checked earlier.
+- **Insufficient-funds behavior mirrors the existing pattern, not a new
+  failure mode.** If the deposit is fully drawn down by settlement time, the
+  semantic credit clamps to whatever remains (possibly zero) — it does not
+  revert, and the judgment (`MET`/`BREACH`/`UNDETERMINED`) is still recorded
+  regardless of whether funds were available to back it. Same separation
+  CRE already has between "the verdict" and "the payout."
+
 ### Economics: symmetric bonded deposits
 
 Verdict isn't known before GenLayer executes, so cost has to be bonded
