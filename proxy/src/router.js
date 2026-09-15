@@ -119,18 +119,27 @@ const json = (body, status = 200, headers = {}) =>
  */
 export function routeOf(request, config) {
   const url = new URL(request.url);
-  const host = url.hostname.toLowerCase();
-  const suffix = `.${config.publicHost.toLowerCase()}`;
-
-  if (host.endsWith(suffix)) {
-    const slug = host.slice(0, -suffix.length);
-    if (!SLUG.test(slug)) return null;
-    return { slug, rest: url.pathname.replace(/^\/+/, '') };
-  }
+  const fromHost = hostSlug(url, config);
+  if (fromHost) return { slug: fromHost, rest: url.pathname.replace(/^\/+/, '') };
 
   const [, slug, ...rest] = url.pathname.split('/');
   if (!slug || !SLUG.test(slug)) return null;
   return { slug, rest: rest.join('/') };
+}
+
+/**
+ * The slug when the request arrived on `<slug>.verdikt.bond`, else null.
+ *
+ * @param {URL} url
+ * @param {ProxyConfig} config
+ * @returns {string | null}
+ */
+function hostSlug(url, config) {
+  const host = url.hostname.toLowerCase();
+  const suffix = `.${config.publicHost.toLowerCase()}`;
+  if (!host.endsWith(suffix)) return null;
+  const slug = host.slice(0, -suffix.length);
+  return SLUG.test(slug) ? slug : null;
 }
 
 /**
@@ -153,54 +162,14 @@ export async function handleRequest(request, deps = {}) {
 
   const url = new URL(request.url);
 
-  if (request.method === 'GET' && url.pathname === '/healthz') {
-    return json({ ok: true });
-  }
-
-  // The machine-facing marketplace (Specification.md §5, stretch 2). Exact
-  // routes, so they are matched ahead of the service catch-all below.
-  if (request.method === 'GET' && url.pathname === '/services') {
-    if (!marketplace) {
-      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
-    }
-    try {
-      const { services } = await marketplace();
-      return json(discover(services, Object.fromEntries(url.searchParams), config.publicHost));
-    } catch (error) {
-      return json({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message }, 503);
-    }
-  }
-
-  const servicesSlug = request.method === 'GET' ? url.pathname.match(/^\/services\/([^/]+)$/) : null;
-  if (servicesSlug) {
-    const slug = servicesSlug[1];
-    if (!marketplace) {
-      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
-    }
-    const { services } = await marketplace();
-    const found = services.find((listing) => listing.slug === slug);
-    if (!found) return json({ error: 'unknown_service', slug }, 404);
-    return json(toListing(found, config.publicHost));
-  }
-
-  // Where the enclave pushes a finished verification (docs/spikes/cre.md,
-  // CRE-9). An exact route, so it is matched ahead of the service catch-all
-  // and can never be mistaken for a slug.
-  if (request.method === 'POST' && url.pathname === '/internal/verification-callback') {
-    return handleCallback(request, { config, workflow });
-  }
-
-  const slaSlug = request.method === 'GET' ? url.pathname.match(/^\/internal\/sla\/([^/]+)$/) : null;
-  if (slaSlug) {
-    return handleSlaRead(slaSlug[1], { config, resolve });
-  }
-
-  // `/internal/` is reserved as a whole, not route by route. In the path form
-  // the catch-all below would otherwise read `internal` as a slug and relay to
-  // whatever service happened to be registered under that name — so a POST to
-  // a GET-only internal route, or a typo in one, became a proxied call.
-  if (url.pathname === '/internal' || url.pathname.startsWith('/internal/')) {
-    return json({ error: 'unknown_internal_route', detail: `${request.method} ${url.pathname}` }, 404);
+  // The proxy's own routes answer on the apex and in the path form only. On
+  // `<slug>.verdikt.bond` every path belongs to the service, so a path
+  // reserved here is a provider path made unreachable: an agent calling
+  // `weather.verdikt.bond/internal/status` would get a proxy 404 rather than
+  // the provider's answer. Only the path form has a slug to disambiguate.
+  if (!hostSlug(url, config)) {
+    const own = await proxyRoute(request, url, { config, marketplace, workflow, resolve });
+    if (own) return own;
   }
 
   const route = routeOf(request, config);
@@ -290,6 +259,73 @@ export async function handleRequest(request, deps = {}) {
   }
 
   return passthrough({ request, upstream, body, doFetch, config });
+}
+
+/**
+ * Verdikt's own surface: health, the machine-facing marketplace
+ * (Specification.md §5, stretch 2), and the `/internal/` namespace. Returns
+ * null when the path is none of them, which is the signal to relay it.
+ *
+ * Reached only off a service host, so a slug can never be shadowed by one of
+ * these, and — in the path form — `internal` can never be read as a slug.
+ *
+ * @param {Request} request
+ * @param {URL} url
+ * @param {{
+ *   config: ProxyConfig,
+ *   marketplace: (() => Promise<Marketplace>)|null,
+ *   workflow: WorkflowClient|null,
+ *   resolve: typeof resolveServiceRecord
+ * }} deps
+ * @returns {Promise<Response|null>}
+ */
+async function proxyRoute(request, url, { config, marketplace, workflow, resolve }) {
+  if (request.method === 'GET' && url.pathname === '/healthz') {
+    return json({ ok: true });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/services') {
+    if (!marketplace) {
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
+    }
+    try {
+      const { services } = await marketplace();
+      return json(discover(services, Object.fromEntries(url.searchParams), config.publicHost));
+    } catch (error) {
+      return json({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+    }
+  }
+
+  const servicesSlug = request.method === 'GET' ? url.pathname.match(/^\/services\/([^/]+)$/) : null;
+  if (servicesSlug) {
+    const slug = servicesSlug[1];
+    if (!marketplace) {
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
+    }
+    const { services } = await marketplace();
+    const found = services.find((listing) => listing.slug === slug);
+    if (!found) return json({ error: 'unknown_service', slug }, 404);
+    return json(toListing(found, config.publicHost));
+  }
+
+  if (url.pathname !== '/internal' && !url.pathname.startsWith('/internal/')) return null;
+
+  // Where the enclave pushes a finished verification (docs/spikes/cre.md,
+  // CRE-9).
+  if (request.method === 'POST' && url.pathname === '/internal/verification-callback') {
+    return handleCallback(request, { config, workflow });
+  }
+
+  const slaSlug = request.method === 'GET' ? url.pathname.match(/^\/internal\/sla\/([^/]+)$/) : null;
+  if (slaSlug) {
+    return handleSlaRead(slaSlug[1], { config, resolve });
+  }
+
+  // `/internal/` is reserved as a whole, not route by route: without it the
+  // path form's catch-all reads `internal` as a slug and relays to whatever
+  // service is registered under that name — so a POST to a GET-only internal
+  // route, or a typo in one, became a proxied call.
+  return json({ error: 'unknown_internal_route', detail: `${request.method} ${url.pathname}` }, 404);
 }
 
 /**

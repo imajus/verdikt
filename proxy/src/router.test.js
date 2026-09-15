@@ -298,4 +298,24 @@ describe('the internal namespace', () => {
     expect(response.json().error).toBe('unknown_internal_route');
     expect(upstreamFetch).not.toHaveBeenCalled();
   });
+
+  // Only the path form has a slug to disambiguate. On a service host every
+  // path is the provider's, so reserving one here would make an upstream path
+  // unreachable behind a proxy 404 the agent cannot tell from the provider's.
+  it('relays `/internal/...` on a service host instead of reserving it', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await call(deps, {
+      method: 'GET',
+      url: '/internal/status',
+      headers: { host: 'weather.verdikt.bond' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/internal/status');
+  });
+
+  it('relays the proxy’s own paths on a service host too', async () => {
+    const { deps, upstreamFetch } = harness();
+    await call(deps, { method: 'GET', url: '/healthz', headers: { host: 'weather.verdikt.bond' } });
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/healthz');
+  });
 });
