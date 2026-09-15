@@ -60,7 +60,7 @@
           },
           {
             "title": "semantic clause",
-            "description": "Judged by GenLayer on dispute (docs/roadmap/genlayer.md), never by this engine — evaluateClause always passes it so a provider's other clauses keep evaluating deterministically. `criteria` is the binding text a claim is judged against; `description` here stays decorative like every other clause type, never binding.",
+            "description": "A promise about what the response *says*, judged on dispute by a GenLayer Intelligent Contract rather than per call by CRE (docs/roadmap/genlayer.md). `evaluate` recognises it and always passes it: the deterministic engine is pure by invariant and cannot judge meaning, and refusing to parse the document would be worse — it would fall back to status-only and lose every deterministic clause the provider declared alongside it.",
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "type", "criteria"],
@@ -69,10 +69,10 @@
               "description": { "type": "string", "maxLength": 256 },
               "type": { "const": "semantic" },
               "criteria": {
-                "description": "The binding judgment text. Not `description` — that field is decorative on every clause type and must not silently become enforceable here.",
+                "description": "The binding judgment text, in plain language. Its own field rather than a reuse of `description`, which stays decorative on every clause type including this one: a reader has to be able to tell what the provider promised from what it merely explained. Frozen into the claim at filing time, so editing the SLA mid-dispute cannot change what is being judged.",
                 "type": "string",
                 "minLength": 1,
-                "maxLength": 2000
+                "maxLength": 2048
               }
             }
           }

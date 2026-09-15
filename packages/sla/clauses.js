@@ -7,6 +7,18 @@ import { validate } from './jsonschema.js';
 /** Result-only clause id, always first. Providers may not declare it. */
 export const DELIVERY_CLAUSE_ID = 'delivery';
 
+// A semantic clause's `criteria` can run up to 2048 characters, and several
+// can appear on one SLA — enough, with the relayed response body, to push the
+// per-call CRE result past the workflow's 100kb `ExecutionResponseLimit`
+// (cre/workflows/limits.json). The full text is already readable on the SLA
+// itself (the ENS `sla` record); the result only needs enough of it to show a
+// reader what was promised, so it is truncated here rather than carried whole.
+const MAX_CRITERIA_IN_RESULT = 200;
+
+/** @param {string} criteria */
+const truncateCriteria = (criteria) =>
+  criteria.length > MAX_CRITERIA_IN_RESULT ? `${criteria.slice(0, MAX_CRITERIA_IN_RESULT)}…` : criteria;
+
 /** @param {string} pointer */
 const display = (pointer) => (pointer === '' ? '(root)' : pointer);
 
@@ -84,17 +96,25 @@ export function evaluateClause(clause, observation) {
       };
     }
     case 'semantic':
-      // CRE cannot judge this — it is schema-valid but deliberately never
-      // evaluated here (docs/roadmap/genlayer.md). Always passes so a mixed
-      // SLA's other clauses still get a real deterministic verdict; a
-      // semantic clause is judged separately by GenLayer, on dispute, never
-      // by this per-call PASS/FAIL.
+      // Recognised, never enforced. `evaluate` is pure by invariant — no I/O,
+      // no clock, no network — so it cannot judge whether a response *meant*
+      // what was promised; that is what the GenLayer leg is for
+      // (docs/roadmap/genlayer.md).
+      //
+      // Passing is the only safe answer. Failing would let any provider who
+      // adds a semantic clause be refunded against on every call by a judge
+      // that never read the criteria, and throwing would drop the whole
+      // document to the status-only fallback, silently disabling every
+      // deterministic clause declared alongside it.
+      //
+      // It still appears in the result list, because a reader needs to see
+      // that the provider promised this and that CRE did not decide it.
       return {
         id: clause.id,
         type: 'semantic',
         pass: true,
-        expected: 'judged by GenLayer on dispute, not by this per-call check',
-        actual: 'not evaluated by CRE'
+        expected: truncateCriteria(clause.criteria),
+        actual: 'not judged here — semantic clauses are decided on dispute'
       };
     default:
       // Unreachable: the SLA is validated against schema.json first. Kept so a

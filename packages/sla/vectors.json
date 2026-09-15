@@ -1,9 +1,9 @@
 {
   "version": 1,
-  "note": "Language-neutral conformance vectors for the Verdikt SLA engine. Spike B (docs/spikes/cre.md) settled on the TypeScript CRE SDK, so @verdikt/sla is imported into the workflow rather than ported \u2014 these exist so that if a port is ever forced, it can be shown equivalent instead of taken on trust. paidAmountMinorUnits is a decimal string because JSON has no integer type wide enough to be safe.",
+  "note": "Language-neutral conformance vectors for the Verdikt SLA engine. Spike B (docs/spikes/cre.md) settled on the TypeScript CRE SDK, so @verdikt/sla is imported into the workflow rather than ported — these exist so that if a port is ever forced, it can be shown equivalent instead of taken on trust. paidAmountMinorUnits is a decimal string because JSON has no integer type wide enough to be safe.",
   "modes": {
     "evaluate": "evaluate(sla, observation)",
-    "statusOnly": "evaluateStatusOnly(observation) \u2014 the SLA could not be read"
+    "statusOnly": "evaluateStatusOnly(observation) — the SLA could not be read"
   },
   "cases": [
     {
@@ -15,60 +15,26 @@
           {
             "id": "shape",
             "type": "schema",
-            "schema": {
-              "type": "object",
-              "required": [
-                "temp"
-              ],
-              "properties": {
-                "temp": {
-                  "type": "number"
-                }
-              }
-            }
+            "schema": { "type": "object", "required": ["temp"], "properties": { "temp": { "type": "number" } } }
           },
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          },
-          {
-            "id": "price",
-            "type": "priceRange",
-            "minMinorUnits": "1000",
-            "maxMinorUnits": "5000",
-            "asset": "USDC"
-          }
+          { "id": "speed", "type": "latency", "maxMs": 2000 },
+          { "id": "price", "type": "priceRange", "minMinorUnits": "1000", "maxMinorUnits": "5000", "asset": "USDC" }
         ]
       },
       "observation": {
         "status": 200,
         "headers": {},
-        "body": {
-          "temp": 12.5
-        },
+        "body": { "temp": 12.5 },
         "latencyMs": 100,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "PASS",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "shape",
-            "pass": true
-          },
-          {
-            "id": "speed",
-            "pass": true
-          },
-          {
-            "id": "price",
-            "pass": true
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "shape", "pass": true },
+          { "id": "speed", "pass": true },
+          { "id": "price", "pass": true }
         ]
       }
     },
@@ -81,51 +47,24 @@
           {
             "id": "shape",
             "type": "schema",
-            "schema": {
-              "type": "object",
-              "required": [
-                "temp"
-              ],
-              "properties": {
-                "temp": {
-                  "type": "number"
-                }
-              }
-            }
+            "schema": { "type": "object", "required": ["temp"], "properties": { "temp": { "type": "number" } } }
           },
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
+          { "id": "speed", "type": "latency", "maxMs": 2000 }
         ]
       },
       "observation": {
         "status": 200,
         "headers": {},
-        "body": {
-          "temp": "warm"
-        },
+        "body": { "temp": "warm" },
         "latencyMs": 100,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "FAIL",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "shape",
-            "pass": false,
-            "expected": "/temp: number",
-            "actual": "/temp: string \"warm\""
-          },
-          {
-            "id": "speed",
-            "pass": true
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "shape", "pass": false, "expected": "/temp: number", "actual": "/temp: string \"warm\"" },
+          { "id": "speed", "pass": true }
         ]
       }
     },
@@ -141,16 +80,9 @@
             "schema": {
               "type": "object",
               "properties": {
-                "current": {
-                  "type": "object",
-                  "required": [
-                    "relative_humidity_2m"
-                  ]
-                }
+                "current": { "type": "object", "required": ["relative_humidity_2m"] }
               },
-              "required": [
-                "current"
-              ]
+              "required": ["current"]
             }
           }
         ]
@@ -158,21 +90,14 @@
       "observation": {
         "status": 200,
         "headers": {},
-        "body": {
-          "current": {
-            "temperature_2m": 12.5
-          }
-        },
+        "body": { "current": { "temperature_2m": 12.5 } },
         "latencyMs": 100,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "FAIL",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
+          { "id": "delivery", "pass": true },
           {
             "id": "shape",
             "pass": false,
@@ -185,16 +110,7 @@
     {
       "name": "latency exactly at the bound passes",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "speed", "type": "latency", "maxMs": 2000 }] },
       "observation": {
         "status": 200,
         "headers": {},
@@ -205,32 +121,15 @@
       "expect": {
         "outcome": "PASS",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "speed",
-            "pass": true,
-            "expected": "<= 2000ms",
-            "actual": "2000ms"
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "speed", "pass": true, "expected": "<= 2000ms", "actual": "2000ms" }
         ]
       }
     },
     {
       "name": "latency one millisecond past the bound fails",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "speed", "type": "latency", "maxMs": 2000 }] },
       "observation": {
         "status": 200,
         "headers": {},
@@ -241,16 +140,8 @@
       "expect": {
         "outcome": "FAIL",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "speed",
-            "pass": false,
-            "expected": "<= 2000ms",
-            "actual": "2001ms"
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "speed", "pass": false, "expected": "<= 2000ms", "actual": "2001ms" }
         ]
       }
     },
@@ -260,13 +151,7 @@
       "sla": {
         "version": 1,
         "clauses": [
-          {
-            "id": "price",
-            "type": "priceRange",
-            "minMinorUnits": "1000",
-            "maxMinorUnits": "5000",
-            "asset": "USDC"
-          }
+          { "id": "price", "type": "priceRange", "minMinorUnits": "1000", "maxMinorUnits": "5000", "asset": "USDC" }
         ]
       },
       "observation": {
@@ -279,16 +164,8 @@
       "expect": {
         "outcome": "PASS",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "price",
-            "pass": true,
-            "expected": "1000..5000 USDC minor units",
-            "actual": "5000 USDC minor units"
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "price", "pass": true, "expected": "1000..5000 USDC minor units", "actual": "5000 USDC minor units" }
         ]
       }
     },
@@ -317,106 +194,53 @@
       "expect": {
         "outcome": "FAIL",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "price",
-            "pass": false
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "price", "pass": false }
         ]
       }
     },
     {
       "name": "a 5xx fails delivery even when every declared clause holds",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "speed", "type": "latency", "maxMs": 2000 }] },
       "observation": {
         "status": 503,
         "headers": {},
-        "body": {
-          "error": "upstream unavailable"
-        },
+        "body": { "error": "upstream unavailable" },
         "latencyMs": 5,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "FAIL",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": false,
-            "expected": "HTTP status < 500",
-            "actual": "503"
-          },
-          {
-            "id": "speed",
-            "pass": true
-          }
+          { "id": "delivery", "pass": false, "expected": "HTTP status < 500", "actual": "503" },
+          { "id": "speed", "pass": true }
         ]
       }
     },
     {
       "name": "a 4xx is left to the declared clauses",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "speed", "type": "latency", "maxMs": 2000 }] },
       "observation": {
         "status": 400,
         "headers": {},
-        "body": {
-          "error": "unknown coordinate"
-        },
+        "body": { "error": "unknown coordinate" },
         "latencyMs": 5,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "PASS",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true,
-            "expected": "HTTP status < 500",
-            "actual": "400"
-          },
-          {
-            "id": "speed",
-            "pass": true
-          }
+          { "id": "delivery", "pass": true, "expected": "HTTP status < 500", "actual": "400" },
+          { "id": "speed", "pass": true }
         ]
       }
     },
     {
       "name": "no usable response is DOWN and evaluates no declared clause",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "speed", "type": "latency", "maxMs": 2000 }] },
       "observation": {
         "status": null,
         "headers": {},
@@ -428,22 +252,14 @@
       "expect": {
         "outcome": "DOWN",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": false,
-            "expected": "a response",
-            "actual": "no response (ETIMEDOUT)"
-          }
+          { "id": "delivery", "pass": false, "expected": "a response", "actual": "no response (ETIMEDOUT)" }
         ]
       }
     },
     {
       "name": "an empty clause list is not a valid SLA",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": []
-      },
+      "sla": { "version": 1, "clauses": [] },
       "observation": {
         "status": 200,
         "headers": {},
@@ -451,23 +267,12 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "throws": true
-      }
+      "expect": { "throws": true }
     },
     {
       "name": "an unknown clause type throws so the caller falls back",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "rate",
-            "type": "throughput",
-            "minRps": 5
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "rate", "type": "throughput", "minRps": 5 }] },
       "observation": {
         "status": 200,
         "headers": {},
@@ -475,25 +280,14 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "throws": true
-      }
+      "expect": { "throws": true }
     },
     {
       "name": "an unsupported JSON Schema keyword throws",
       "mode": "evaluate",
       "sla": {
         "version": 1,
-        "clauses": [
-          {
-            "id": "shape",
-            "type": "schema",
-            "schema": {
-              "type": "string",
-              "pattern": "^ok$"
-            }
-          }
-        ]
+        "clauses": [{ "id": "shape", "type": "schema", "schema": { "type": "string", "pattern": "^ok$" } }]
       },
       "observation": {
         "status": 200,
@@ -502,23 +296,12 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "throws": true
-      }
+      "expect": { "throws": true }
     },
     {
       "name": "the reserved delivery id is refused",
       "mode": "evaluate",
-      "sla": {
-        "version": 1,
-        "clauses": [
-          {
-            "id": "delivery",
-            "type": "latency",
-            "maxMs": 10
-          }
-        ]
-      },
+      "sla": { "version": 1, "clauses": [{ "id": "delivery", "type": "latency", "maxMs": 10 }] },
       "observation": {
         "status": 200,
         "headers": {},
@@ -526,9 +309,7 @@
         "latencyMs": 1,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "throws": true
-      }
+      "expect": { "throws": true }
     },
     {
       "name": "fallback scores 2xx as PASS",
@@ -540,10 +321,7 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "outcome": "PASS",
-        "clauses": []
-      }
+      "expect": { "outcome": "PASS", "clauses": [] }
     },
     {
       "name": "fallback scores 5xx as FAIL",
@@ -555,10 +333,7 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "outcome": "FAIL",
-        "clauses": []
-      }
+      "expect": { "outcome": "FAIL", "clauses": [] }
     },
     {
       "name": "fallback writes no verdict on 4xx",
@@ -570,10 +345,7 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "outcome": null,
-        "clauses": []
-      }
+      "expect": { "outcome": null, "clauses": [] }
     },
     {
       "name": "fallback writes no verdict on 3xx",
@@ -585,10 +357,7 @@
         "latencyMs": 10,
         "paidAmountMinorUnits": "2500"
       },
-      "expect": {
-        "outcome": null,
-        "clauses": []
-      }
+      "expect": { "outcome": null, "clauses": [] }
     },
     {
       "name": "fallback scores no response as DOWN",
@@ -601,54 +370,69 @@
         "paidAmountMinorUnits": "2500",
         "transportError": "ECONNREFUSED"
       },
-      "expect": {
-        "outcome": "DOWN",
-        "clauses": []
-      }
+      "expect": { "outcome": "DOWN", "clauses": [] }
     },
     {
-      "name": "mixed SLA: semantic clause never blocks the deterministic verdict",
+      "name": "a semantic clause is recognised without disabling the deterministic ones",
+      "note": "The case that forced this change. An unrecognised clause type fails the whole document, and `evaluate` falls back to status-only on any validation failure — so adding a semantic clause naively would have silently stopped enforcing every clause the provider already had.",
       "mode": "evaluate",
       "sla": {
         "version": 1,
         "clauses": [
           {
-            "id": "speed",
-            "type": "latency",
-            "maxMs": 2000
+            "id": "shape",
+            "type": "schema",
+            "schema": { "type": "object", "required": ["summary"], "properties": { "summary": { "type": "string" } } }
           },
+          { "id": "speed", "type": "latency", "maxMs": 2000 },
           {
-            "id": "quality",
+            "id": "faithful",
             "type": "semantic",
-            "description": "decorative only, not what GenLayer judges against",
-            "criteria": "The response must read as a professionally written product description, not placeholder or lorem-ipsum text."
+            "criteria": "The summary must describe the document supplied in the request, in English, in under 200 words."
           }
         ]
       },
       "observation": {
         "status": 200,
         "headers": {},
-        "body": {
-          "anything": "CRE never evaluates a semantic clause's body content"
-        },
+        "body": { "summary": "A short summary." },
         "latencyMs": 100,
         "paidAmountMinorUnits": "2500"
       },
       "expect": {
         "outcome": "PASS",
         "clauses": [
-          {
-            "id": "delivery",
-            "pass": true
-          },
-          {
-            "id": "speed",
-            "pass": true
-          },
-          {
-            "id": "quality",
-            "pass": true
-          }
+          { "id": "delivery", "pass": true },
+          { "id": "shape", "pass": true },
+          { "id": "speed", "pass": true },
+          { "id": "faithful", "pass": true }
+        ]
+      }
+    },
+    {
+      "name": "a deterministic clause still fails alongside a semantic one",
+      "note": "The other half of the same guarantee: passing the semantic clause must not soften the verdict a deterministic clause earned.",
+      "mode": "evaluate",
+      "sla": {
+        "version": 1,
+        "clauses": [
+          { "id": "speed", "type": "latency", "maxMs": 500 },
+          { "id": "faithful", "type": "semantic", "criteria": "The summary must describe the document supplied in the request." }
+        ]
+      },
+      "observation": {
+        "status": 200,
+        "headers": {},
+        "body": { "summary": "A short summary." },
+        "latencyMs": 4000,
+        "paidAmountMinorUnits": "2500"
+      },
+      "expect": {
+        "outcome": "FAIL",
+        "clauses": [
+          { "id": "delivery", "pass": true },
+          { "id": "speed", "pass": false },
+          { "id": "faithful", "pass": true }
         ]
       }
     }

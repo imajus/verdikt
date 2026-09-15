@@ -245,3 +245,73 @@ describe('determinism', () => {
     expect(JSON.stringify(document)).toBe(snapshot);
   });
 });
+
+// A promise about what the response *says*, decided on dispute by GenLayer
+// (docs/roadmap/genlayer.md). The engine is pure by invariant and cannot judge
+// meaning, so its whole job here is to recognise the clause and get out of the
+// way — while still enforcing everything it *can* judge.
+describe('evaluate — semantic clauses', () => {
+  /** @type {SlaSemanticClause} */
+  const semanticClause = {
+    id: 'faithful',
+    type: 'semantic',
+    criteria: 'The summary must describe the document supplied in the request.'
+  };
+
+  it('passes a semantic clause rather than deciding it', () => {
+    const result = evaluate(sla(semanticClause), observe());
+    expect(result.outcome).toBe(OUTCOME.PASS);
+    const clause = result.clauses.find((c) => c.id === 'faithful');
+    expect(clause).toMatchObject({ type: 'semantic', pass: true, expected: semanticClause.criteria });
+  });
+
+  // The failure this change exists to prevent. `evaluate` falls back to
+  // status-only on any validation failure, so a document the schema refused
+  // would have quietly stopped enforcing every deterministic clause in it —
+  // the provider's latency and schema promises would go unjudged, and the
+  // verdict would come from the HTTP status alone.
+  it('does not disable the deterministic clauses declared alongside it', () => {
+    const result = evaluate(sla(schemaClause, latencyClause, semanticClause), observe({ latencyMs: 9000 }));
+    expect(result.outcome).toBe(OUTCOME.FAIL);
+    expect(result.clauses.map((c) => c.id)).toEqual(['delivery', 'shape', 'speed', 'faithful']);
+    expect(result.clauses.find((c) => c.id === 'speed')?.pass).toBe(false);
+  });
+
+  it('never fails one, whatever the response was', () => {
+    const result = evaluate(sla(semanticClause), observe({ status: 200, body: 'total nonsense' }));
+    expect(result.clauses.find((c) => c.id === 'faithful')?.pass).toBe(true);
+  });
+
+  // `criteria` is its own field and not a reuse of `description`, which stays
+  // decorative on every clause type: a reader has to be able to tell what was
+  // promised from what was merely explained.
+  it('requires criteria, and does not accept description in its place', () => {
+    expect(() => evaluate(/** @type {never} */ (sla(/** @type {never} */ ({ id: 'x', type: 'semantic' }))), observe())).toThrow();
+    expect(() =>
+      evaluate(
+        /** @type {never} */ (sla(/** @type {never} */ ({ id: 'x', type: 'semantic', description: 'be good' }))),
+        observe()
+      )
+    ).toThrow();
+  });
+
+  it('still accepts description alongside criteria, same as every other clause type', () => {
+    const documented = { ...semanticClause, description: 'Faithfulness' };
+    expect(evaluate(sla(/** @type {SlaSemanticClause} */ (documented)), observe()).outcome).toBe(OUTCOME.PASS);
+  });
+
+  it('rejects an empty criteria string, which promises nothing and cannot be judged', () => {
+    expect(() => evaluate(sla({ ...semanticClause, criteria: '' }), observe())).toThrow();
+  });
+
+  // A long criteria, multiplied across several semantic clauses, is what pushed
+  // a per-call CRE result past the workflow's 100kb ExecutionResponseLimit. The
+  // full text is still readable on the SLA itself, so the result only needs a
+  // bounded excerpt.
+  it('bounds a long criteria in the result rather than carrying it whole', () => {
+    const long = { ...semanticClause, criteria: 'x'.repeat(2048) };
+    const result = evaluate(sla(long), observe());
+    const clause = result.clauses.find((c) => c.id === 'faithful');
+    expect(clause?.expected.length).toBeLessThan(long.criteria.length);
+  });
+});
