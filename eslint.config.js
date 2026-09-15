@@ -19,6 +19,12 @@ export default [
       'cre/spike/**',
       'cre/workflows/**/.tmp/**',
       'cre/workflows/**/.cre_build_tmp.js',
+      // genlayer/ is a Python toolchain. Its virtualenv vendors a handful of
+      // stray .js files (urllib3 ships an emscripten worker), and eslint walks
+      // into them even though git ignores the directory.
+      'genlayer/.venv/**',
+      // wrangler's local dev scratch: a bundled Worker, not source.
+      '**/.wrangler/**',
       // Vendored Impeccable skill files (0803a6e): third-party browser-runtime
       // scripts and a bundled UMD build, not code this repo lints or owns.
       '.agents/skills/impeccable/scripts/**',

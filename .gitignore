@@ -43,3 +43,9 @@ ens-setup-plan.json
 web/.impeccable/live/sessions/
 web/.impeccable/live/roots.json
 web/.impeccable/live/inject-journal.json
+
+# genlayer/ is a separate Python toolchain, not part of the pnpm workspace
+genlayer/.venv/
+genlayer/artifacts/
+__pycache__/
+.pytest_cache/

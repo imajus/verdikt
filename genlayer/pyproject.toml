@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
-    "integration: tests requiring GenLayer Studio (run with gltest)",
+    "integration: tests requiring a GenLayer node (run with gltest, not pytest)",
 ]

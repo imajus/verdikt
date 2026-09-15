@@ -2,16 +2,17 @@ networks:
   default: localnet
 
   localnet:
-    url: "http://127.0.0.1:4000/api"
-
-  testnet_bradbury:
-    url: "https://rpc-bradbury.genlayer.com"
-    accounts:
-      - ${GENLAYER_DEPLOYER_PRIVATE_KEY}
+    url: 'http://127.0.0.1:4000/api'
 
   studionet: {}
 
+  # GenLayer's public testnet. The key has to be one genlayer-py knows
+  # (`localnet`, `studionet`, `testnet_asimov`, `testnet_bradbury`) — it is how
+  # the chain is resolved, not a free-form label.
+  testnet_bradbury:
+    url: 'https://rpc-bradbury.genlayer.com'
+
 paths:
-  contracts: "contracts"
+  contracts: 'contracts'
 
 environment: .env
