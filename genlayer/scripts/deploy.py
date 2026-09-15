@@ -36,6 +36,11 @@ NETWORKS = ('localnet', 'studionet', 'testnet_asimov', 'testnet_bradbury')
 DEFAULT_BOND = 1_000_000
 DEFAULT_BOUNTY = 100_000
 
+# How long after a verdict is written a claim may still be opened. Bounds the
+# provider's exposure; the proxy's evidence cache carries the separate
+# adjudication clock (docs/roadmap/genlayer.md, "Two clocks, not one").
+DEFAULT_FILING_WINDOW_SECONDS = 24 * 60 * 60
+
 
 def load_env() -> dict:
     """Read the repo's `.env` without adding a dependency to do it."""
@@ -60,6 +65,9 @@ def main() -> int:
     parser.add_argument('--proxy-base-url', default=None, help='defaults to PROXY_BASE_URL, then the workers.dev host')
     parser.add_argument('--bond', type=int, default=DEFAULT_BOND)
     parser.add_argument('--bounty', type=int, default=DEFAULT_BOUNTY)
+    parser.add_argument('--registry', default=None, help='VerdiktRegistry on Arc; defaults to deployments/arc-testnet.json')
+    parser.add_argument('--arc-rpc-url', default=None, help='defaults to ARC_RPC_URL')
+    parser.add_argument('--filing-window', type=int, default=DEFAULT_FILING_WINDOW_SECONDS)
     parser.add_argument('--token-name', default='Verdikt Settlement')
     parser.add_argument('--token-symbol', default='VSET')
     parser.add_argument('--dry-run', action='store_true', help='check the account and balance, deploy nothing')
@@ -99,8 +107,19 @@ def main() -> int:
     proxy_base_url = (
         args.proxy_base_url or env.get('PROXY_BASE_URL') or 'https://verdikt-proxy.denis-perov.workers.dev'
     )
+    arc = json.loads((REPO / 'deployments' / 'arc-testnet.json').read_text())
+    registry = args.registry or env.get('VERDIKT_REGISTRY_ADDRESS') or arc['registry']
+    arc_rpc_url = args.arc_rpc_url or env.get('ARC_RPC_URL')
+    if not arc_rpc_url:
+        # The eligibility gate reads Arc on every claim. Without an RPC the
+        # judge deploys and then refuses every claim it is given, which looks
+        # like a bug rather than a missing setting.
+        print('ARC_RPC_URL is unset — the judge could not read a verdict.', file=sys.stderr)
+        return 2
+
     if args.dry_run:
         print(f'\nwould deploy with proxy_base_url={proxy_base_url} bond={args.bond} bounty={args.bounty}')
+        print(f'                 registry={registry} arc_rpc={arc_rpc_url} filing_window={args.filing_window}s')
         return 0
 
     token_code = (CONTRACTS / 'settlement_token.py').read_text()
@@ -112,7 +131,8 @@ def main() -> int:
     judge_code = (CONTRACTS / 'sla_claim_judge.py').read_text()
     print('deploying SlaClaimJudge…')
     judge_address = client.deploy_contract(
-        code=judge_code, args=[proxy_base_url, token_address, args.bond, args.bounty]
+        code=judge_code,
+        args=[proxy_base_url, token_address, args.bond, args.bounty, registry, arc_rpc_url, args.filing_window],
     )
     judge_address = _address_of(client, judge_address)
     print(f'  {judge_address}')
@@ -141,6 +161,8 @@ def main() -> int:
         'proxyBaseUrl': proxy_base_url,
         'bondAmount': args.bond,
         'bountyAmount': args.bounty,
+        'registryAddress': registry,
+        'filingWindowSeconds': args.filing_window,
     }
     out = REPO / 'deployments' / f'genlayer-{args.network.replace("testnet_", "")}.json'
     out.write_text(json.dumps(record, indent=2) + '\n')

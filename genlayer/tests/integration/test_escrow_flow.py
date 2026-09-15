@@ -24,13 +24,17 @@ SLUG = 'summarizer'
 DEPOSIT = 5_000_000
 BOND = 1_000_000
 BOUNTY = 100_000
+# Never reached here: nothing in this file opens a claim, which is the only
+# path that reads Arc.
+REGISTRY = '0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af'
+FILING_WINDOW = 86_400
 
 
 @pytest.fixture
 def deployed():
     token = get_contract_factory('SettlementToken').deploy(args=['Verdikt Settlement', 'VSET'])
     judge = get_contract_factory('SlaClaimJudge').deploy(
-        args=['https://proxy.invalid', token.address, BOND, BOUNTY]
+        args=['https://proxy.invalid', token.address, BOND, BOUNTY, REGISTRY, 'https://arc.invalid', FILING_WINDOW]
     )
     return token, judge
 
@@ -87,7 +91,7 @@ def test_a_second_judge_cannot_touch_the_first_judge_s_escrow(deployed):
     """`release` is custodian-scoped, and the custodian is whoever the escrow named."""
     token, judge = deployed
     other = get_contract_factory('SlaClaimJudge').deploy(
-        args=['https://proxy.invalid', token.address, BOND, BOUNTY]
+        args=['https://proxy.invalid', token.address, BOND, BOUNTY, REGISTRY, 'https://arc.invalid', FILING_WINDOW]
     )
     me = get_default_account().address
 
@@ -98,3 +102,4 @@ def test_a_second_judge_cannot_touch_the_first_judge_s_escrow(deployed):
     # withdrawal has nothing to release — the escrow stays where it was put.
     assert not tx_execution_succeeded(other.fund_deposit(args=[SLUG]).transact())
     assert token.escrow_of(args=[me, judge.address]).call() == DEPOSIT
+

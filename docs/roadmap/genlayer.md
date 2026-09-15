@@ -365,25 +365,38 @@ else's call. Checked via `getVerdict()` on Arc
 The claim key is composite, `(request_id, clause_id)`: one verdict can carry
 several disputable semantic clauses.
 
-**Two consequences of shipping the judge ahead of this gate**, both live on
-`feat/genlayer` today:
+### How the read works, and why it looks like this
 
-- **The key can be squatted.** Nothing yet says the caller is the payer, so
-  anyone reading a `VerdictWritten` event can file first with a signature that
-  will never authorise, permanently occupying the key the payer needed — a
-  resolved or cancelled claim still holds it. Making keys reusable is not the
-  fix: it would let a claimant who dislikes a judgment file again for a second
-  opinion. The **Payer** check above is the fix, and nothing is at stake in a
-  claim until [#83](https://github.com/imajus/verdikt/issues/83) attaches a
-  bond.
-- **Service correlation is enforced twice, and the cheap half is already
-  there.** The claim names a slug and freezes that SLA's criteria; the evidence
-  envelope says which service actually served the call. Without comparing them,
-  one disclosure signature judges service A's response against service B's
-  promises — a binding `MET`/`BREACH` about words the provider that was called
-  never wrote. `_decide` refuses a mismatch as `UNDETERMINED`. That is defence
-  in depth, not a replacement: only the Arc check ties the slug to the verdict
-  rather than to the envelope the proxy happened to serve.
+One **batched** JSON-RPC POST carrying `eth_call` for the verdict and
+`eth_getBlockByNumber('latest')` for a clock. Batched because the deadline
+compares two timestamps that have to come from the same chain at the same
+moment, and because a metered runtime should not pay two round trips to answer
+one question. Confirmed working against Arc's RPC.
+
+The calldata and the decode are **hand-rolled**, which is a decision rather than
+laziness: GenVM ships no ABI library that reaches an arbitrary chain, and
+`getVerdict` returns a single all-static tuple — `bytes32, uint8, address,
+uint256, uint256, uint64, bytes32` — so it is seven consecutive words with no
+offsets and no tails. Verified against the live registry, which answered exactly
+224 bytes for a settled request and for an unset one alike
+(`tests/direct/test_arc_live.py`, opt-in).
+
+**The clock is Arc's, not GenLayer's and not a time API.** `writtenAt` is an Arc
+block timestamp; measuring it against anything else would be comparing two
+clocks. GenVM exposes no block timestamp of its own, and a caller-supplied one
+would make the deadline advisory.
+
+`strict_eq` is the right equivalence principle here even though one input moves,
+because what is returned is already *derived*: the immutable verdict fields plus
+the boolean `within_filing_window`. Validators compare the derivation, never the
+timestamp. **A claim filed within seconds of the deadline can still have two
+validators derive different booleans** — and that is the correct outcome for a
+genuinely contested boundary. They disagree, and consensus rotates, rather than
+one node deciding alone.
+
+The rules themselves (`check_eligibility`) are a pure function for the same
+reason `settlement_for` is: it is where being wrong costs somebody money, and it
+is testable exhaustively without a chain.
 
 **Open, not solved: Circle Gateway payers.** Under `GatewayWalletBatched` the
 booked payer is the agent wallet's *backing EOA*, and the relationship between

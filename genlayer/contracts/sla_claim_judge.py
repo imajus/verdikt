@@ -37,6 +37,10 @@ OUTCOME_CANCELLED = 'CANCELLED'
 
 RESOLVED_OUTCOMES = (OUTCOME_BREACH, OUTCOME_MET, OUTCOME_UNDETERMINED)
 
+# `getVerdict` returns one static tuple: bytes32, uint8, address, uint256,
+# uint256, uint64, bytes32 — seven words, encoded in place.
+VERDICT_WORDS = 7
+
 # Mirrors EVIDENCE_AUTH_HEADER in proxy/src/evidence.js. Renaming one without
 # the other makes every disclosure refuse, which reads as a claimant error.
 EVIDENCE_AUTH_HEADER = 'x-verdikt-evidence-auth'
@@ -75,10 +79,10 @@ class Claim:
     # adjudicators may read it. Held in state rather than passed per call so
     # every validator re-fetching the evidence presents the same token.
     disclosure_signature: str
-    # What the original x402 call cost, in USDC minor units. Compensation is
-    # sized to match this number — not converted to it; the settlement token is
-    # pegged to nothing. Caller-supplied and unverified for now; #90 binds it to
-    # `VerdiktRegistry.getVerdict(requestId).paidAmount` on Arc.
+    # What the original x402 call cost, in USDC minor units. Read from
+    # `VerdiktRegistry.getVerdict(requestId).paidAmount` on Arc, never supplied
+    # by the claimant. Compensation is sized to match this number — not
+    # converted to it; the settlement token is pegged to nothing.
     paid_amount: u256
     bond: u256
     resolved: bool
@@ -95,6 +99,15 @@ class SlaClaimJudge(gl.Contract):
     # The proxy's apex host, e.g. `https://verdikt-proxy.workers.dev`. Per-slug
     # hosts serve the paid leg; the internal read endpoints live on the apex.
     proxy_base_url: str
+    # `VerdiktRegistry` on Arc, and an RPC that can read it. Fixed in contract
+    # config and never caller-supplied: a claimant who could name the registry
+    # could name a contract of their own that answers whatever they like.
+    registry_address: str
+    arc_rpc_url: str
+    # How long after `writtenAt` a claim may still be opened. Bounds the
+    # provider's exposure; the adjudication runway is the proxy's separate
+    # clock (docs/roadmap/genlayer.md, "Two clocks, not one").
+    filing_window_seconds: u256
     # The settlement token. Empty means this judge decides claims and settles
     # nothing — useful for a smoke test, useless for a demo.
     token_address: str
@@ -128,12 +141,24 @@ class SlaClaimJudge(gl.Contract):
     # one escrow would back an unlimited number of simultaneous claims.
     bonded: TreeMap[Address, u256]
 
-    def __init__(self, proxy_base_url: str, token_address: str, bond_amount: int, bounty_amount: int):
+    def __init__(
+        self,
+        proxy_base_url: str,
+        token_address: str,
+        bond_amount: int,
+        bounty_amount: int,
+        registry_address: str,
+        arc_rpc_url: str,
+        filing_window_seconds: int,
+    ):
         self.owner = gl.message.sender_address
         self.proxy_base_url = proxy_base_url.rstrip('/')
         self.token_address = token_address
         self.bond_amount = u256(bond_amount)
         self.bounty_amount = u256(bounty_amount)
+        self.registry_address = registry_address
+        self.arc_rpc_url = arc_rpc_url
+        self.filing_window_seconds = u256(filing_window_seconds)
 
     # ------------------------------------------------------------------ writes
 
@@ -189,9 +214,7 @@ class SlaClaimJudge(gl.Contract):
         self.deposit_committed[sender] = u256(committed_elsewhere + allocatable)
 
     @gl.public.write
-    def submit_claim(
-        self, request_id: str, clause_id: str, slug: str, disclosure_signature: str, paid_amount: int
-    ) -> None:
+    def submit_claim(self, request_id: str, clause_id: str, slug: str, disclosure_signature: str) -> None:
         """
         Open a claim against one semantic clause of one paid call.
 
@@ -203,28 +226,19 @@ class SlaClaimJudge(gl.Contract):
         against the payer Arc booked, which is the only party that can say — so
         a wrong one costs the claimant a resolution, not a judgment.
 
-        `paid_amount` is what the original call cost. Unverified here; #90 binds
-        it to the Arc verdict.
-
-        **Open until [#90]: the composite key can be squatted.** `request_id` is
-        public in every `VerdictWritten` event, and nothing yet says the caller
-        is the payer, so anyone can file first with a signature that will never
-        authorise — permanently occupying the key the payer needed, since a
-        resolved or cancelled claim still holds it. Re-filing is not the fix:
-        letting a key be reused would let a claimant who dislikes a judgment
-        file again for a second opinion. The fix is #90's eligibility gate,
-        which requires `verdict.payer == claimant` before a key is taken at all.
-        A bond now raises the cost of squatting, but does not close it: the
-        squatter only forfeits it once #90's eligibility gate exists to reject
-        them, which it does not yet.
+        Checks run cheapest-first: local state, then the same-chain bond, then
+        Arc, then ENS. `request_id` is public in every `VerdictWritten` event,
+        so without the Arc gate anyone could file against anyone else's call —
+        and every check that runs before it is one an ineligible claimant pays
+        for in gas rather than in someone else's money.
         """
         key = _claim_key(request_id, clause_id)
         if key in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Claim already exists')
         if not disclosure_signature.startswith('0x'):
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Disclosure signature must be 0x-prefixed hex')
-        if paid_amount < 0:
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} Paid amount cannot be negative')
+        if not _is_request_id(request_id):
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Request id must be 32 bytes of 0x-prefixed hex')
 
         claimant = gl.message.sender_address
         committed = self.bonded.get(claimant, 0)
@@ -237,6 +251,12 @@ class SlaClaimJudge(gl.Contract):
                 raise gl.vm.UserError(
                     f'{ERROR_EXPECTED} Escrow {self.bond_amount} more to this contract to post the bond'
                 )
+
+        eligibility = self._read_eligibility(request_id)
+        refusal = check_eligibility(eligibility, claimant.as_hex, slug)
+        if refusal is not None:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {refusal}')
+        paid_amount = eligibility['paid_amount']
 
         criteria = self._fetch_criteria(slug, clause_id)
 
@@ -346,6 +366,9 @@ class SlaClaimJudge(gl.Contract):
             'token_address': self.token_address,
             'bond_amount': self.bond_amount,
             'bounty_amount': self.bounty_amount,
+            'registry_address': self.registry_address,
+            'arc_rpc_url': self.arc_rpc_url,
+            'filing_window_seconds': self.filing_window_seconds,
         }
 
     @gl.public.view
@@ -440,6 +463,42 @@ class SlaClaimJudge(gl.Contract):
         if claim.resolved:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Claim already resolved')
         return claim
+
+    def _read_eligibility(self, request_id: str) -> dict:
+        """
+        Read Arc's verdict for this request, and whether the filing window is
+        still open.
+
+        One batched JSON-RPC round trip: `eth_call` for the verdict and
+        `eth_getBlockByNumber('latest')` for a clock. GenVM exposes no block
+        timestamp of its own, and a caller-supplied one would make the filing
+        deadline advisory.
+
+        `strict_eq` is right here even though one of those inputs is a moving
+        clock, because what is returned is already *derived*: the verdict
+        fields, which are immutable once written, plus the boolean
+        `within_filing_window`. Validators compare the derivation, not the
+        timestamp. A claim filed within seconds of the deadline can still have
+        two validators derive different booleans — and that is the correct
+        outcome for a genuinely contested boundary: they disagree, and
+        consensus rotates rather than one node deciding alone.
+        """
+        rpc_url = self.arc_rpc_url
+        registry = self.registry_address
+        window = int(self.filing_window_seconds)
+
+        def read() -> str:
+            verdict = read_verdict_and_clock(rpc_url, registry, request_id)
+            # The clock itself never leaves this function. What validators
+            # compare is the derived boolean, which is stable everywhere except
+            # within seconds of the deadline.
+            now = verdict.pop('now')
+            verdict['within_filing_window'] = verdict['written_at'] != 0 and now - verdict['written_at'] <= window
+            # Serialized because `strict_eq` compares the returned value, and a
+            # canonical string compares unambiguously.
+            return json.dumps(verdict, sort_keys=True)
+
+        return json.loads(gl.eq_principle.strict_eq(read))
 
     def _fetch_criteria(self, slug: str, clause_id: str) -> str:
         """
@@ -536,6 +595,74 @@ def _now() -> int:
         raise gl.vm.UserError(f'{ERROR_EXPECTED} Transaction carries no timestamp')
     return int(datetime.datetime.fromisoformat(stamp.replace('Z', '+00:00')).timestamp())
 
+
+def _is_request_id(value: str) -> bool:
+    if not value.startswith('0x') or len(value) != 66:
+        return False
+    return all(c in '0123456789abcdefABCDEF' for c in value[2:])
+
+
+def service_id_of(slug: str) -> str:
+    """`keccak256(bytes(slug))` — the same id Arc's registry uses."""
+    return '0x' + Keccak256(slug.encode('utf-8')).digest().hex()
+
+
+def _encode_get_verdict(request_id: str) -> str:
+    selector = Keccak256(b'getVerdict(bytes32)').digest()[:4]
+    return '0x' + (selector + bytes.fromhex(request_id[2:])).hex()
+
+
+def _decode_verdict(result_hex: str) -> dict:
+    """
+    Decode `getVerdict`'s return without an ABI library.
+
+    Every field of the struct is static — `bytes32, uint8, address, uint256,
+    uint256, uint64, bytes32` — so a single static tuple is encoded in place:
+    seven consecutive 32-byte words, no offsets, no tails. Verified against the
+    live registry on Arc Testnet, which returned exactly 224 bytes for a real
+    request id and for an unset one alike.
+    """
+    raw = bytes.fromhex(result_hex[2:] if result_hex.startswith('0x') else result_hex)
+    if len(raw) < VERDICT_WORDS * 32:
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Registry returned {len(raw)} bytes, expected {VERDICT_WORDS * 32}')
+    word = lambda i: raw[i * 32 : (i + 1) * 32]  # noqa: E731
+    return {
+        'service_id': '0x' + word(0).hex(),
+        'outcome': int.from_bytes(word(1), 'big'),
+        'payer': '0x' + word(2)[12:].hex(),
+        'paid_amount': int.from_bytes(word(3), 'big'),
+        'refund_credited': int.from_bytes(word(4), 'big'),
+        # The "no verdict recorded" sentinel. `getVerdict` on an unset key
+        # returns Solidity's zero-valued struct rather than reverting, so this
+        # is the only field that can say "there was no such call".
+        'written_at': int.from_bytes(word(5), 'big'),
+        'failed_clause': '0x' + word(6).hex(),
+    }
+
+
+def check_eligibility(verdict: dict, claimant: str, slug: str) -> str | None:
+    """
+    Whether this claimant may dispute this call. Pure — the refusal text, or
+    `None` to proceed.
+
+    Separated from the read so the rules can be tested exhaustively without a
+    chain, in the same spirit as `settlement_for`.
+    """
+    if verdict.get('written_at', 0) == 0:
+        # Also what rejects the replay-402 and fallback-4xx cases: both write no
+        # verdict at all, so both land here before any judgment logic runs.
+        return 'No verdict was written for this request'
+    if verdict.get('payer', '').lower() != claimant.lower():
+        # `request_id` is public in every VerdictWritten event. Without this,
+        # anyone could file against anyone else's call.
+        return 'Only the payer of this call may dispute it'
+    if verdict.get('service_id', '').lower() != service_id_of(slug).lower():
+        return f'This verdict does not belong to {slug}'
+    if not verdict.get('within_filing_window', False):
+        return 'The filing window for this call has closed'
+    return None
+
+
 def settlement_for(*, outcome: str, paid_amount: int, deposit_available: int, bond: int, bounty: int) -> dict:
     """
     Who pays what, for each of the four outcomes. Pure — no storage, no I/O.
@@ -591,6 +718,61 @@ def _claim_to_dict(claim: Claim) -> dict:
         'compensation': claim.compensation,
         'bounty': claim.bounty,
     }
+
+
+def read_verdict_and_clock(rpc_url: str, registry: str, request_id: str) -> dict:
+    """
+    One batched JSON-RPC round trip: the verdict, and Arc's own clock.
+
+    Batched rather than two POSTs because the deadline compares two timestamps
+    that must come from the same chain at the same moment — and because a
+    metered runtime should not pay for two round trips to answer one question.
+    Confirmed working against Arc Testnet's RPC.
+
+    The clock comes from Arc rather than from a time API for the same reason:
+    `writtenAt` is an Arc block timestamp, so measuring against anything else
+    would be comparing two different clocks.
+    """
+    batch = [
+        {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_call',
+         'params': [{'to': registry, 'data': _encode_get_verdict(request_id)}, 'latest']},
+        {'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getBlockByNumber', 'params': ['latest', False]},
+    ]
+    res = gl.nondet.web.post(
+        rpc_url, body=json.dumps(batch).encode('utf-8'), headers={'Content-Type': 'application/json'}
+    )
+    if 400 <= res.status < 500:
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC refused the read ({res.status})')
+    if res.status >= 500:
+        raise gl.vm.UserError(f'{ERROR_TRANSIENT} Arc RPC unavailable ({res.status})')
+
+    try:
+        answers = json.loads(_decode_body(res.body))
+    except Exception:
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC response is not valid JSON')
+    # A node may answer a batch out of order, so the ids are what pair a result
+    # with its question.
+    if not isinstance(answers, list):
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC did not answer the batch as an array')
+    by_id = {}
+    for answer in answers:
+        if not isinstance(answer, dict):
+            continue
+        if 'error' in answer:
+            # The node's answer, not a network failure: deterministic, so
+            # validators must agree on it exactly.
+            raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC error: {answer["error"]}')
+        by_id[answer.get('id')] = answer.get('result')
+
+    if 1 not in by_id or 2 not in by_id:
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC answered only part of the batch')
+    block = by_id[2]
+    if not isinstance(block, dict) or 'timestamp' not in block:
+        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC returned no block timestamp')
+
+    verdict = _decode_verdict(str(by_id[1]))
+    verdict['now'] = int(str(block['timestamp']), 16)
+    return verdict
 
 
 def _decode_body(body) -> str:

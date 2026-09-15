@@ -26,6 +26,14 @@ PAID_AMOUNT = 2500
 BOND = 1000
 BOUNTY = 100
 
+ARC_RPC = 'https://arc.test/rpc'
+REGISTRY = '0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af'
+FILING_WINDOW = 86_400
+# Arc's clock, as the mocked `eth_getBlockByNumber` reports it. The verdict
+# below is written well inside the filing window of this.
+NOW = 1_789_400_000
+WRITTEN_AT = NOW - 3600
+
 
 @pytest.fixture
 def judge(direct_deploy):
@@ -38,8 +46,11 @@ def judge(direct_deploy):
     empty it decides claims and settles nothing, which is exactly the half
     direct mode *can* prove. The arithmetic is covered as a pure function in
     test_settlement.py, and the wiring needs a node (#85).
+
+    The Arc eligibility gate is *not* in that category: it is a web call, which
+    direct mode mocks, so it is exercised for real below.
     """
-    return direct_deploy('contracts/sla_claim_judge.py', PROXY, '', 0, BOUNTY)
+    return direct_deploy('contracts/sla_claim_judge.py', PROXY, '', 0, BOUNTY, REGISTRY, ARC_RPC, FILING_WINDOW)
 
 
 @pytest.fixture
@@ -158,6 +169,64 @@ def image_envelope(*, content_type='image/png', response_body=PNG_PIXEL, body_en
 def mock_evidence(direct_vm, *, envelope=None, status=200):
     body = json.dumps(envelope if envelope is not None else evidence_envelope())
     direct_vm.mock_web(rf'.*/internal/evidence/.*', {'status': status, 'body': body})
+
+
+def encode_verdict(*, service_id=None, outcome=0, payer, paid_amount=PAID_AMOUNT, written_at=WRITTEN_AT):
+    """The registry's `getVerdict` return: seven static words, encoded in place.
+
+    Shape confirmed against the live registry on Arc Testnet, which answers
+    exactly 224 bytes for a real request id and for an unset one alike.
+    """
+    words = [
+        bytes.fromhex((service_id or service_id_hex(SLUG))[2:]),
+        (outcome).to_bytes(32, 'big'),
+        bytes(12) + bytes.fromhex(payer[2:]),
+        (paid_amount).to_bytes(32, 'big'),
+        (0).to_bytes(32, 'big'),
+        (written_at).to_bytes(32, 'big'),
+        bytes(32),
+    ]
+    return '0x' + b''.join(words).hex()
+
+
+def service_id_hex(slug):
+    """`keccak256(bytes(slug))`, computed outside the contract so the test is
+    not checking the contract against itself."""
+    from Crypto.Hash import keccak
+
+    digest = keccak.new(digest_bits=256)
+    digest.update(slug.encode('utf-8'))
+    return '0x' + digest.hexdigest()
+
+
+ZERO_ADDRESS = '0x' + '00' * 20
+ARC_HOST_PATTERN = rf'.*{ARC_RPC.split("//")[1]}.*'
+
+
+def mock_arc(direct_vm, *, verdict_hex=None, payer=None, now=NOW, status=200, rpc_error=None, body=None, **verdict):
+    """Answer the batched eligibility read.
+
+    One POST carrying both questions, so one mock answers both — which is also
+    why the contract batches rather than making two calls: the direct VM
+    matches on URL and method, and two POSTs to the same endpoint are
+    indistinguishable to it.
+    """
+    if body is None:
+        if rpc_error is not None:
+            answers = [{'jsonrpc': '2.0', 'id': 1, 'error': {'message': rpc_error}}]
+        else:
+            answers = [
+                {'jsonrpc': '2.0', 'id': 1,
+                 'result': verdict_hex or encode_verdict(payer=payer or ZERO_ADDRESS, **verdict)},
+                {'jsonrpc': '2.0', 'id': 2, 'result': {'timestamp': hex(now)}},
+            ]
+        body = json.dumps(answers)
+    # Full mock format, because the method matters: the mock matcher keys on
+    # URL *and* method, and this is the one POST the contract makes.
+    direct_vm.mock_web(
+        ARC_HOST_PATTERN,
+        {'method': 'POST', 'response': {'status': status, 'headers': {}, 'body': body.encode('utf-8')}},
+    )
 
 
 def mock_judgment(direct_vm, outcome, reasoning='Because.'):

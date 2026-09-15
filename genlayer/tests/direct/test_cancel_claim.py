@@ -2,14 +2,15 @@
 
 from tests.direct.conftest import (
     CLAUSE_ID,
-    PAID_AMOUNT,
     REQUEST_ID,
     SIGNATURE,
     SLUG,
     advance,
+    mock_arc,
     mock_evidence,
     mock_judgment,
     mock_sla,
+    to_hex,
 )
 
 WINDOW = 24 * 60 * 60
@@ -18,7 +19,8 @@ WINDOW = 24 * 60 * 60
 def _open_claim(direct_vm, judge, sender):
     direct_vm.sender = sender
     mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
+    mock_arc(direct_vm, payer=to_hex(sender))
+    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
 
 
 def test_claimant_can_cancel_once_the_window_has_lapsed(direct_vm, judge, direct_alice):

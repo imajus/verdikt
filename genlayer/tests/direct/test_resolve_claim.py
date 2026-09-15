@@ -2,22 +2,24 @@
 
 from tests.direct.conftest import (
     CLAUSE_ID,
-    PAID_AMOUNT,
     REQUEST_ID,
     SIGNATURE,
     SLUG,
     evidence_envelope,
     image_envelope,
+    mock_arc,
     mock_evidence,
     mock_judgment,
     mock_sla,
+    to_hex,
 )
 
 
 def _open_claim(direct_vm, judge, sender):
     direct_vm.sender = sender
     mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
+    mock_arc(direct_vm, payer=to_hex(sender))
+    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
 
 
 def test_breach(direct_vm, judge, direct_alice):

@@ -53,9 +53,15 @@ python3 -m venv .venv
 
 ```bash
 .venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
-.venv/bin/python -m pytest tests/direct -q                # ~35s cold, ~1s warm, no server
+.venv/bin/python -m pytest tests/direct -q                # ~35s cold, ~2s warm, no server
 .venv/bin/python -m pytest tests/direct/test_resolve_claim.py -q
+VERDIKT_LIVE_ARC=1 .venv/bin/python -m pytest tests/direct/test_arc_live.py -q
 ```
+
+`test_arc_live.py` is opt-in because it reads the real registry on Arc Testnet
+over the public internet. It is what says the mocked verdict bytes everywhere
+else are shaped like the real ones — the judge decodes `getVerdict` by hand,
+with no ABI library, because GenVM has none that reaches an arbitrary chain.
 
 The integration suite needs a running node. `glsim` is the cheapest one, and it
 comes with the testing suite (via the `[sim]` extra, already in
