@@ -106,14 +106,23 @@ class SlaClaimJudge(gl.Contract):
     bounty_amount: u256
     claims: TreeMap[str, Claim]
     claim_keys: DynArray[str]
-    # slug -> the GenLayer account whose escrow backs it. First funder wins and
-    # the binding is permanent: a deposit that could change hands mid-dispute
-    # would let a provider hand its liability to an empty account.
+    # slug -> the GenLayer account whose escrow backs it. Binding is permanent
+    # while the slug carries a live deposit: a deposit that could change hands
+    # mid-dispute would let a provider hand its liability to an empty account.
+    # It is *not* permanent once that owner has withdrawn back to zero with no
+    # claim open — the slug is vacant then, and a different account may bind
+    # it. See `fund_deposit` for the identity gap this still leaves open.
     deposit_owner: TreeMap[str, Address]
-    # What that owner committed, as this contract last read it. The real
-    # ceiling is the escrow itself, re-read at credit time — this is the
-    # advertised figure, and settlement never trusts it alone.
+    # What that owner committed to this slug, as this contract last read it.
+    # The real ceiling is the escrow itself, re-read at credit time — this is
+    # the advertised figure, and settlement never trusts it alone.
     deposit_amount: TreeMap[str, u256]
+    # Per owner, the sum of `deposit_amount` across every slug they back. The
+    # escrow a `SettlementToken` reports is a single bucket per (owner,
+    # custodian) pair, shared across every slug the same owner funds — without
+    # this running total, `fund_deposit` would count the same escrowed tokens
+    # as collateral for each slug independently.
+    deposit_committed: TreeMap[Address, u256]
     open_claims: TreeMap[str, u256]
     # Per claimant, the bond total across their still-open claims. Without it
     # one escrow would back an unlimited number of simultaneous claims.
@@ -135,21 +144,49 @@ class SlaClaimJudge(gl.Contract):
         service's semantic promises.
 
         Reads the escrow rather than taking an amount, so there is no way to
-        claim a deposit larger than the one actually posted. Binding is
-        permanent once made: a deposit that could change hands mid-dispute
-        would let a provider pass its liability to an empty account.
+        claim a deposit larger than the one actually posted — but the escrow a
+        `SettlementToken` reports is one shared bucket per (owner, custodian)
+        pair, not one per slug, so this allocates only what the caller has not
+        already committed to another slug (`deposit_committed`), rather than
+        the whole bucket. Without that, one escrow would count as full
+        collateral for every slug the same owner backs at once.
+
+        Binding holds while the slug carries a live deposit: a deposit that
+        could change hands mid-dispute would let a provider pass its liability
+        to an empty account. It releases once the incumbent has withdrawn back
+        to zero with no claim open, so a different account may then bind it.
+
+        **Known gap, stated rather than papered over: nothing here checks that
+        the caller is the slug's actual registered provider.** Minting is
+        permissionless, so anyone can escrow a trivial amount and bind an
+        unfunded slug before its real provider does, then withdraw once no
+        claim is open — leaving the slug vacant again rather than usable, and
+        forcing the real provider to race a repeat squatter for it. That is a
+        griefing cost, not a permanent lock, because the binding above is no
+        longer forever; closing it for good needs the same eligibility gate as
+        #90, checked against the registered provider on Arc rather than
+        assumed from whoever calls first.
         """
         sender = gl.message.sender_address
         existing = self.deposit_owner.get(slug)
-        if existing is not None and existing != sender:
+        previous = self.deposit_amount.get(slug, 0)
+        if existing is not None and existing != sender and (previous > 0 or self.open_claims.get(slug, 0) > 0):
             raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} is already backed by another account')
 
+        # This slug's own previous share, backed out of the sender's running
+        # total before recomputing it, so re-funding an already-owned slug
+        # (a top-up) does not count that share against itself twice.
+        committed_elsewhere = self.deposit_committed.get(sender, 0)
+        if existing == sender:
+            committed_elsewhere -= previous
         escrowed = self._escrow_of(sender)
-        if escrowed <= 0:
+        allocatable = escrowed - committed_elsewhere
+        if allocatable <= 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Escrow settlement tokens to this contract first')
 
         self.deposit_owner[slug] = sender
-        self.deposit_amount[slug] = u256(escrowed)
+        self.deposit_amount[slug] = u256(allocatable)
+        self.deposit_committed[sender] = u256(committed_elsewhere + allocatable)
 
     @gl.public.write
     def submit_claim(
@@ -255,8 +292,11 @@ class SlaClaimJudge(gl.Contract):
         if self.open_claims.get(slug, 0) > 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has open claims')
 
-        amount = self._escrow_of(owner)
+        # Only this slug's own allocated share, never the owner's whole escrow
+        # bucket — a bucket the owner may also be backing other slugs from.
+        amount = self.deposit_amount.get(slug, 0)
         self.deposit_amount[slug] = u256(0)
+        self.deposit_committed[owner] = u256(max(0, self.deposit_committed.get(owner, 0) - amount))
         if amount > 0:
             self._release(owner, owner, amount)
 
@@ -342,10 +382,14 @@ class SlaClaimJudge(gl.Contract):
             return
 
         provider = self.deposit_owner.get(claim.slug)
-        # Re-read rather than trusting `deposit_amount`: liabilities can be
-        # concurrent, and the ceiling that matters is what is actually there at
-        # credit time, not what was there when the deposit was advertised.
-        available = self._escrow_of(provider) if provider is not None else 0
+        # Re-read rather than trusting `deposit_amount` alone: liabilities can
+        # be concurrent, and the ceiling that matters is what is actually
+        # there at credit time, not what was there when the deposit was
+        # advertised. Also capped at this slug's own allocated share, since
+        # the escrow itself is a bucket shared with whatever else the same
+        # owner backs — the slug can never be credited more than it was ever
+        # advertised as holding, however much escrow the owner still has.
+        available = min(self._escrow_of(provider), self.deposit_amount.get(claim.slug, 0)) if provider is not None else 0
 
         plan = settlement_for(
             outcome=claim.outcome,
@@ -363,8 +407,19 @@ class SlaClaimJudge(gl.Contract):
             if plan['bounty'] > 0:
                 self._release(provider, resolver, plan['bounty'])
             self.deposit_amount[claim.slug] = u256(max(0, available - plan['from_provider']))
+            self.deposit_committed[provider] = u256(
+                max(0, self.deposit_committed.get(provider, 0) - plan['from_provider'])
+            )
         elif plan['from_consumer'] > 0:
             self._release(claim.claimant, resolver, plan['from_consumer'])
+
+        # Whatever the bond didn't pay comes back to the claimant. The token
+        # has no owner-side unescrow (see `SettlementToken.release`), so a
+        # self-release — owner and recipient the same account — is how a bond
+        # that was never spent, or only partly spent, stops being encumbered.
+        surplus = claim.bond - plan['from_consumer']
+        if surplus > 0:
+            self._release(claim.claimant, claim.claimant, surplus)
 
     def _token(self):
         return gl.get_contract_at(Address(self.token_address))
