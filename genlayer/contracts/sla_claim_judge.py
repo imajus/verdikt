@@ -190,8 +190,11 @@ class SlaClaimJudge(gl.Contract):
 
         def fetch() -> str:
             res = gl.nondet.web.get(url)
+            # The proxy answers 404 both for a slug it has never heard of and
+            # for one that publishes no `sla` record. Neither is judgeable and
+            # the claimant can act on either, so they share a message.
             if res.status == 404:
-                raise gl.vm.UserError(f'{ERROR_EXTERNAL} Unknown service: {slug}')
+                raise gl.vm.UserError(f'{ERROR_EXPECTED} No SLA published for {slug}')
             if 400 <= res.status < 500:
                 raise gl.vm.UserError(f'{ERROR_EXTERNAL} SLA read returned {res.status}')
             if res.status >= 500:

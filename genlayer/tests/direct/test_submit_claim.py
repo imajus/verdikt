@@ -78,11 +78,12 @@ def test_semantic_clause_without_criteria_refuses(direct_vm, judge, direct_alice
         judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
 
 
-def test_unknown_service_refuses(direct_vm, judge, direct_alice):
+def test_service_without_an_sla_refuses(direct_vm, judge, direct_alice):
+    """The proxy answers 404 for an unknown slug and for one with no `sla` record alike."""
     direct_vm.sender = direct_alice
     mock_sla(direct_vm, status=404)
 
-    with direct_vm.expect_revert('Unknown service'):
+    with direct_vm.expect_revert('No SLA published'):
         judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
 
 

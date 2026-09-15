@@ -234,3 +234,88 @@ describe('the paid leg', () => {
     expect(upstreamFetch).not.toHaveBeenCalled();
   });
 });
+
+describe('the SLA read endpoint', () => {
+  /** @param {ProxyDeps} deps */
+  const readSla = (deps, slug = 'weather') => call(deps, { method: 'GET', url: `/internal/sla/${slug}` });
+
+  it('relays the SLA exactly as ENS holds it, unparsed', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      slug: 'weather',
+      sla: SERVICE_RECORD.sla,
+      url: 'https://provider.example/weather'
+    });
+    // A read, not a relay: the provider's endpoint is never called.
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('404s a service that publishes no sla record', async () => {
+    const { deps } = harness({ serviceRecord: { sla: null } });
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('no_sla');
+  });
+
+  // A judge that read an ENS outage as an absent SLA would refuse claims that
+  // are perfectly valid, so the two answers must stay distinguishable.
+  it('503s when ENS is unreachable, rather than reporting no SLA', async () => {
+    const { deps } = harness({ ensError: new Error('rpc down') });
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toBe('naming_layer_unavailable');
+  });
+
+  it('404s a slug that could never be a service, without touching ENS', async () => {
+    const { deps } = harness();
+    const response = await readSla(deps, 'Weather');
+    expect(response.statusCode).toBe(404);
+    expect(deps.resolveServiceRecord).not.toHaveBeenCalled();
+  });
+
+  it('is matched ahead of the service catch-all, so `internal` is never a slug', async () => {
+    const { deps, upstreamFetch } = harness();
+    await readSla(deps);
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('answers GET only', async () => {
+    const { deps } = harness();
+    const response = await call(deps, { method: 'POST', url: '/internal/sla/weather', payload: {} });
+    expect(response.statusCode).toBe(404);
+  });
+});
+
+// `/internal/` is reserved as a namespace, not route by route: in the path
+// form the service catch-all would otherwise read `internal` as a slug.
+describe('the internal namespace', () => {
+  it('404s an unknown internal route instead of relaying to a service called `internal`', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await call(deps, { method: 'GET', url: '/internal/evidence/0xabc' });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('unknown_internal_route');
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  // Only the path form has a slug to disambiguate. On a service host every
+  // path is the provider's, so reserving one here would make an upstream path
+  // unreachable behind a proxy 404 the agent cannot tell from the provider's.
+  it('relays `/internal/...` on a service host instead of reserving it', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await call(deps, {
+      method: 'GET',
+      url: '/internal/status',
+      headers: { host: 'weather.verdikt.bond' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/internal/status');
+  });
+
+  it('relays the proxy’s own paths on a service host too', async () => {
+    const { deps, upstreamFetch } = harness();
+    await call(deps, { method: 'GET', url: '/healthz', headers: { host: 'weather.verdikt.bond' } });
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/healthz');
+  });
+});
