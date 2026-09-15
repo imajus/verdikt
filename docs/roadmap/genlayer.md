@@ -571,3 +571,21 @@ being able to look at. Both halves read back what they wrote.
   to the filing window or to the deposit cooldown that has to outlast both.
   [#83](https://github.com/imajus/verdikt/issues/83),
   [#93](https://github.com/imajus/verdikt/issues/93).
+
+## Sources
+
+- GenLayer docs — https://docs.genlayer.com (Intelligent Contracts intro,
+  Equivalence Principle, non-determinism, web access, image processing,
+  validators & roles, tooling setup, deploying)
+- GenLayer whitepaper — https://genlayer.com/whitepaper
+- Agent Tank hackathon portal — https://portal.genlayer.foundation/agent-tank/
+  and `/agent-tank/hackathon`, submission form at `/agent-tank/hackathon/submit`
+- `genlayer-project-boilerplate` — https://github.com/genlayerlabs/genlayer-project-boilerplate
+- Competitor projects: Uptime (https://uptime-rouge.vercel.app/,
+  https://github.com/genlayer-foundation/uptime), Internet Court
+  (https://internetcourt.org/, an agent-skill router whose own adjudication
+  layer routes to GenLayer Intelligent Contracts), Apolo
+  (https://apolo-protocol.xyz/), MergeProof (https://mergeproof.com/),
+  Recourse (https://github.com/A-Raphie/recourse), ASSAY
+  (https://github.com/Franlinozz/ASSAY)
+
