@@ -3,6 +3,7 @@
 from tests.direct.conftest import (
     CLAUSE_ID,
     CRITERIA,
+    PAID_AMOUNT,
     REQUEST_ID,
     SIGNATURE,
     SLUG,
@@ -16,7 +17,7 @@ def test_submit_claim_freezes_the_criteria(direct_vm, judge, direct_alice):
     direct_vm.sender = direct_alice
     mock_sla(direct_vm)
 
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
     claim = judge.get_claim(REQUEST_ID, CLAUSE_ID)
     assert claim['criteria'] == CRITERIA
@@ -37,8 +38,8 @@ def test_claim_key_is_composite(direct_vm, judge, direct_alice):
         ],
     })
 
-    judge.submit_claim(REQUEST_ID, 'first', SLUG, SIGNATURE)
-    judge.submit_claim(REQUEST_ID, 'second', SLUG, SIGNATURE)
+    judge.submit_claim(REQUEST_ID, 'first', SLUG, SIGNATURE, PAID_AMOUNT)
+    judge.submit_claim(REQUEST_ID, 'second', SLUG, SIGNATURE, PAID_AMOUNT)
 
     assert judge.get_claim(REQUEST_ID, 'first')['criteria'] == 'A'
     assert judge.get_claim(REQUEST_ID, 'second')['criteria'] == 'B'
@@ -48,10 +49,10 @@ def test_claim_key_is_composite(direct_vm, judge, direct_alice):
 def test_duplicate_claim_refuses(direct_vm, judge, direct_alice):
     direct_vm.sender = direct_alice
     mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
     with direct_vm.expect_revert('Claim already exists'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_unknown_clause_refuses(direct_vm, judge, direct_alice):
@@ -59,7 +60,7 @@ def test_unknown_clause_refuses(direct_vm, judge, direct_alice):
     mock_sla(direct_vm)
 
     with direct_vm.expect_revert('is not in the SLA'):
-        judge.submit_claim(REQUEST_ID, 'no-such-clause', SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, 'no-such-clause', SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_deterministic_clause_refuses(direct_vm, judge, direct_alice):
@@ -68,7 +69,7 @@ def test_deterministic_clause_refuses(direct_vm, judge, direct_alice):
     mock_sla(direct_vm, sla=sla_document(clause_type='latency'))
 
     with direct_vm.expect_revert('is not semantic'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_semantic_clause_without_criteria_refuses(direct_vm, judge, direct_alice):
@@ -76,7 +77,7 @@ def test_semantic_clause_without_criteria_refuses(direct_vm, judge, direct_alice
     mock_sla(direct_vm, sla=sla_document(criteria=None))
 
     with direct_vm.expect_revert('declares no criteria'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_service_without_an_sla_refuses(direct_vm, judge, direct_alice):
@@ -85,7 +86,7 @@ def test_service_without_an_sla_refuses(direct_vm, judge, direct_alice):
     mock_sla(direct_vm, status=404)
 
     with direct_vm.expect_revert('No SLA published'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_proxy_outage_is_transient_not_expected(direct_vm, judge, direct_alice):
@@ -94,7 +95,7 @@ def test_proxy_outage_is_transient_not_expected(direct_vm, judge, direct_alice):
     mock_sla(direct_vm, status=503)
 
     with direct_vm.expect_revert('[TRANSIENT]'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE, PAID_AMOUNT)
 
 
 def test_a_claim_needs_a_disclosure_signature(direct_vm, judge, direct_alice):
@@ -103,4 +104,4 @@ def test_a_claim_needs_a_disclosure_signature(direct_vm, judge, direct_alice):
     mock_sla(direct_vm)
 
     with direct_vm.expect_revert('Disclosure signature'):
-        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, '')
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, '', PAID_AMOUNT)
