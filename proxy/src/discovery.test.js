@@ -26,7 +26,7 @@ const listing = (overrides = {}) =>
         { id: 'price', type: 'priceRange', minMinorUnits: '1000', maxMinorUnits: '10000', asset: 'USDC' }
       ]
     },
-    published: { conformance: 1000, availability: 958 },
+    published: { conformance: 1000, availability: 958, semanticConformance: null },
     unpublished: { conformance: 1000, availability: 958, counts: { pass: 0, fail: 0, down: 0, total: 0 } },
     history: [],
     ...overrides
@@ -83,7 +83,7 @@ describe('discover — filtering', () => {
   // caveat beside it. An agent asking for minConformance=990 is asking for
   // evidence, and "no evidence yet" is not evidence.
   it('excludes an unpublished score from a minimum rather than passing it', () => {
-    const unranked = [listing({ published: { conformance: null, availability: null } })];
+    const unranked = [listing({ published: { conformance: null, availability: null, semanticConformance: null } })];
     expect(find({ minConformance: '1' }, unranked).count).toBe(0);
     expect(find({}, unranked).count).toBe(1);
   });
@@ -118,7 +118,7 @@ describe('the routes', () => {
   const deps = (marketplace) => ({
     config,
     marketplace,
-    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
+    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }), getVerdict: async () => null },
     resolveServiceRecord: async () => {
       throw new Error('unused');
     }

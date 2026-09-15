@@ -60,6 +60,14 @@ contract VerdiktSubnameRegistrar {
     ISubnameRegistry public immutable SUBNAME_REGISTRY;
     IAuthorizingResolver public immutable RESOLVER;
     address public immutable SCORE_WRITER;
+    /// @dev The `semanticConformance` signer (`scripts/publish-semantic-scores.mjs`),
+    ///      an EOA rather than a contract like `SCORE_WRITER` — GenLayer scoring
+    ///      predates a deployed writer contract for it. Zero is a valid value:
+    ///      a registrar deployed before that signer existed grants nothing for
+    ///      the key and `claim` skips it, the same "reads back null, not a gap"
+    ///      state `docs/roadmap/genlayer.md` already documents for subnames
+    ///      minted before the key existed.
+    address public immutable SEMANTIC_SCORE_WRITER;
     bytes32 public immutable PARENT_NODE;
     uint64 public immutable DURATION_SECONDS;
 
@@ -74,13 +82,15 @@ contract VerdiktSubnameRegistrar {
 
     /// @notice A slug was claimed: subname minted, `sla`/`url` granted to the
     ///         claimant, `conformance`/`availability` granted to the score
-    ///         writer, and the address record set to `payTo`.
+    ///         writer, `semanticConformance` granted to the semantic writer
+    ///         (if one is configured), and the address record set to `payTo`.
     event SubnameClaimed(string slug, bytes32 indexed node, address indexed claimant, address payTo);
 
     constructor(
         address subnameRegistry,
         address resolver,
         address scoreWriter,
+        address semanticScoreWriter,
         string memory parentName,
         uint64 durationSeconds
     ) {
@@ -91,6 +101,7 @@ contract VerdiktSubnameRegistrar {
         SUBNAME_REGISTRY = ISubnameRegistry(subnameRegistry);
         RESOLVER = IAuthorizingResolver(resolver);
         SCORE_WRITER = scoreWriter;
+        SEMANTIC_SCORE_WRITER = semanticScoreWriter;
         PARENT_NODE = EnsNamehash.namehash(parentName);
         DURATION_SECONDS = durationSeconds;
         _parentDnsSuffix = DnsEncode.dnsEncode(parentName);
@@ -125,6 +136,9 @@ contract VerdiktSubnameRegistrar {
         RESOLVER.authorizeTextRoles(dnsName, "url", msg.sender, true);
         RESOLVER.authorizeTextRoles(dnsName, "conformance", SCORE_WRITER, true);
         RESOLVER.authorizeTextRoles(dnsName, "availability", SCORE_WRITER, true);
+        if (SEMANTIC_SCORE_WRITER != address(0)) {
+            RESOLVER.authorizeTextRoles(dnsName, "semanticConformance", SEMANTIC_SCORE_WRITER, true);
+        }
         RESOLVER.setAddr(node, payTo);
 
         emit SubnameClaimed(slug, node, msg.sender, payTo);

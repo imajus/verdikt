@@ -14,6 +14,7 @@ export {
   resolveServiceRecord,
   serviceName,
   setTextCalldata,
+  writeSemanticScore,
   writeServiceScores
 } from './ens.js';
 export { DEFAULT_ARC_RPC, arcTestnet, createRegistryReader, registryAbi } from './arc.js';

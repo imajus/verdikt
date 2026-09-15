@@ -57,6 +57,24 @@
               "maxMinorUnits": { "type": "string", "minLength": 1, "maxLength": 78 },
               "asset": { "type": "string", "minLength": 1, "maxLength": 16 }
             }
+          },
+          {
+            "title": "semantic clause",
+            "description": "A promise about what the response *says*, judged on dispute by a GenLayer Intelligent Contract rather than per call by CRE (docs/roadmap/genlayer.md). `evaluate` recognises it and always passes it: the deterministic engine is pure by invariant and cannot judge meaning, and refusing to parse the document would be worse — it would fall back to status-only and lose every deterministic clause the provider declared alongside it.",
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id", "type", "criteria"],
+            "properties": {
+              "id": { "type": "string", "minLength": 1, "maxLength": 64 },
+              "description": { "type": "string", "maxLength": 256 },
+              "type": { "const": "semantic" },
+              "criteria": {
+                "description": "The binding judgment text, in plain language. Its own field rather than a reuse of `description`, which stays decorative on every clause type including this one: a reader has to be able to tell what the provider promised from what it merely explained. Frozen into the claim at filing time, so editing the SLA mid-dispute cannot change what is being judged.",
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 2048
+              }
+            }
           }
         ]
       }

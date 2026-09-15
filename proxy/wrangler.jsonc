@@ -7,7 +7,10 @@
   // Buffer, used by jwt.js and router.js's constant-time bearer check.
   "compatibility_flags": ["nodejs_compat"],
   "durable_objects": {
-    "bindings": [{ "name": "PENDING_VERIFICATION", "class_name": "PendingVerification" }]
+    "bindings": [
+      { "name": "PENDING_VERIFICATION", "class_name": "PendingVerification" },
+      { "name": "EVIDENCE_CACHE", "class_name": "EvidenceCache" }
+    ]
   },
   // Non-secret config, read by loadConfig (proxy/src/config.js) the same way
   // `.env` is. `CRE_TRIGGER_PRIVATE_KEY` and `CRE_CALLBACK_TOKEN` are NOT
@@ -60,7 +63,11 @@
     // object is in-memory for the life of one verification — but the
     // storage backend still has to be declared, and SQLite is what a
     // Workers Free plan can run.
-    { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] }
+    { "tag": "v1", "new_sqlite_classes": ["PendingVerification"] },
+    // EvidenceCache, unlike the class above, genuinely persists: an envelope
+    // outlives the request that produced it by up to the filing window, and is
+    // re-read by several GenLayer validators. It expires itself with an alarm.
+    { "tag": "v2", "new_sqlite_classes": ["EvidenceCache"] }
   ],
   // This wildcard catches every subdomain, including the one that is not a
   // service: `www`. That is handled at the edge, NOT here — a Single Redirect

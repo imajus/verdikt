@@ -16,6 +16,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkOwnership, decodeChallenge } from './challenge.js';
 import { discover, toListing } from './discovery.js';
+import { EVIDENCE_AUTH_HEADER, authorizeDisclosure, buildEnvelope } from './evidence.js';
 import { assertRelayableUrl, bodyToHex, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
@@ -119,18 +120,27 @@ const json = (body, status = 200, headers = {}) =>
  */
 export function routeOf(request, config) {
   const url = new URL(request.url);
-  const host = url.hostname.toLowerCase();
-  const suffix = `.${config.publicHost.toLowerCase()}`;
-
-  if (host.endsWith(suffix)) {
-    const slug = host.slice(0, -suffix.length);
-    if (!SLUG.test(slug)) return null;
-    return { slug, rest: url.pathname.replace(/^\/+/, '') };
-  }
+  const fromHost = hostSlug(url, config);
+  if (fromHost) return { slug: fromHost, rest: url.pathname.replace(/^\/+/, '') };
 
   const [, slug, ...rest] = url.pathname.split('/');
   if (!slug || !SLUG.test(slug)) return null;
   return { slug, rest: rest.join('/') };
+}
+
+/**
+ * The slug when the request arrived on `<slug>.verdikt.bond`, else null.
+ *
+ * @param {URL} url
+ * @param {ProxyConfig} config
+ * @returns {string | null}
+ */
+function hostSlug(url, config) {
+  const host = url.hostname.toLowerCase();
+  const suffix = `.${config.publicHost.toLowerCase()}`;
+  if (!host.endsWith(suffix)) return null;
+  const slug = host.slice(0, -suffix.length);
+  return SLUG.test(slug) ? slug : null;
 }
 
 /**
@@ -150,44 +160,21 @@ export async function handleRequest(request, deps = {}) {
   // a different job with a different failure mode. Absent means /services 503s
   // instead of the relay refusing to start.
   const marketplace = deps.marketplace ?? null;
+  // Absent means a paid call caches nothing and the evidence endpoint says so.
+  // Not fatal — the deterministic leg is unaffected — but no semantic claim
+  // over a call made while it was absent can ever be judged.
+  const evidence = deps.evidence ?? null;
 
   const url = new URL(request.url);
 
-  if (request.method === 'GET' && url.pathname === '/healthz') {
-    return json({ ok: true });
-  }
-
-  // The machine-facing marketplace (Specification.md §5, stretch 2). Exact
-  // routes, so they are matched ahead of the service catch-all below.
-  if (request.method === 'GET' && url.pathname === '/services') {
-    if (!marketplace) {
-      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
-    }
-    try {
-      const { services } = await marketplace();
-      return json(discover(services, Object.fromEntries(url.searchParams), config.publicHost));
-    } catch (error) {
-      return json({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message }, 503);
-    }
-  }
-
-  const servicesSlug = request.method === 'GET' ? url.pathname.match(/^\/services\/([^/]+)$/) : null;
-  if (servicesSlug) {
-    const slug = servicesSlug[1];
-    if (!marketplace) {
-      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
-    }
-    const { services } = await marketplace();
-    const found = services.find((listing) => listing.slug === slug);
-    if (!found) return json({ error: 'unknown_service', slug }, 404);
-    return json(toListing(found, config.publicHost));
-  }
-
-  // Where the enclave pushes a finished verification (docs/spikes/cre.md,
-  // CRE-9). An exact route, so it is matched ahead of the service catch-all
-  // and can never be mistaken for a slug.
-  if (request.method === 'POST' && url.pathname === '/internal/verification-callback') {
-    return handleCallback(request, { config, workflow });
+  // The proxy's own routes answer on the apex and in the path form only. On
+  // `<slug>.verdikt.bond` every path belongs to the service, so a path
+  // reserved here is a provider path made unreachable: an agent calling
+  // `weather.verdikt.bond/internal/status` would get a proxy 404 rather than
+  // the provider's answer. Only the path form has a slug to disambiguate.
+  if (!hostSlug(url, config)) {
+    const own = await proxyRoute(request, url, { config, marketplace, workflow, resolve, registry, evidence });
+    if (own) return own;
   }
 
   const route = routeOf(request, config);
@@ -273,10 +260,84 @@ export async function handleRequest(request, deps = {}) {
 
   const paymentHeader = paymentHeaderOf(request.headers);
   if (paymentHeader) {
-    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body });
+    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body, evidence });
   }
 
   return passthrough({ request, upstream, body, doFetch, config });
+}
+
+/**
+ * Verdikt's own surface: health, the machine-facing marketplace
+ * (Specification.md §5, stretch 2), and the `/internal/` namespace. Returns
+ * null when the path is none of them, which is the signal to relay it.
+ *
+ * Reached only off a service host, so a slug can never be shadowed by one of
+ * these, and — in the path form — `internal` can never be read as a slug.
+ *
+ * @param {Request} request
+ * @param {URL} url
+ * @param {{
+ *   config: ProxyConfig,
+ *   marketplace: (() => Promise<Marketplace>)|null,
+ *   workflow: WorkflowClient|null,
+ *   resolve: typeof resolveServiceRecord,
+ *   registry: Pick<RegistryReader, 'getVerdict'>,
+ *   evidence: EvidenceStore|null
+ * }} deps
+ * @returns {Promise<Response|null>}
+ */
+async function proxyRoute(request, url, { config, marketplace, workflow, resolve, registry, evidence }) {
+  if (request.method === 'GET' && url.pathname === '/healthz') {
+    return json({ ok: true });
+  }
+
+  if (request.method === 'GET' && url.pathname === '/services') {
+    if (!marketplace) {
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
+    }
+    try {
+      const { services } = await marketplace();
+      return json(discover(services, Object.fromEntries(url.searchParams), config.publicHost));
+    } catch (error) {
+      return json({ error: 'marketplace_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+    }
+  }
+
+  const servicesSlug = request.method === 'GET' ? url.pathname.match(/^\/services\/([^/]+)$/) : null;
+  if (servicesSlug) {
+    const slug = servicesSlug[1];
+    if (!marketplace) {
+      return json({ error: 'discovery_unavailable', detail: 'no marketplace reader configured' }, 503);
+    }
+    const { services } = await marketplace();
+    const found = services.find((listing) => listing.slug === slug);
+    if (!found) return json({ error: 'unknown_service', slug }, 404);
+    return json(toListing(found, config.publicHost));
+  }
+
+  if (url.pathname !== '/internal' && !url.pathname.startsWith('/internal/')) return null;
+
+  // Where the enclave pushes a finished verification (docs/spikes/cre.md,
+  // CRE-9).
+  if (request.method === 'POST' && url.pathname === '/internal/verification-callback') {
+    return handleCallback(request, { config, workflow });
+  }
+
+  const slaSlug = request.method === 'GET' ? url.pathname.match(/^\/internal\/sla\/([^/]+)$/) : null;
+  if (slaSlug) {
+    return handleSlaRead(slaSlug[1], { config, resolve });
+  }
+
+  const evidenceId = request.method === 'GET' ? url.pathname.match(/^\/internal\/evidence\/([^/]+)$/) : null;
+  if (evidenceId) {
+    return handleEvidenceRead(evidenceId[1], request, { config, registry, evidence });
+  }
+
+  // `/internal/` is reserved as a whole, not route by route: without it the
+  // path form's catch-all reads `internal` as a slug and relays to whatever
+  // service is registered under that name — so a POST to a GET-only internal
+  // route, or a typo in one, became a proxied call.
+  return json({ error: 'unknown_internal_route', detail: `${request.method} ${url.pathname}` }, 404);
 }
 
 /**
@@ -376,10 +437,11 @@ function failureDetailHeaders(clauses) {
  *   newRequestId: () => string,
  *   doFetch: typeof fetch,
  *   config: ProxyConfig,
- *   body: ArrayBuffer|undefined
+ *   body: ArrayBuffer|undefined,
+ *   evidence: EvidenceStore|null
  * }} args
  */
-async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body }) {
+async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body, evidence }) {
   if (!workflow) {
     return json({
       error: 'verification_unavailable',
@@ -462,6 +524,30 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     );
   }
 
+  // Cached before the response is built, and never allowed to break it: the
+  // agent has paid, and a storage hiccup must not cost it the payload it bought.
+  // A call with no verdict (the 402 replay and 4xx carve-outs) is skipped —
+  // there is no verdict for a claim to be bound to, so evidence for it could
+  // never be disclosed anyway.
+  if (evidence && result.outcome) {
+    try {
+      await evidence.store(
+        requestId,
+        buildEnvelope({
+          requestId,
+          slug: record.slug,
+          method: request.method,
+          url: upstream.toString(),
+          requestBody: body,
+          result
+        }),
+        config.evidenceFilingWindowMs
+      );
+    } catch (error) {
+      console.warn(`[verdikt] evidence not cached for ${requestId}: ${/** @type {Error} */ (error).message}`);
+    }
+  }
+
   const headers = {
     'x-verdikt-verdict': result.outcome ?? 'NONE',
     'x-verdikt-mode': result.mode,
@@ -482,6 +568,100 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
   // SLA failure that `evaluate` has already judged — turning it into a proxy
   // error would hide from the agent what it actually bought.
   return new Response(result.body, { status: result.status ?? 502, headers: { ...result.headers, ...headers } });
+}
+
+/**
+ * The service's SLA, over HTTP, for a caller that cannot import the SDK.
+ *
+ * `SlaClaimJudge` runs inside GenVM and has no way to reach `packages/sdk` or
+ * an ENS library, so this exposes the one `resolveServiceRecord` call it needs
+ * to freeze the disputed clause's `criteria` at claim-open time
+ * (docs/roadmap/genlayer.md).
+ *
+ * Deliberately unauthenticated. The `sla` and `url` text records are public on
+ * Sepolia and readable by anyone with an RPC endpoint; a token here would
+ * protect nothing and would have to be shared with every GenLayer validator,
+ * which is the opposite of a secret. `/internal/` is the namespace for
+ * machine-facing routes, not a claim that they are private — the evidence
+ * endpoint next door is gated because what it serves is genuinely not public.
+ *
+ * It adds no ENS logic of its own: `packages/sdk/ens.js` stays the only file
+ * that knows ENS exists.
+ *
+ * @param {string} slug
+ * @param {{ config: ProxyConfig, resolve: typeof resolveServiceRecord }} deps
+ */
+async function handleSlaRead(slug, { config, resolve }) {
+  if (!SLUG.test(slug)) {
+    return json({ error: 'unknown_service', slug, detail: 'not a valid service slug' }, 404);
+  }
+
+  /** @type {ServiceRecord} */
+  let record;
+  try {
+    record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs });
+  } catch (error) {
+    // Distinguished from "no SLA published" on purpose: a judge that reads an
+    // ENS outage as an absent SLA would refuse claims that are perfectly valid.
+    return json({ error: 'naming_layer_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
+
+  if (!record.sla) {
+    return json({ error: 'no_sla', slug, detail: `${slug} publishes no sla record` }, 404);
+  }
+
+  // `sla` is relayed exactly as ENS holds it — a raw, unparsed string. Parsing
+  // belongs to @verdikt/sla, which the proxy must not depend on, and the judge
+  // needs the bytes the provider actually published rather than a re-serialised
+  // copy of them.
+  return json({ slug, sla: record.sla, url: record.url });
+}
+
+/**
+ * The evidence envelope for one paid call, disclosed to the payer that bought
+ * it and to whoever that payer authorises — in practice, GenLayer's validators
+ * (docs/roadmap/genlayer.md, #82).
+ *
+ * Three answers are deliberately distinct, because the judge treats them
+ * differently. 404 means there is nothing to judge and resolves the claim
+ * `UNDETERMINED`; 401/403 mean the caller has not shown it may look; 503 means
+ * the proxy is misconfigured and the claimant should come back, which the judge
+ * reads as `[TRANSIENT]` rather than as a finding against anyone.
+ *
+ * @param {string} requestId
+ * @param {Request} request
+ * @param {{ config: ProxyConfig, registry: Pick<RegistryReader, 'getVerdict'>, evidence: EvidenceStore|null }} deps
+ */
+async function handleEvidenceRead(requestId, request, { config, registry, evidence }) {
+  if (!evidence) {
+    return json(
+      { error: 'evidence_unavailable', detail: 'this proxy is not configured with an evidence store' },
+      503
+    );
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(requestId)) {
+    return json({ error: 'bad_request_id', detail: 'a request id is 32 bytes as 0x-prefixed hex' }, 400);
+  }
+
+  const gate = await authorizeDisclosure({
+    requestId,
+    signature: request.headers.get(EVIDENCE_AUTH_HEADER),
+    registry
+  });
+  if (!gate.ok) {
+    return json({ error: gate.error, detail: gate.detail }, gate.status);
+  }
+
+  const envelope = await evidence.read(requestId, config.evidenceAdjudicationWindowMs);
+  if (!envelope) {
+    // Never cached, or the window closed. Both are "no evidence", and the
+    // judge must read that as undecidable rather than as a breach — a provider
+    // that loses a dispute because a cache expired is being convicted of
+    // Verdikt's bookkeeping.
+    return json({ error: 'no_evidence', requestId, detail: 'no evidence is cached for this request' }, 404);
+  }
+
+  return json(envelope);
 }
 
 /**

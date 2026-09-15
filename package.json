@@ -18,7 +18,8 @@
     "spike:ens": "node --env-file-if-exists=.env scripts/spike-ens.mjs",
     "setup:ens": "node --env-file-if-exists=.env scripts/setup-ens.mjs",
     "demo": "node --env-file-if-exists=.env scripts/demo.mjs",
-    "onboard": "node --env-file-if-exists=.env scripts/onboard-service.mjs"
+    "onboard": "node --env-file-if-exists=.env scripts/onboard-service.mjs",
+    "publish:semantic": "node --env-file-if-exists=.env scripts/publish-semantic-scores.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

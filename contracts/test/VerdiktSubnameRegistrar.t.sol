@@ -80,6 +80,7 @@ contract VerdiktSubnameRegistrarTest is Test {
     RegistryStub internal registry;
     ResolverStub internal resolver;
     address internal scoreWriter = makeAddr("scoreWriter");
+    address internal semanticScoreWriter = makeAddr("semanticScoreWriter");
     address internal claimant = makeAddr("claimant");
     address internal payTo = makeAddr("payTo");
 
@@ -88,8 +89,9 @@ contract VerdiktSubnameRegistrarTest is Test {
     function setUp() public {
         registry = new RegistryStub();
         resolver = new ResolverStub();
-        registrar =
-            new VerdiktSubnameRegistrar(address(registry), address(resolver), scoreWriter, PARENT_NAME, DURATION);
+        registrar = new VerdiktSubnameRegistrar(
+            address(registry), address(resolver), scoreWriter, semanticScoreWriter, PARENT_NAME, DURATION
+        );
     }
 
     function _node(string memory slug) internal pure returns (bytes32) {
@@ -147,6 +149,32 @@ contract VerdiktSubnameRegistrarTest is Test {
         assertTrue(resolver.textGrant(keccak256(dnsName), keccak256("availability"), scoreWriter));
         assertFalse(resolver.textGrant(keccak256(dnsName), keccak256("sla"), scoreWriter));
         assertFalse(resolver.textGrant(keccak256(dnsName), keccak256("url"), scoreWriter));
+    }
+
+    function test_grantsSemanticConformanceToTheSemanticScoreWriterOnly() public {
+        bytes memory dnsName = registrar.dnsNameFor("weather");
+        vm.prank(claimant);
+        registrar.claim("weather", payTo);
+
+        assertTrue(resolver.textGrant(keccak256(dnsName), keccak256("semanticConformance"), semanticScoreWriter));
+        assertFalse(resolver.textGrant(keccak256(dnsName), keccak256("semanticConformance"), scoreWriter));
+        assertFalse(resolver.textGrant(keccak256(dnsName), keccak256("semanticConformance"), claimant));
+    }
+
+    /// @dev A registrar deployed before the semantic signer existed (zero
+    ///      address) must not try to authorize the zero address — `claim`
+    ///      just skips the grant, same as a pre-existing subname reading back
+    ///      `null` for the key.
+    function test_skipsSemanticGrantWhenNoSemanticScoreWriterIsConfigured() public {
+        VerdiktSubnameRegistrar noSemanticRegistrar = new VerdiktSubnameRegistrar(
+            address(registry), address(resolver), scoreWriter, address(0), PARENT_NAME, DURATION
+        );
+        bytes memory dnsName = noSemanticRegistrar.dnsNameFor("weather");
+
+        vm.prank(claimant);
+        noSemanticRegistrar.claim("weather", payTo);
+
+        assertFalse(resolver.textGrant(keccak256(dnsName), keccak256("semanticConformance"), address(0)));
     }
 
     function test_setsTheAddressRecordToPayTo() public {

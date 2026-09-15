@@ -88,6 +88,9 @@ export const SERVICE_RECORD = Object.freeze({
   sla: JSON.stringify(HONEST_SLA),
   conformance: 1000,
   availability: 1000,
+  // Null, not 1000: the fixture subname predates the key and nobody has
+  // published one. "Nothing was disputed" is a claim, and this is not it.
+  semanticConformance: null,
   owner: null,
   backend: 'fixture',
   resolvedAt: 0
