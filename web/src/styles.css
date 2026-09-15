@@ -1347,6 +1347,7 @@ verdikt-demo-chat { display: block; max-width: 70ch; font-size: 18.15px; }
 .semantic.breach { color: var(--poor); }
 .semantic.met { color: var(--muted); }
 .semantic.open { color: var(--down); }
+.semantic.undetermined { color: var(--fair); }
 .ledger .reason {
   display: block;
   margin-top: 0.2rem;

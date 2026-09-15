@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatWhen, scoreBand } from './format.js';
+import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatSettlementUnits, formatWhen, scoreBand } from './format.js';
 import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
@@ -81,6 +81,9 @@ const semanticMark = (settlements) => {
   }
   const open = settlements.filter((settlement) => !settlement.resolved);
   if (open.length > 0) return html`<span class="semantic open" title="A semantic claim is open against this call.">disputed</span>`;
+  if (settlements[0].outcome !== 'MET') {
+    return html`<span class="semantic undetermined" title="Disputed on meaning; the validators reached no determination.">semantic ${settlements[0].outcome}</span>`;
+  }
   return html`<span class="semantic met" title="Disputed on meaning and dismissed.">semantic ${settlements[0].outcome}</span>`;
 };
 
@@ -424,7 +427,7 @@ const semanticSection = (listing) => {
       ${listing.semantic.length === 0
         ? nothing
         : html`<div class="scroll"><table class="ledger"><thead><tr><th>Request</th><th>Clause</th><th>Outcome</th><th class="num">Paid for</th><th class="num">Compensated</th></tr></thead><tbody>
-            ${listing.semantic.map((settlement) => html`<tr class="verdict"><td><code title=${settlement.requestId}>${settlement.requestId.slice(0, 10)}…</code></td><td><code>${settlement.clauseId}</code></td><td>${semanticMark([settlement])}${settlement.reasoning ? html`<small class="reason">${settlement.reasoning}</small>` : nothing}</td><td class="num">${figure(formatMinorUsdc(settlement.paidAmount))}</td><td class="num">${settlement.compensation > 0n ? figure(formatMinorUsdc(settlement.compensation)) : html`<span class="muted">—</span>`}</td></tr>`)}
+            ${listing.semantic.map((settlement) => html`<tr class="verdict"><td><code title=${settlement.requestId}>${settlement.requestId.slice(0, 10)}…</code></td><td><code>${settlement.clauseId}</code></td><td>${semanticMark([settlement])}${settlement.reasoning ? html`<small class="reason">${settlement.reasoning}</small>` : nothing}</td><td class="num">${figure(formatMinorUsdc(settlement.paidAmount))}</td><td class="num">${settlement.compensation > 0n ? figure(formatSettlementUnits(settlement.compensation)) : html`<span class="muted">—</span>`}</td></tr>`)}
           </tbody></table></div>`}
     </section>`;
 };
