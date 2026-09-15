@@ -16,6 +16,7 @@ import {
   TxStatus,
   bytesToHex,
   decodeJson,
+  getHeader,
   getNetwork,
   handlerInTee,
   prepareReportRequest,
@@ -27,6 +28,7 @@ import { encodeAbiParameters, keccak256, parseAbiParameters, toHex, type Address
 
 import { requestBodyField } from '@verdikt/cre/http-request';
 import { failedClauseOf, judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
+import { relayPayload } from '@verdikt/cre/relay';
 import { outcomeToOrdinal } from '@verdikt/sdk/registry';
 
 export type Config = {
@@ -128,6 +130,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   const started = runtime.now().getTime();
   let status: number | null = null;
   let bodyText: string | undefined;
+  let contentType: string | undefined;
   let transportError: string | undefined;
   try {
     const response = new HTTPClient()
@@ -152,6 +155,7 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
       .result();
     status = Number(response.statusCode);
     bodyText = text(response);
+    contentType = getHeader(response, 'content-type');
   } catch {
     // A transport failure is the only source of DOWN: payment settled and
     // nothing usable came back. Swallowing it would turn a dead provider into a
@@ -190,10 +194,11 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   //   - the DON consensus observation is capped (25kb in simulation). A larger
   //     response cannot come back whole, so it is truncated and flagged rather
   //     than silently cut: the agent paid for it and has to be able to tell.
-  const MAX_BODY_BYTES = 20_000;
-  const fullBody = bodyText ?? '';
-  const body = fullBody.length > MAX_BODY_BYTES ? fullBody.slice(0, MAX_BODY_BYTES) : fullBody;
-  const relay = { status, body, bodyTruncated: body.length !== fullBody.length };
+  //
+  // Assembled in `@verdikt/cre/relay` rather than here, because what this
+  // payload carries decides whether a semantic claim can be judged at all, and
+  // logic that lives only in this file is logic nothing tests.
+  const relay = relayPayload({ status, contentType, bodyText });
 
   // A 4xx under the status-only fallback writes nothing at all. `onReport` has
   // no way to express that — every report it accepts writes a verdict — so the

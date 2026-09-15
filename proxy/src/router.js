@@ -16,6 +16,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verdikt/sdk';
 import { checkOwnership, decodeChallenge } from './challenge.js';
 import { discover, toListing } from './discovery.js';
+import { EVIDENCE_AUTH_HEADER, authorizeDisclosure, buildEnvelope } from './evidence.js';
 import { assertRelayableUrl, bodyToHex, forwardRequestHeaders, forwardResponseHeaders, joinUpstream } from './http.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
@@ -159,6 +160,10 @@ export async function handleRequest(request, deps = {}) {
   // a different job with a different failure mode. Absent means /services 503s
   // instead of the relay refusing to start.
   const marketplace = deps.marketplace ?? null;
+  // Absent means a paid call caches nothing and the evidence endpoint says so.
+  // Not fatal — the deterministic leg is unaffected — but no semantic claim
+  // over a call made while it was absent can ever be judged.
+  const evidence = deps.evidence ?? null;
 
   const url = new URL(request.url);
 
@@ -168,7 +173,7 @@ export async function handleRequest(request, deps = {}) {
   // `weather.verdikt.bond/internal/status` would get a proxy 404 rather than
   // the provider's answer. Only the path form has a slug to disambiguate.
   if (!hostSlug(url, config)) {
-    const own = await proxyRoute(request, url, { config, marketplace, workflow, resolve });
+    const own = await proxyRoute(request, url, { config, marketplace, workflow, resolve, registry, evidence });
     if (own) return own;
   }
 
@@ -255,7 +260,7 @@ export async function handleRequest(request, deps = {}) {
 
   const paymentHeader = paymentHeaderOf(request.headers);
   if (paymentHeader) {
-    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body });
+    return verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body, evidence });
   }
 
   return passthrough({ request, upstream, body, doFetch, config });
@@ -275,11 +280,13 @@ export async function handleRequest(request, deps = {}) {
  *   config: ProxyConfig,
  *   marketplace: (() => Promise<Marketplace>)|null,
  *   workflow: WorkflowClient|null,
- *   resolve: typeof resolveServiceRecord
+ *   resolve: typeof resolveServiceRecord,
+ *   registry: Pick<RegistryReader, 'getVerdict'>,
+ *   evidence: EvidenceStore|null
  * }} deps
  * @returns {Promise<Response|null>}
  */
-async function proxyRoute(request, url, { config, marketplace, workflow, resolve }) {
+async function proxyRoute(request, url, { config, marketplace, workflow, resolve, registry, evidence }) {
   if (request.method === 'GET' && url.pathname === '/healthz') {
     return json({ ok: true });
   }
@@ -319,6 +326,11 @@ async function proxyRoute(request, url, { config, marketplace, workflow, resolve
   const slaSlug = request.method === 'GET' ? url.pathname.match(/^\/internal\/sla\/([^/]+)$/) : null;
   if (slaSlug) {
     return handleSlaRead(slaSlug[1], { config, resolve });
+  }
+
+  const evidenceId = request.method === 'GET' ? url.pathname.match(/^\/internal\/evidence\/([^/]+)$/) : null;
+  if (evidenceId) {
+    return handleEvidenceRead(evidenceId[1], request, { config, registry, evidence });
   }
 
   // `/internal/` is reserved as a whole, not route by route: without it the
@@ -425,10 +437,11 @@ function failureDetailHeaders(clauses) {
  *   newRequestId: () => string,
  *   doFetch: typeof fetch,
  *   config: ProxyConfig,
- *   body: ArrayBuffer|undefined
+ *   body: ArrayBuffer|undefined,
+ *   evidence: EvidenceStore|null
  * }} args
  */
-async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body }) {
+async function verified({ request, record, upstream, paymentHeader, decode, workflow, newRequestId, doFetch, config, body, evidence }) {
   if (!workflow) {
     return json({
       error: 'verification_unavailable',
@@ -511,6 +524,30 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     );
   }
 
+  // Cached before the response is built, and never allowed to break it: the
+  // agent has paid, and a storage hiccup must not cost it the payload it bought.
+  // A call with no verdict (the 402 replay and 4xx carve-outs) is skipped —
+  // there is no verdict for a claim to be bound to, so evidence for it could
+  // never be disclosed anyway.
+  if (evidence && result.outcome) {
+    try {
+      await evidence.store(
+        requestId,
+        buildEnvelope({
+          requestId,
+          slug: record.slug,
+          method: request.method,
+          url: upstream.toString(),
+          requestBody: body,
+          result
+        }),
+        config.evidenceFilingWindowMs
+      );
+    } catch (error) {
+      console.warn(`[verdikt] evidence not cached for ${requestId}: ${/** @type {Error} */ (error).message}`);
+    }
+  }
+
   const headers = {
     'x-verdikt-verdict': result.outcome ?? 'NONE',
     'x-verdikt-mode': result.mode,
@@ -578,6 +615,53 @@ async function handleSlaRead(slug, { config, resolve }) {
   // needs the bytes the provider actually published rather than a re-serialised
   // copy of them.
   return json({ slug, sla: record.sla, url: record.url });
+}
+
+/**
+ * The evidence envelope for one paid call, disclosed to the payer that bought
+ * it and to whoever that payer authorises — in practice, GenLayer's validators
+ * (docs/roadmap/genlayer.md, #82).
+ *
+ * Three answers are deliberately distinct, because the judge treats them
+ * differently. 404 means there is nothing to judge and resolves the claim
+ * `UNDETERMINED`; 401/403 mean the caller has not shown it may look; 503 means
+ * the proxy is misconfigured and the claimant should come back, which the judge
+ * reads as `[TRANSIENT]` rather than as a finding against anyone.
+ *
+ * @param {string} requestId
+ * @param {Request} request
+ * @param {{ config: ProxyConfig, registry: Pick<RegistryReader, 'getVerdict'>, evidence: EvidenceStore|null }} deps
+ */
+async function handleEvidenceRead(requestId, request, { config, registry, evidence }) {
+  if (!evidence) {
+    return json(
+      { error: 'evidence_unavailable', detail: 'this proxy is not configured with an evidence store' },
+      503
+    );
+  }
+  if (!/^0x[0-9a-fA-F]{64}$/.test(requestId)) {
+    return json({ error: 'bad_request_id', detail: 'a request id is 32 bytes as 0x-prefixed hex' }, 400);
+  }
+
+  const gate = await authorizeDisclosure({
+    requestId,
+    signature: request.headers.get(EVIDENCE_AUTH_HEADER),
+    registry
+  });
+  if (!gate.ok) {
+    return json({ error: gate.error, detail: gate.detail }, gate.status);
+  }
+
+  const envelope = await evidence.read(requestId, config.evidenceAdjudicationWindowMs);
+  if (!envelope) {
+    // Never cached, or the window closed. Both are "no evidence", and the
+    // judge must read that as undecidable rather than as a breach — a provider
+    // that loses a dispute because a cache expired is being convicted of
+    // Verdikt's bookkeeping.
+    return json({ error: 'no_evidence', requestId, detail: 'no evidence is cached for this request' }, 404);
+  }
+
+  return json(envelope);
 }
 
 /**

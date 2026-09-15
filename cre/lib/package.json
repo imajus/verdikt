@@ -13,6 +13,7 @@
     "./http-request": "./http-request.js",
     "./judge": "./judge.js",
     "./log-range": "./log-range.js",
+    "./relay": "./relay.js",
     "./reputation": "./reputation.js"
   }
 }

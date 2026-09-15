@@ -178,8 +178,49 @@ own consensus, which needs several independent validators to fetch the same
 evidence.
 
 **Round 2 — provider opt-in plus dispute gating**, where `submit_claim` unlocks
-disclosure. Correct, and still the shape. But "fetchable for the resolution
-round" is where the two clocks above got conflated.
+disclosure. Correct in shape. But "fetchable for the resolution round" is where
+the two clocks above got conflated.
+
+**Round 4, at implementation — the gate is the payer's signature, not the
+existence of a claim.** Round 2's gate asked "has a claim been filed?", which
+means the proxy reading GenLayer contract state. GenLayer reads go through
+`gen_call` with its own calldata encoding, not ABI; there is no JS path to that
+short of shipping `genlayer-js` (1.2MB, viem-dependent) into a Worker, or
+hand-rolling the codec. Both are a lot of risk for a question that has a better
+answer.
+
+What disclosure actually needs to establish is that the party entitled to the
+response consents to it being shown. So the caller presents an EIP-191
+signature over `Verdikt evidence disclosure\nrequest: <id>`, and the proxy
+checks it recovers to the payer `getVerdict` booked — one Arc read the proxy
+already knows how to make.
+
+This is *stronger* than round 2's gate, not weaker. "A claim exists" proves
+somebody, possibly anybody, filed against a public request id. "The payer
+signed" proves the one party entitled to the response asked for it to be
+disclosed. It also lands squarely on the existing invariant: the observed value
+never goes on chain and reaches the paying agent on its own response, "which is
+the one party entitled to it" — this discloses that agent's own response, to
+adjudicators that agent chose.
+
+`submit_claim` therefore takes the signature and stores it, so every validator
+re-fetching the evidence presents the same token, and a claim is only openable
+by someone holding the payer's consent.
+
+**This also removes the provider opt-in**, and that is a real deviation from
+round 2 rather than an oversight. Two reasons. Practically: an opt-in flag
+belongs on ENS as a fifth text record, and every already-minted subname would
+need its per-key roles re-authorised before a provider could write it — the
+feature would be dead on the live testnet. Substantively: the flag was
+protecting the wrong thing. The disclosed bytes are a response the payer already
+holds; a provider has no standing to forbid the payer from showing its own
+purchase to an adjudicator. If an opt-in is still wanted later, it is a fifth
+ENS key plus a role migration, and it gates *caching*, not disclosure.
+
+The cost of dropping it is that every verified call with a verdict is cached for
+the filing window, whether or not its SLA has a semantic clause. That is
+storage the deterministic leg did not previously spend. Bounded by the window,
+and noted rather than hidden.
 
 **Round 3 — a body is not evidence; an envelope is.** A response body on its own
 cannot be judged, because the criteria are about whether the response answered
@@ -199,6 +240,29 @@ Supported content types: `application/json`, `text/plain`, `text/html` for text
 judgment, `image/png` and `image/jpeg` via `exec_prompt(images=[…])`. Anything
 else, or an incomplete envelope, resolves `UNDETERMINED` — never a forced
 verdict.
+
+**`contentType` comes from the CRE relay, and the first implementation did not
+send it.** The workflow built its relay from status and body alone, so
+`VerificationResult.headers` was `{}` on every real paid call and every envelope
+said `contentType: null` — which the judge correctly refuses as an unsupported
+type, resolving *every* semantic claim `UNDETERMINED` against evidence that was
+otherwise perfect. Nothing errored; the proxy's own tests supplied the header
+that production never did. The relay is now assembled in `cre/lib/relay.js`
+under vitest rather than inline in the workflow, for the reason
+`cre/lib/http-request.js` already exists: logic that lives only in a file that
+bundles to WASM is logic nothing tests. It carries the content type and nothing
+else — `content-length` and `content-encoding` count bytes that stop existing
+the moment the enclave decodes and clips the body.
+
+**Images are refused until the relay carries bytes.** `bodyEncoding: 'base64'`
+is implemented on the judge's side, but the relay decodes every response through
+`text(response)` before the proxy ever sees it, so a PNG arrives with its
+non-UTF-8 bytes already replaced and the envelope labels it `utf8`. Re-encoding
+that and calling it the delivered image puts bytes in front of the model that
+the provider never sent, so an image content type that is not `base64` resolves
+`UNDETERMINED` rather than being guessed at. Carrying binary losslessly means a
+base64 leg through the workflow, the callback and the proxy's own relay to the
+agent — its own change, not a line in this one.
 
 `bodyEncoding` is load-bearing rather than decorative, because an image cannot
 travel as JSON text: `utf8` (the default when absent) or `base64`, and any
@@ -231,6 +295,17 @@ turns on, so this has to be root-caused before the evidence cache can claim to
 hold the full body. Tracked as
 [#88](https://github.com/imajus/verdikt/issues/88).
 
+Until it is, the flag is *told to the judge* rather than acted on in code. Both
+alternatives are worse. Refusing every truncated body outright hands any
+provider a way to become unjudgeable — pad past the cap and no semantic clause
+can be enforced again — which makes missing evidence worth manufacturing, the
+same failure `UNDETERMINED` exists to avoid. Judging one unflagged lets a `MET`
+rest on the part that went missing. So the prompt carries a contract-authored
+notice, outside the evidence fences, saying the body is clipped and that a
+binding outcome is available only when the retained part settles the promise on
+its own. Both notices — clipped and complete — are asserted by the direct tests,
+so dropping either fails rather than passing quietly.
+
 ## Eligibility
 
 Every claim binds to an on-chain fact before any GenLayer execution cost is
@@ -253,6 +328,26 @@ else's call. Checked via `getVerdict()` on Arc
 
 The claim key is composite, `(request_id, clause_id)`: one verdict can carry
 several disputable semantic clauses.
+
+**Two consequences of shipping the judge ahead of this gate**, both live on
+`feat/genlayer` today:
+
+- **The key can be squatted.** Nothing yet says the caller is the payer, so
+  anyone reading a `VerdictWritten` event can file first with a signature that
+  will never authorise, permanently occupying the key the payer needed — a
+  resolved or cancelled claim still holds it. Making keys reusable is not the
+  fix: it would let a claimant who dislikes a judgment file again for a second
+  opinion. The **Payer** check above is the fix, and nothing is at stake in a
+  claim until [#83](https://github.com/imajus/verdikt/issues/83) attaches a
+  bond.
+- **Service correlation is enforced twice, and the cheap half is already
+  there.** The claim names a slug and freezes that SLA's criteria; the evidence
+  envelope says which service actually served the call. Without comparing them,
+  one disclosure signature judges service A's response against service B's
+  promises — a binding `MET`/`BREACH` about words the provider that was called
+  never wrote. `_decide` refuses a mismatch as `UNDETERMINED`. That is defence
+  in depth, not a replacement: only the Arc check ties the slug to the verdict
+  rather than to the envelope the proxy happened to serve.
 
 **Open, not solved: Circle Gateway payers.** Under `GatewayWalletBatched` the
 booked payer is the agent wallet's *backing EOA*, and the relationship between

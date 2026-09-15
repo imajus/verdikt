@@ -16,6 +16,10 @@ REQUEST_ID = '0x' + 'ab' * 32
 SLUG = 'summarizer'
 CLAUSE_ID = 'faithful-summary'
 CRITERIA = 'The response must summarise the document supplied in the request, in English, in under 200 words.'
+# The payer's consent to disclose its own response body. Not verified by the
+# contract — the proxy checks it against the payer Arc booked — so any
+# well-formed hex stands in here.
+SIGNATURE = '0x' + '11' * 65
 
 
 @pytest.fixture

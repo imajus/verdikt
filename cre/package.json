@@ -17,6 +17,7 @@
   "exports": {
     "./config": "./lib/config.js",
     "./judge": "./lib/judge.js",
+    "./relay": "./lib/relay.js",
     "./reputation": "./lib/reputation.js"
   }
 }
