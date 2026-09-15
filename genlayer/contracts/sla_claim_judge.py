@@ -75,9 +75,19 @@ class Claim:
     # adjudicators may read it. Held in state rather than passed per call so
     # every validator re-fetching the evidence presents the same token.
     disclosure_signature: str
+    # What the original x402 call cost, in USDC minor units. Compensation is
+    # sized to match this number — not converted to it; the settlement token is
+    # pegged to nothing. Caller-supplied and unverified for now; #90 binds it to
+    # `VerdiktRegistry.getVerdict(requestId).paidAmount` on Arc.
+    paid_amount: u256
+    bond: u256
     resolved: bool
     outcome: str
     reasoning: str
+    # Written at resolution, so a reader can see what a judgment actually cost
+    # rather than inferring it from balances.
+    compensation: u256
+    bounty: u256
 
 
 class SlaClaimJudge(gl.Contract):
@@ -85,17 +95,103 @@ class SlaClaimJudge(gl.Contract):
     # The proxy's apex host, e.g. `https://verdikt-proxy.workers.dev`. Per-slug
     # hosts serve the paid leg; the internal read endpoints live on the apex.
     proxy_base_url: str
+    # The settlement token. Empty means this judge decides claims and settles
+    # nothing — useful for a smoke test, useless for a demo.
+    token_address: str
+    bond_amount: u256
+    # A fixed constant, not metered against actual gas. Whoever calls
+    # `submit_claim`/`resolve_claim` pays their own GEN directly; there is no
+    # relay to front or reimburse anything, so this is a bounty for doing the
+    # work rather than a reimbursement of a measured cost.
+    bounty_amount: u256
     claims: TreeMap[str, Claim]
     claim_keys: DynArray[str]
+    # slug -> the GenLayer account whose escrow backs it. Binding is permanent
+    # while the slug carries a live deposit: a deposit that could change hands
+    # mid-dispute would let a provider hand its liability to an empty account.
+    # It is *not* permanent once that owner has withdrawn back to zero with no
+    # claim open — the slug is vacant then, and a different account may bind
+    # it. See `fund_deposit` for the identity gap this still leaves open.
+    deposit_owner: TreeMap[str, Address]
+    # What that owner committed to this slug, as this contract last read it.
+    # The real ceiling is the escrow itself, re-read at credit time — this is
+    # the advertised figure, and settlement never trusts it alone.
+    deposit_amount: TreeMap[str, u256]
+    # Per owner, the sum of `deposit_amount` across every slug they back. The
+    # escrow a `SettlementToken` reports is a single bucket per (owner,
+    # custodian) pair, shared across every slug the same owner funds — without
+    # this running total, `fund_deposit` would count the same escrowed tokens
+    # as collateral for each slug independently.
+    deposit_committed: TreeMap[Address, u256]
+    open_claims: TreeMap[str, u256]
+    # Per claimant, the bond total across their still-open claims. Without it
+    # one escrow would back an unlimited number of simultaneous claims.
+    bonded: TreeMap[Address, u256]
 
-    def __init__(self, proxy_base_url: str):
+    def __init__(self, proxy_base_url: str, token_address: str, bond_amount: int, bounty_amount: int):
         self.owner = gl.message.sender_address
         self.proxy_base_url = proxy_base_url.rstrip('/')
+        self.token_address = token_address
+        self.bond_amount = u256(bond_amount)
+        self.bounty_amount = u256(bounty_amount)
 
     # ------------------------------------------------------------------ writes
 
     @gl.public.write
-    def submit_claim(self, request_id: str, clause_id: str, slug: str, disclosure_signature: str) -> None:
+    def fund_deposit(self, slug: str) -> None:
+        """
+        Bind the caller's escrow to a slug, making it the bond behind that
+        service's semantic promises.
+
+        Reads the escrow rather than taking an amount, so there is no way to
+        claim a deposit larger than the one actually posted — but the escrow a
+        `SettlementToken` reports is one shared bucket per (owner, custodian)
+        pair, not one per slug, so this allocates only what the caller has not
+        already committed to another slug (`deposit_committed`), rather than
+        the whole bucket. Without that, one escrow would count as full
+        collateral for every slug the same owner backs at once.
+
+        Binding holds while the slug carries a live deposit: a deposit that
+        could change hands mid-dispute would let a provider pass its liability
+        to an empty account. It releases once the incumbent has withdrawn back
+        to zero with no claim open, so a different account may then bind it.
+
+        **Known gap, stated rather than papered over: nothing here checks that
+        the caller is the slug's actual registered provider.** Minting is
+        permissionless, so anyone can escrow a trivial amount and bind an
+        unfunded slug before its real provider does, then withdraw once no
+        claim is open — leaving the slug vacant again rather than usable, and
+        forcing the real provider to race a repeat squatter for it. That is a
+        griefing cost, not a permanent lock, because the binding above is no
+        longer forever; closing it for good needs the same eligibility gate as
+        #90, checked against the registered provider on Arc rather than
+        assumed from whoever calls first.
+        """
+        sender = gl.message.sender_address
+        existing = self.deposit_owner.get(slug)
+        previous = self.deposit_amount.get(slug, 0)
+        if existing is not None and existing != sender and (previous > 0 or self.open_claims.get(slug, 0) > 0):
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} is already backed by another account')
+
+        # This slug's own previous share, backed out of the sender's running
+        # total before recomputing it, so re-funding an already-owned slug
+        # (a top-up) does not count that share against itself twice.
+        committed_elsewhere = self.deposit_committed.get(sender, 0)
+        if existing == sender:
+            committed_elsewhere -= previous
+        escrowed = self._escrow_of(sender)
+        allocatable = escrowed - committed_elsewhere
+        if allocatable <= 0:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Escrow settlement tokens to this contract first')
+
+        self.deposit_owner[slug] = sender
+        self.deposit_amount[slug] = u256(allocatable)
+        self.deposit_committed[sender] = u256(committed_elsewhere + allocatable)
+
+    @gl.public.write
+    def submit_claim(
+        self, request_id: str, clause_id: str, slug: str, disclosure_signature: str, paid_amount: int
+    ) -> None:
         """
         Open a claim against one semantic clause of one paid call.
 
@@ -107,6 +203,9 @@ class SlaClaimJudge(gl.Contract):
         against the payer Arc booked, which is the only party that can say — so
         a wrong one costs the claimant a resolution, not a judgment.
 
+        `paid_amount` is what the original call cost. Unverified here; #90 binds
+        it to the Arc verdict.
+
         **Open until [#90]: the composite key can be squatted.** `request_id` is
         public in every `VerdictWritten` event, and nothing yet says the caller
         is the payer, so anyone can file first with a signature that will never
@@ -115,14 +214,29 @@ class SlaClaimJudge(gl.Contract):
         letting a key be reused would let a claimant who dislikes a judgment
         file again for a second opinion. The fix is #90's eligibility gate,
         which requires `verdict.payer == claimant` before a key is taken at all.
-        Nothing is at stake in a claim until #83 attaches a bond, which is why
-        this ships ahead of that gate rather than behind it.
+        A bond now raises the cost of squatting, but does not close it: the
+        squatter only forfeits it once #90's eligibility gate exists to reject
+        them, which it does not yet.
         """
         key = _claim_key(request_id, clause_id)
         if key in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Claim already exists')
         if not disclosure_signature.startswith('0x'):
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Disclosure signature must be 0x-prefixed hex')
+        if paid_amount < 0:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Paid amount cannot be negative')
+
+        claimant = gl.message.sender_address
+        committed = self.bonded.get(claimant, 0)
+        if self.bond_amount > 0:
+            # Checked against escrow already committed to other open claims:
+            # without that, one bond would back every claim the account cares to
+            # file, and filing would be free after the first.
+            escrowed = self._escrow_of(claimant)
+            if escrowed < committed + self.bond_amount:
+                raise gl.vm.UserError(
+                    f'{ERROR_EXPECTED} Escrow {self.bond_amount} more to this contract to post the bond'
+                )
 
         criteria = self._fetch_criteria(slug, clause_id)
 
@@ -130,15 +244,21 @@ class SlaClaimJudge(gl.Contract):
             request_id=request_id,
             clause_id=clause_id,
             slug=slug,
-            claimant=gl.message.sender_address,
+            claimant=claimant,
             criteria=criteria,
             filed_at=u256(_now()),
             disclosure_signature=disclosure_signature,
+            paid_amount=u256(paid_amount),
+            bond=self.bond_amount,
             resolved=False,
             outcome=OUTCOME_OPEN,
             reasoning='',
+            compensation=u256(0),
+            bounty=u256(0),
         )
         self.claim_keys.append(key)
+        self.bonded[claimant] = u256(committed + self.bond_amount)
+        self.open_claims[slug] = u256(self.open_claims.get(slug, 0) + 1)
 
     @gl.public.write
     def resolve_claim(self, request_id: str, clause_id: str) -> None:
@@ -151,6 +271,34 @@ class SlaClaimJudge(gl.Contract):
         claim.outcome = judgment['outcome']
         claim.reasoning = judgment['reasoning']
         claim.resolved = True
+        self._settle(claim, gl.message.sender_address)
+
+    @gl.public.write
+    def withdraw_deposit(self, slug: str) -> None:
+        """
+        Release a slug's deposit back to the account that posted it.
+
+        Refused while any claim against the slug is still open — a provider must
+        not be able to empty its bond out from under a dispute in progress.
+        #93 adds the cooldown that closes the remaining gap: withdrawing
+        *before* anyone files.
+        """
+        sender = gl.message.sender_address
+        owner = self.deposit_owner.get(slug)
+        if owner is None:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit')
+        if owner != sender:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the depositor may withdraw')
+        if self.open_claims.get(slug, 0) > 0:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has open claims')
+
+        # Only this slug's own allocated share, never the owner's whole escrow
+        # bucket — a bucket the owner may also be backing other slugs from.
+        amount = self.deposit_amount.get(slug, 0)
+        self.deposit_amount[slug] = u256(0)
+        self.deposit_committed[owner] = u256(max(0, self.deposit_committed.get(owner, 0) - amount))
+        if amount > 0:
+            self._release(owner, owner, amount)
 
     @gl.public.write
     def cancel_claim(self, request_id: str, clause_id: str) -> None:
@@ -174,6 +322,7 @@ class SlaClaimJudge(gl.Contract):
         claim.outcome = OUTCOME_CANCELLED
         claim.reasoning = 'Cancelled by the claimant'
         claim.resolved = True
+        self._settle(claim, gl.message.sender_address)
 
     # ------------------------------------------------------------------- views
 
@@ -194,9 +343,95 @@ class SlaClaimJudge(gl.Contract):
             'owner': self.owner.as_hex,
             'proxy_base_url': self.proxy_base_url,
             'adjudication_window_seconds': ADJUDICATION_WINDOW_SECONDS,
+            'token_address': self.token_address,
+            'bond_amount': self.bond_amount,
+            'bounty_amount': self.bounty_amount,
         }
 
+    @gl.public.view
+    def get_deposit(self, slug: str) -> dict:
+        owner = self.deposit_owner.get(slug)
+        return {
+            'slug': slug,
+            'owner': owner.as_hex if owner is not None else None,
+            'amount': self.deposit_amount.get(slug, 0),
+            'open_claims': self.open_claims.get(slug, 0),
+        }
+
+    @gl.public.view
+    def get_bonded(self, account: str) -> int:
+        return self.bonded.get(Address(account), 0)
+
     # ---------------------------------------------------------------- internals
+
+    def _settle(self, claim: Claim, resolver: Address) -> None:
+        """
+        Move money, once, according to the outcome already written.
+
+        Every transfer goes out as `.emit(on='finalized')`. GenLayer's
+        internal-message primitive defers the balance change until the parent
+        transaction finalizes, and the reason applies exactly here: an
+        `on='accepted'` message can be emitted several times across appeals and
+        cannot be taken back, which for a payout means paying a claimant more
+        than once for a judgment that was later overturned.
+        """
+        self.bonded[claim.claimant] = u256(max(0, self.bonded.get(claim.claimant, 0) - claim.bond))
+        self.open_claims[claim.slug] = u256(max(0, self.open_claims.get(claim.slug, 0) - 1))
+
+        if not self.token_address:
+            return
+
+        provider = self.deposit_owner.get(claim.slug)
+        # Re-read rather than trusting `deposit_amount` alone: liabilities can
+        # be concurrent, and the ceiling that matters is what is actually
+        # there at credit time, not what was there when the deposit was
+        # advertised. Also capped at this slug's own allocated share, since
+        # the escrow itself is a bucket shared with whatever else the same
+        # owner backs — the slug can never be credited more than it was ever
+        # advertised as holding, however much escrow the owner still has.
+        available = min(self._escrow_of(provider), self.deposit_amount.get(claim.slug, 0)) if provider is not None else 0
+
+        plan = settlement_for(
+            outcome=claim.outcome,
+            paid_amount=claim.paid_amount,
+            deposit_available=available,
+            bond=claim.bond,
+            bounty=self.bounty_amount,
+        )
+        claim.compensation = u256(plan['compensation'])
+        claim.bounty = u256(plan['bounty'])
+
+        if plan['from_provider'] > 0 and provider is not None:
+            if plan['compensation'] > 0:
+                self._release(provider, claim.claimant, plan['compensation'])
+            if plan['bounty'] > 0:
+                self._release(provider, resolver, plan['bounty'])
+            self.deposit_amount[claim.slug] = u256(max(0, available - plan['from_provider']))
+            self.deposit_committed[provider] = u256(
+                max(0, self.deposit_committed.get(provider, 0) - plan['from_provider'])
+            )
+        elif plan['from_consumer'] > 0:
+            self._release(claim.claimant, resolver, plan['from_consumer'])
+
+        # Whatever the bond didn't pay comes back to the claimant. The token
+        # has no owner-side unescrow (see `SettlementToken.release`), so a
+        # self-release — owner and recipient the same account — is how a bond
+        # that was never spent, or only partly spent, stops being encumbered.
+        surplus = claim.bond - plan['from_consumer']
+        if surplus > 0:
+            self._release(claim.claimant, claim.claimant, surplus)
+
+    def _token(self):
+        return gl.get_contract_at(Address(self.token_address))
+
+    def _escrow_of(self, owner: Address) -> int:
+        """How much of `owner`'s balance this contract may currently move."""
+        if not self.token_address:
+            return 0
+        return int(self._token().view().escrow_of(owner.as_hex, gl.message.contract_address.as_hex))
+
+    def _release(self, owner: Address, to: Address, amount: int) -> None:
+        self._token().emit(on='finalized').release(owner.as_hex, to.as_hex, amount)
 
     def _require_open(self, key: str) -> Claim:
         if key not in self.claims:
@@ -301,6 +536,43 @@ def _now() -> int:
         raise gl.vm.UserError(f'{ERROR_EXPECTED} Transaction carries no timestamp')
     return int(datetime.datetime.fromisoformat(stamp.replace('Z', '+00:00')).timestamp())
 
+def settlement_for(*, outcome: str, paid_amount: int, deposit_available: int, bond: int, bounty: int) -> dict:
+    """
+    Who pays what, for each of the four outcomes. Pure — no storage, no I/O.
+
+    Deliberately a free function and deliberately total: every outcome has an
+    entry, and none of them can revert. A judgment is recorded whether or not
+    funds backed it, because a provider that could erase a finding by being
+    broke would have every reason to be broke.
+
+    - `BREACH`  the provider's deposit pays compensation, then the bounty from
+                whatever is left. The consumer's bond comes back untouched.
+    - `MET`     the consumer's bond pays the bounty; the surplus comes back.
+    - `UNDETERMINED` / `CANCELLED`
+                nobody pays. The claimant absorbs its own gas as the cost of
+                trying, which is what stops incomplete evidence from being
+                worth manufacturing.
+    """
+    if outcome == OUTCOME_BREACH:
+        # Compensation before bounty: compensation is the point of the claim,
+        # the bounty is the cost of processing it. On a deposit too small for
+        # both, the claimant is made as whole as the bond allows and whoever
+        # resolved it goes unpaid — which is the right way round.
+        compensation = max(0, min(paid_amount, deposit_available))
+        paid_bounty = max(0, min(bounty, deposit_available - compensation))
+        return {
+            'compensation': compensation,
+            'bounty': paid_bounty,
+            'from_provider': compensation + paid_bounty,
+            'from_consumer': 0,
+        }
+
+    if outcome == OUTCOME_MET:
+        paid_bounty = max(0, min(bounty, bond))
+        return {'compensation': 0, 'bounty': paid_bounty, 'from_provider': 0, 'from_consumer': paid_bounty}
+
+    return {'compensation': 0, 'bounty': 0, 'from_provider': 0, 'from_consumer': 0}
+
 
 def _claim_to_dict(claim: Claim) -> dict:
     return {
@@ -311,9 +583,13 @@ def _claim_to_dict(claim: Claim) -> dict:
         'criteria': claim.criteria,
         'filed_at': int(claim.filed_at),
         'disclosure_signature': claim.disclosure_signature,
+        'paid_amount': claim.paid_amount,
+        'bond': claim.bond,
         'resolved': claim.resolved,
         'outcome': claim.outcome,
         'reasoning': claim.reasoning,
+        'compensation': claim.compensation,
+        'bounty': claim.bounty,
     }
 
 

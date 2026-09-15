@@ -22,10 +22,62 @@ CRITERIA = 'The response must summarise the document supplied in the request, in
 SIGNATURE = '0x' + '11' * 65
 
 
+PAID_AMOUNT = 2500
+BOND = 1000
+BOUNTY = 100
+
+
 @pytest.fixture
 def judge(direct_deploy):
-    """A deployed SlaClaimJudge pointed at the fake proxy host."""
-    return direct_deploy('contracts/sla_claim_judge.py', PROXY)
+    """
+    A deployed SlaClaimJudge with no settlement token.
+
+    Direct mode cannot make cross-contract calls at all — `gl_call`'s
+    `CallContract`/`PostMessage` ops are unhandled without glsim's hook — so a
+    judge that talks to a token is untestable here. With `token_address`
+    empty it decides claims and settles nothing, which is exactly the half
+    direct mode *can* prove. The arithmetic is covered as a pure function in
+    test_settlement.py, and the wiring needs a node (#85).
+    """
+    return direct_deploy('contracts/sla_claim_judge.py', PROXY, '', 0, BOUNTY)
+
+
+@pytest.fixture
+def token(direct_deploy):
+    return direct_deploy('contracts/settlement_token.py', 'Verdikt Settlement', 'VSET')
+
+
+def load_judge_module():
+    """
+    Import `contracts/sla_claim_judge.py` as a plain module.
+
+    `settlement_for` is pure — the whole point of factoring it out — but it
+    lives in a file whose first import is the GenVM SDK, which only lands on
+    `sys.path` once something has been deployed. So call this after a fixture
+    that deploys, same constraint `to_hex` is written around.
+    """
+    import importlib.util
+    import sys
+    from pathlib import Path
+
+    # The SDK allows exactly one `gl.Contract` subclass per process and the
+    # deploy above already registered one, so a second import of the same file
+    # raises. Park the registration, import, put it back — glsim does the same
+    # thing for the same reason.
+    registry = sys.modules.get('genlayer.gl.genvm_contracts')
+    attr = next((name for name in ('__known_contact__', '__known_contract__') if hasattr(registry, name)), None)
+    parked = getattr(registry, attr) if attr else None
+    if attr:
+        setattr(registry, attr, None)
+    try:
+        path = Path(__file__).resolve().parents[2] / 'contracts' / 'sla_claim_judge.py'
+        spec = importlib.util.spec_from_file_location('sla_claim_judge_under_test', path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+    finally:
+        if attr:
+            setattr(registry, attr, parked)
 
 
 def to_hex(addr_bytes):

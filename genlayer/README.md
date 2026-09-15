@@ -19,10 +19,24 @@ pnpm workspace, and `pnpm test` does not run it.
 ## Layout
 
 ```
-contracts/sla_claim_judge.py   the Intelligent Contract
+contracts/sla_claim_judge.py   the Intelligent Contract that judges a claim
+contracts/settlement_token.py  what a claim settles in — a faucet-minted token, escrow included
 tests/direct/                  fast in-memory tests, no node required
 gltest.config.yaml             network table; `testnet_bradbury` is GenLayer's public testnet
 ```
+
+### Escrow, and why there is no `unescrow`
+
+`SettlementToken.escrow(custodian, amount)` hands a contract the authority to
+move part of your balance; the tokens do not go anywhere and still count as
+yours. Only the custodian can `release` them.
+
+There is deliberately no owner-side way to pull an escrow back. If there were,
+a consumer could withdraw its bond the moment a claim started going against it
+and a provider could withdraw its deposit the moment one was filed — which is
+to say neither would be a bond at all. Getting funds back out means asking the
+custodian, which is what `SlaClaimJudge.withdraw_deposit` and the automatic
+bond release on a settled claim are for.
 
 ## Setup
 
@@ -62,7 +76,18 @@ and `allow_storage` move between them).
 
 ## What direct mode does and does not prove
 
-Direct tests run the **leader function only**. `validator_fn` — the half that
-decides whether validators agree — is never exercised. So these tests prove the
-state machine, the refusals, and the evidence handling, and prove nothing about
-consensus. That needs a real node.
+Two hard limits, both worth knowing before trusting a green run:
+
+- Direct tests run the **leader function only**. `validator_fn` — the half that
+  decides whether validators agree — is never exercised, so nothing here says
+  anything about consensus.
+- **Cross-contract calls do not work at all.** `gl_call`'s
+  `CallContract`/`PostMessage` operations are unhandled in direct mode unless
+  glsim's hook is installed, so a judge wired to a token is untestable here.
+  The fixtures deploy the judge with an empty `token_address`, which makes it
+  decide claims and settle nothing.
+
+What that leaves is still most of the risk: the state machine, every refusal,
+the evidence handling, and — as a pure function, factored out for exactly this
+reason — the settlement arithmetic. The wiring between the two contracts needs
+a real node (#85).

@@ -90,12 +90,31 @@ over JSON-RPC. A read is not a bridge: nothing on Arc has to trust anything on
 GenLayer, which is the whole point.
 
 Payout happens inside `resolve_claim` via the token's
-`.emit(on='finalized').transfer(...)`. GenLayer's internal-message primitive
+`.emit(on='finalized').release(...)`. GenLayer's internal-message primitive
 defers the balance change until the parent transaction finalizes. This is the
 documented default and the reason for it applies directly here: an
 `on='accepted'` message can be emitted several times across appeals and cannot
 be taken back, which for a payout means paying a claimant more than once for a
 judgment that was later overturned.
+
+### Escrow, and the missing `unescrow`
+
+Bonds and deposits are posted with `SettlementToken.escrow(custodian, amount)`,
+which hands a contract the authority to move part of a balance without moving
+the balance. Only the custodian can `release` it, and there is deliberately no
+owner-side way to pull an escrow back.
+
+That absence is the mechanism, not an omission. With an `unescrow`, a consumer
+could withdraw its bond the moment a claim started going against it and a
+provider could withdraw its deposit the moment one was filed — neither would be
+a bond. Funds come back out by asking the custodian: `withdraw_deposit`, which
+refuses while any claim against the slug is open, and the automatic bond
+release when a claim settles.
+
+This is also why GenLayer's async cross-contract writes are not a problem here.
+The judge never takes custody of anything; it only ever directs the token at
+settlement time, so there is no window in which it holds funds it might fail to
+account for.
 
 ## Claim lifecycle
 
