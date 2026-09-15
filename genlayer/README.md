@@ -110,6 +110,73 @@ wants a signed-in wallet holding at least 0.01 ETH on mainnet — 100 GEN per
 claim, once a week. `--dry-run` reports the account and its balance without
 spending anything, which is the check to run before the real one.
 
+## Filing a claim
+
+`scripts/claim.py` is the claimant's CLI — a CLI rather than a web UI, matching
+`scripts/pay-x402.mjs` and `pnpm onboard` on the deterministic side, because the
+audience is an operator who already has a key and a request id.
+
+```bash
+export GENLAYER_PRIVATE_KEY=0x…      # the claimant; must be the payer Arc booked
+export GENLAYER_JUDGE_ADDRESS=0x…
+export GENLAYER_TOKEN_ADDRESS=0x…
+
+.venv/bin/python scripts/claim.py sign --request-id 0x…   # payer consent — do not skip
+.venv/bin/python scripts/claim.py mint --amount 5000000
+.venv/bin/python scripts/claim.py bond
+.venv/bin/python scripts/claim.py open --request-id 0x… --clause faithful --slug summarizer \
+    --signature 0x…
+GENLAYER_RESOLVER_PRIVATE_KEY=0x… \                        # a distinct account — see below
+    .venv/bin/python scripts/claim.py resolve --request-id 0x… --clause faithful
+.venv/bin/python scripts/claim.py status --request-id 0x… --clause faithful
+```
+
+`sign` is the step that is easy to skip and impossible to work around: the proxy
+discloses evidence only to the payer, so a claim opened without the payer's
+signature resolves `UNDETERMINED` for want of anything to judge. The message it
+signs is pinned on both sides — `proxy/src/evidence.test.js` and
+`tests/direct/test_eligibility.py` — because a drift there makes every
+disclosure refuse, which reads as a claimant error rather than as the bug it is.
+
+`resolve_claim` is permissionless by design — whoever calls it earns the
+bounty — and that is precisely what makes a `MET` outcome cost the claimant
+anything: the bounty is released out of the claimant's own bond to whoever
+resolved. Resolve with the claimant's own key (the default, if
+`GENLAYER_RESOLVER_PRIVATE_KEY` is unset) and that release is a debit and a
+credit to the same balance, so the "claimant loses the bounty" half of the
+demo below silently stops being true. Set `GENLAYER_RESOLVER_PRIVATE_KEY` to a
+second, funded account to resolve as an actual third party; `claim.py resolve`
+warns when it detects self-resolution.
+
+Every subcommand that moves money reads the balance back. A transaction that
+mined is not a transaction that did anything: GenLayer consensus can record an
+`ERROR` in the leader receipt while the transaction around it looks fine, so
+`claim.py` checks `execution_result` rather than trusting the receipt.
+
+## The demo, and what would make it honest
+
+Four things, and the third is the one usually skipped:
+
+1. **A claim that resolves `BREACH`** — the claimant is compensated from the
+   provider's deposit.
+2. **A claim that resolves `MET`** — the claimant loses the bounty out of its
+   bond. A demo that only shows the claimant winning is advertising, and one
+   resolved with the claimant's own key doesn't show it at all: see
+   `GENLAYER_RESOLVER_PRIVATE_KEY` above.
+3. **Balances read back off chain, before and after.** Not "the transaction did
+   not revert". This codebase already learned once that a forwarder can swallow
+   a receiver revert and report success; GenLayer's version is an `ERROR`
+   execution result inside a perfectly healthy transaction.
+4. **`CANCELLED` exercised, not merely present.** The infrastructure-failure
+   path — evidence that never becomes fetchable — is the one a real user hits
+   first and the one nobody demonstrates.
+
+Settlement is emitted `on='finalized'`, so the money moves when the parent
+transaction finalizes rather than when the judgment is recorded. `claim.py
+resolve` prints the balance either side of that deliberately: the judgment and
+the payment are two events, and showing them as one would misrepresent when a
+claimant is actually paid.
+
 ## A trap worth knowing: nondet closures cannot call module-level functions
 
 A nondet block (`strict_eq`, `run_nondet_unsafe`) runs in a sub-VM that the

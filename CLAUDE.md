@@ -63,6 +63,7 @@ cd genlayer                                               # Python, not the pnpm
 .venv/bin/glsim --port 4000 --no-browser &                # a local node, for the rest
 .venv/bin/gltest tests/integration -q                     # the cross-contract half direct mode cannot reach
 .venv/bin/python scripts/deploy.py --network testnet_bradbury --dry-run
+.venv/bin/python scripts/claim.py --help                  # the claimant's CLI: sign, bond, open, resolve
 ```
 
 ```bash

@@ -94,6 +94,20 @@ describe('the envelope', () => {
   });
 });
 
+// The exact bytes a payer signs, pinned. `genlayer/scripts/claim.py` builds
+// the same string in Python and the judge presents whatever it produced; a
+// change on either side makes every disclosure refuse, which reads as a
+// claimant error rather than as the drift it is.
+describe('the message a payer signs', () => {
+  it('is exactly this, byte for byte', () => {
+    expect(disclosureMessage(REQUEST_ID)).toBe(`Verdikt evidence disclosure\nrequest: ${REQUEST_ID}`);
+  });
+
+  it('lower-cases the request id, so either casing of the same id signs the same', () => {
+    expect(disclosureMessage(REQUEST_ID.toUpperCase().replace('0X', '0x'))).toBe(disclosureMessage(REQUEST_ID));
+  });
+});
+
 describe('the disclosure gate', () => {
   const sign = (/** @type {string} */ requestId, key = PAYER_KEY) =>
     signPersonalMessage(key, disclosureMessage(requestId));

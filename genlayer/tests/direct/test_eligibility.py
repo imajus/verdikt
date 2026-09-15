@@ -216,3 +216,20 @@ class TestPureRules:
             'within_filing_window': True,
         }
         assert judge_module.check_eligibility(verdict, OTHER_PAYER, SLUG) is None
+
+
+# The Python half of a two-language agreement. `proxy/src/evidence.js` builds
+# the same string, and `evidence.test.js` pins it there; a change on either side
+# makes every disclosure refuse, which reads as a claimant error rather than as
+# the drift it is.
+def test_the_disclosure_message_matches_the_proxy_byte_for_byte():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / 'scripts' / 'claim.py'
+    spec = importlib.util.spec_from_file_location('claim_cli_under_test', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    assert module.DISCLOSURE_PREFIX == 'Verdikt evidence disclosure\nrequest: '
+    assert module.DISCLOSURE_PREFIX + REQUEST_ID == f'Verdikt evidence disclosure\nrequest: {REQUEST_ID}'

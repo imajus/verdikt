@@ -614,6 +614,36 @@ cooldown itself — cannot be exercised by either test suite: reaching
 glsim will not let a write transaction make. See the comment in
 `tests/integration/test_escrow_flow.py`.
 
+## Filing a claim, and what an honest demo shows
+
+`genlayer/scripts/claim.py` is the claimant's CLI: sign, mint, bond, open,
+resolve, status, cancel, withdraw. A CLI rather than a web UI, matching
+`scripts/pay-x402.mjs` and `pnpm onboard` — the audience is an operator who
+already holds a key and a request id.
+
+`sign` is the step that is easy to skip and impossible to work around. The proxy
+discloses evidence only to the payer, so a claim opened without the payer's
+signature resolves `UNDETERMINED` for want of anything to judge. The message is
+pinned on both sides of the language boundary, because a drift there makes every
+disclosure refuse and reads as a claimant error rather than as a bug.
+
+The demo is honest when it shows four things, and the third is the one usually
+skipped ([#94](https://github.com/imajus/verdikt/issues/94)):
+
+1. a claim resolving `BREACH`, compensating from the provider's deposit;
+2. a claim resolving `MET`, costing the claimant the bounty — a demo that only
+   shows the claimant winning is advertising;
+3. **balances read back off chain either side of settlement**, not "the
+   transaction did not revert". GenLayer's version of the forwarder trap is an
+   `ERROR` execution result inside a perfectly healthy transaction;
+4. `CANCELLED` actually exercised — the infrastructure-failure path is the one a
+   real user hits first and the one nobody demonstrates.
+
+Settlement is emitted `on='finalized'`, so the money moves when the parent
+transaction finalizes rather than when the judgment lands. The CLI prints the
+balance either side of that on purpose: those are two events, and showing them
+as one would misrepresent when a claimant is actually paid.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.
