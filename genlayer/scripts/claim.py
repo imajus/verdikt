@@ -21,7 +21,8 @@ the transaction itself looks fine from the outside.
     .venv/bin/python scripts/claim.py mint --amount 5000000      # faucet
     .venv/bin/python scripts/claim.py bond                       # escrow the bond
     .venv/bin/python scripts/claim.py open --request-id 0x… --clause faithful --slug summarizer
-    .venv/bin/python scripts/claim.py resolve --request-id 0x… --clause faithful
+    GENLAYER_RESOLVER_PRIVATE_KEY=0x… \                       # a distinct account — see `resolve`
+        .venv/bin/python scripts/claim.py resolve --request-id 0x… --clause faithful
     .venv/bin/python scripts/claim.py status  --request-id 0x… --clause faithful
     .venv/bin/python scripts/claim.py balance
 
@@ -49,11 +50,11 @@ def deployment(network: str) -> dict:
     return json.loads(path.read_text()) if path.exists() else {}
 
 
-def connect(args):
+def connect(args, key=None):
     import genlayer_py
     from eth_account import Account
 
-    key = os.environ.get('GENLAYER_PRIVATE_KEY')
+    key = key or os.environ.get('GENLAYER_PRIVATE_KEY')
     if not key:
         raise SystemExit('GENLAYER_PRIVATE_KEY is unset — that key is the claimant')
     account = Account.from_key(key)
@@ -169,10 +170,36 @@ def cmd_open(args):
 
 
 def cmd_resolve(args):
-    client, account = connect(args)
+    """Have the claim judged.
+
+    `resolve_claim` is permissionless by design — whoever calls it earns the
+    bounty — but the bounty is what makes a MET outcome cost the claimant
+    anything: `_settle` releases it from the claimant's own bond to the
+    resolver. Resolve with the claimant's own key and that release is
+    `release(claimant, claimant, amount)`, a debit and credit to the same
+    balance, so the documented demo would show a MET outcome that costs the
+    claimant nothing. `GENLAYER_RESOLVER_PRIVATE_KEY` picks a distinct
+    resolver account for this call; without it, resolving as the claimant is
+    still allowed (a real user with no bounty hunter on hand may have no
+    choice) but flagged.
+    """
+    resolver_key = os.environ.get('GENLAYER_RESOLVER_PRIVATE_KEY')
+    client, account = connect(args, key=resolver_key)
     judge, token = addresses(args)
+    claim = client.read_contract(address=judge, function_name='get_claim', args=[args.request_id, args.clause])
+    claimant = claim['claimant']
+    self_resolved = account.address.lower() == claimant.lower()
+    if self_resolved:
+        print(
+            'warning: resolving as the claimant — on MET the bounty is released from the '
+            "claimant's own bond back to itself, so the deterrent this demo is supposed to "
+            'show does not apply. Set GENLAYER_RESOLVER_PRIVATE_KEY to a distinct account to '
+            'see it.'
+        )
     print('before:')
-    show_balance(client, token, account.address, 'claimant')
+    show_balance(client, token, claimant, 'claimant')
+    if not self_resolved:
+        show_balance(client, token, account.address, 'resolver')
     write(client, judge, 'resolve_claim', [args.request_id, args.clause])
     claim = client.read_contract(address=judge, function_name='get_claim', args=[args.request_id, args.clause])
     print(f'\noutcome   {claim["outcome"]}')
@@ -184,7 +211,9 @@ def cmd_resolve(args):
     # the point: a reader sees the judgment and the money as two separate
     # events, which is what they are.
     print('\nafter (settlement lands on finalization):')
-    show_balance(client, token, account.address, 'claimant')
+    show_balance(client, token, claimant, 'claimant')
+    if not self_resolved:
+        show_balance(client, token, account.address, 'resolver')
     return 0
 
 

@@ -126,7 +126,8 @@ export GENLAYER_TOKEN_ADDRESS=0x…
 .venv/bin/python scripts/claim.py bond
 .venv/bin/python scripts/claim.py open --request-id 0x… --clause faithful --slug summarizer \
     --signature 0x…
-.venv/bin/python scripts/claim.py resolve --request-id 0x… --clause faithful
+GENLAYER_RESOLVER_PRIVATE_KEY=0x… \                        # a distinct account — see below
+    .venv/bin/python scripts/claim.py resolve --request-id 0x… --clause faithful
 .venv/bin/python scripts/claim.py status --request-id 0x… --clause faithful
 ```
 
@@ -136,6 +137,16 @@ signature resolves `UNDETERMINED` for want of anything to judge. The message it
 signs is pinned on both sides — `proxy/src/evidence.test.js` and
 `tests/direct/test_eligibility.py` — because a drift there makes every
 disclosure refuse, which reads as a claimant error rather than as the bug it is.
+
+`resolve_claim` is permissionless by design — whoever calls it earns the
+bounty — and that is precisely what makes a `MET` outcome cost the claimant
+anything: the bounty is released out of the claimant's own bond to whoever
+resolved. Resolve with the claimant's own key (the default, if
+`GENLAYER_RESOLVER_PRIVATE_KEY` is unset) and that release is a debit and a
+credit to the same balance, so the "claimant loses the bounty" half of the
+demo below silently stops being true. Set `GENLAYER_RESOLVER_PRIVATE_KEY` to a
+second, funded account to resolve as an actual third party; `claim.py resolve`
+warns when it detects self-resolution.
 
 Every subcommand that moves money reads the balance back. A transaction that
 mined is not a transaction that did anything: GenLayer consensus can record an
@@ -149,7 +160,9 @@ Four things, and the third is the one usually skipped:
 1. **A claim that resolves `BREACH`** — the claimant is compensated from the
    provider's deposit.
 2. **A claim that resolves `MET`** — the claimant loses the bounty out of its
-   bond. A demo that only shows the claimant winning is advertising.
+   bond. A demo that only shows the claimant winning is advertising, and one
+   resolved with the claimant's own key doesn't show it at all: see
+   `GENLAYER_RESOLVER_PRIVATE_KEY` above.
 3. **Balances read back off chain, before and after.** Not "the transaction did
    not revert". This codebase already learned once that a forwarder can swallow
    a receiver revert and report success; GenLayer's version is an `ERROR`
