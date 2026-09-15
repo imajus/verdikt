@@ -303,4 +303,15 @@ describe('evaluate — semantic clauses', () => {
   it('rejects an empty criteria string, which promises nothing and cannot be judged', () => {
     expect(() => evaluate(sla({ ...semanticClause, criteria: '' }), observe())).toThrow();
   });
+
+  // A long criteria, multiplied across several semantic clauses, is what pushed
+  // a per-call CRE result past the workflow's 100kb ExecutionResponseLimit. The
+  // full text is still readable on the SLA itself, so the result only needs a
+  // bounded excerpt.
+  it('bounds a long criteria in the result rather than carrying it whole', () => {
+    const long = { ...semanticClause, criteria: 'x'.repeat(2048) };
+    const result = evaluate(sla(long), observe());
+    const clause = result.clauses.find((c) => c.id === 'faithful');
+    expect(clause?.expected.length).toBeLessThan(long.criteria.length);
+  });
 });
