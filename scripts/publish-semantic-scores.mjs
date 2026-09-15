@@ -63,7 +63,10 @@ async function main() {
   if (!signerKey) throw new Error('ENS_SEMANTIC_SIGNER_PRIVATE_KEY (or ENS_SCORE_SIGNER_PRIVATE_KEY) is unset');
   const signer = privateKeyToAccount(signerKey);
 
-  const settlements = Array.isArray(exported.claims) ? exported.claims : [];
+  if (!Array.isArray(exported.claims)) {
+    throw new Error(`${args.claims}: "claims" is not an array — export is malformed, refusing to score it as empty`);
+  }
+  const settlements = exported.claims;
   console.log(`judge    ${exported.judge ?? '(unknown)'} on ${exported.network ?? '(unknown)'}`);
   console.log(`signer   ${signer.address}`);
   console.log(`claims   ${settlements.length}`);
