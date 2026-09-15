@@ -38,7 +38,7 @@ const listing = (overrides) => ({
   contested: false,
   sla: null,
   slaRaw: null,
-  published: { conformance: 1000, availability: 1000 },
+  published: { conformance: 1000, availability: 1000, semanticConformance: null },
   unpublished: { conformance: 1000, availability: 1000, counts: { pass: 0, fail: 0, down: 0, total: 0 } },
   semantic: null,
   history: [],
@@ -58,7 +58,7 @@ describe('a service with no verdicts', () => {
 
   it('says so in the computed scores it offers while nothing is published', () => {
     const html = stringify(
-      detailTemplate(listing({ published: { conformance: null, availability: null } }))
+      detailTemplate(listing({ published: { conformance: null, availability: null, semanticConformance: null } }))
     );
     expect(html).toContain('N/A availability');
   });
@@ -69,7 +69,7 @@ describe('a service with verdicts', () => {
     const html = stringify(
       detailTemplate(
         listing({
-          published: { conformance: 1000, availability: 958 },
+          published: { conformance: 1000, availability: 958, semanticConformance: null },
           history: [verdict({})]
         })
       )

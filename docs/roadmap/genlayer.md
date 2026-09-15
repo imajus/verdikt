@@ -520,6 +520,40 @@ record, semantic settlements are a second judgement, and a page that refused to
 render the first because the second was unreachable would be reporting the
 wrong outage.
 
+## The third score
+
+`semanticConformance` = `MET / (MET + BREACH)`, floored, on the same 0–1000
+scale as the other two, and **1000 for an empty record** on the same principle:
+absence of evidence is not evidence of failure, and a provider nobody has
+disputed is not thereby suspect
+([#92](https://github.com/imajus/verdikt/issues/92)).
+
+**Only decided disputes count.** `OPEN` has not decided yet;
+`UNDETERMINED` and `CANCELLED` decided nothing at all. Folding any of them in
+would let a claimant move a provider's public standing by filing claims that
+never resolve — the same reasoning that keeps `DOWN` out of the conformance
+denominator. A non-answer is not an answer.
+
+**Never averaged into `conformance`.** They measure different questions over
+different traffic: every paid call versus only the disputed ones. One merged
+figure answers neither, and it would hide exactly the case this whole leg
+exists to surface — a spotless deterministic record next to a poor semantic one.
+
+It is written by its own signer, scoped per key with `authorizeTextRoles` and
+never `authorizeNameRoles`. That is not bookkeeping: Spike A found the name-wide
+grant to be one of the two ways the per-key ACL can be bypassed, and a semantic
+aggregator that could also write `conformance` would undo the separation above.
+A subname minted before this key existed has nobody authorised for it and reads
+back `null` — correct, not a gap; nothing has been published.
+
+**The pipeline is deliberately two programs.** `genlayer/scripts/export-claims.py`
+reads the judge and emits JSON; `scripts/publish-semantic-scores.mjs` aggregates
+and writes ENS. Split along the toolchain boundary rather than forced into one
+language — reading GenLayer means its own calldata codec, writing ENS means viem
+and the key-scoped resolver — and the file between them is a feature: for a
+number that ranks providers publicly, the exact input it came from is worth
+being able to look at. Both halves read back what they wrote.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.

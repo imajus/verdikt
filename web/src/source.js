@@ -167,6 +167,7 @@ function demoSource() {
       sla: SLA_TEXT.honest,
       conformance: 1000,
       availability: 958,
+      semanticConformance: 666,
       owner: '0xA11ce00000000000000000000000000000000001',
       backend: ENS_BACKEND.FIXTURE,
       resolvedAt: 0
@@ -180,6 +181,7 @@ function demoSource() {
       sla: SLA_TEXT.violating,
       conformance: 0,
       availability: 1000,
+      semanticConformance: null,
       owner: '0xB0b0000000000000000000000000000000000002',
       backend: ENS_BACKEND.FIXTURE,
       resolvedAt: 0
