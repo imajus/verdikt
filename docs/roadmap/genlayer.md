@@ -306,112 +306,75 @@ deadline must not have its evidence expire mid-execution. Concretely:
   whole window — a claim opened at hour 23.9 of the filing window still gets
   the full fresh adjudication runway, not six minutes.
 
-### Cross-chain: pull-only, no bridge for the hackathon window
+### Settlement currency: a custom token, native to GenLayer, no bridge at all
 
-GenLayer has no native bridge to Arc (it settles to Ethereum via a zkSync
-rollup; its own currency is `GEN`, no USDC/stablecoin exists on GenLayer
-chain — full migration of the registry/escrow onto GenLayer was considered
-and rejected for this reason plus the confidentiality/execution-model
-mismatches above). GenLayer Foundation does publish an official bridge
-pattern — `genlayer-studio-bridge-boilerplate` (cloned at
-`hackathon/genlayer-studio-bridge-boilerplate/`), LayerZero V2, Python
-`BridgeSender`/`BridgeReceiver` ICs + Solidity mailbox contracts + a Node.js
-polling relay through a ZKsync Era hub — but LayerZero V2 only has **Arc
-Mainnet** deployed (chain ID 5042, endpoint 30417). **Evidence standard,
-corrected:** the original claim rested on one 404 against one guessed URL —
-not good enough on its own. Re-checked across LayerZero's V1 and V2 deployed-
-contracts pages, several per-chain pages that list all known networks, and a
-web search for "Arc testnet LayerZero" specifically: Arc Mainnet is the only
-Arc entry anywhere in LayerZero's documented surface. That's a real, multi-
-source check now, not a single dead link — but it is still absence of
-evidence, not a documented "Arc Testnet is unsupported" statement, since no
-source asserts the negative directly. Treat "no Arc Testnet endpoint" as
-well-supported, not proven, and re-verify before committing to mainnet
-migration.
+**Superseded (Sep 15): no relay, no bridge, no Arc write-back.** Everything
+below this point through "Deployment" replaces several rounds of relay/
+bridge/trust-model design that turned out to be solving a problem that
+didn't need to exist. The chain of reasoning, kept because the dead ends are
+informative:
 
-Given no bridge either way, the hackathon path is a custom pull-based relay
-(no LayerZero) that reads GenLayer's finalized claim state and applies
-settlement back to Arc — specified in full below, since a naive version of
-this relay turns out to hide a real, undisclosed centralization of trust.
-Mainnet migration to the official bridge is a natural post-hackathon step,
-not in scope now.
+1. Original plan: settle refunds in USDC on Arc, requiring GenLayer to write
+   back cross-chain. No native bridge exists (GenLayer's own currency is
+   `GEN`, no USDC on GenLayer chain), so this meant either the official
+   LayerZero bridge (`genlayer-studio-bridge-boilerplate`, cloned at
+   `hackathon/genlayer-studio-bridge-boilerplate/`) or a custom relay.
+   LayerZero V2 only has **Arc Mainnet** deployed (chain ID 5042, checked
+   across V1/V2 docs and several per-chain listings, not a single guessed
+   URL — still absence of evidence, not a documented negative, but
+   well-supported), ruling out the official bridge against Arc Testnet.
+2. A custom relay was specified in detail — finality polling, a trust model
+   naming the relay's signing key as a full settlement authority, replay
+   protection, durable progress, retries, read-back. All of that
+   engineering existed to solve one problem: getting a USDC-denominated
+   result from GenLayer onto Arc.
+3. **The premise was wrong.** Nothing requires the semantic-claims refund to
+   be denominated in the *same* currency as the original x402 payment. A
+   dedicated token, deployed on GenLayer itself with a permissionless
+   `mint()` (a hackathon-appropriate stand-in for a faucet — GEN was
+   considered first, but GEN is a plain utility/gas token with no
+   dollar-parity, and using it directly would leave the same numerical
+   mismatch a custom token avoids by matching USDC's 6-decimal convention),
+   removes the cross-chain requirement entirely. GenLayer still *reads* Arc
+   (`getVerdict()`, a plain nondet fetch, no bridge needed for reads) to
+   confirm a real verdict exists and who paid — settlement itself never
+   leaves GenLayer.
 
-### Relay: finality, trust model, and failure handling
+**Why this doesn't reopen "just move everything to GenLayer."** That was
+considered and rejected earlier for two reasons that have nothing to do with
+currency and still fully apply: GenLayer has no TEE, so moving the *live,
+per-call* verification there would expose every paid response to every
+validator, not just disputed ones; and GenLayer's consensus requires every
+validator to independently re-fetch and agree on the same result, which
+fits judging *cached* evidence (a stable blob, fetched the same way every
+time) but not a one-time, already-consumed HTTP exchange. CRE stays exactly
+where it is, judging exactly what it judges today. Only the semantic-claims
+settlement — already reading cached evidence, always compatible with
+GenLayer's consensus model — moves fully onto GenLayer.
 
-#83/#84 said "the relay polls resolved claims and settles." That sentence
-was hiding three separate, serious gaps — checked against GenLayer's actual
-finality documentation and this repo's own hard-won lessons about exactly
-this class of bug, not assumed.
+**Finality is still required, solved natively instead of via a relay.**
+The finality lesson from the (now superseded) relay design is real and
+still applies: `claim.resolved = True` flips at Accepted, not Finalized, and
+GenLayer's own docs are explicit that "an Accepted receipt... can require it
+and later non-finalized transactions... to be recomputed." Settling funds
+against a merely-Accepted result is settling against a result that can
+still change. GenLayer's own messaging primitive solves this directly,
+without any external polling: internal IC-to-IC calls take an `on=`
+parameter, and `on='finalized'` — "the message executes after the parent
+transaction is fully finalized (appeal window has closed)" — is **the
+documented default**, specifically because `on='accepted'` messages "may be
+emitted multiple times across appeal rounds" and "cannot be taken back" if
+a later appeal changes the outcome. `resolve_claim` calls the settlement
+token's `transfer` via `.emit(on='finalized')` — the platform itself defers
+the actual balance change until finality, the same guarantee the relay
+design was manually reconstructing.
 
-**"Resolved" is not "final."** GenLayer's own finality docs
-(`understand-genlayer-protocol/core-concepts/optimistic-democracy/finality`)
-are explicit: *"An Accepted receipt can influence the contract's provisional
-execution chain, but a successful appeal can require it and later
-non-finalized transactions for the same Intelligent Contract to be
-recomputed. Applications that need irreversible settlement should wait for
-`Finalized`."* The contract's own `claim.resolved = True` flag flips at
-**Accepted** time (inside the same transaction that runs
-`run_nondet_unsafe`), not at Finalized — an appeal during the Finality
-Window can still overturn it. Settling real Arc-side funds against a merely-
-Accepted result is settling against a result that can still change. The
-relay must poll GenLayer's transaction-level status (`gen_getTransactionStatus`
-or `gen_getTransactionLifecycle`, not just the contract's own state) and wait
-for `Finalized` before settling anything.
-
-**"Accepted" doesn't mean "succeeded," either.** Same doc: *"Accepted also
-does not mean 'execution succeeded.' It means the committee agreed on the
-receipt. The agreed receipt can contain a user error or a GenVM error."* The
-relay must check that the finalized state's `outcome` field is one of the
-four recognized values (`MET`/`BREACH`/`UNDETERMINED`/`CANCELLED`) before
-settling — not just that the transaction didn't revert. A committee can
-validly agree that execution errored.
-
-**Bind settlement to the exact deployed judge and claim.** The relay's
-config pins the `SlaClaimJudge` contract address (not derived from caller
-input, same principle as pinning the Arc registry address in the eligibility
-gate), and a settlement transaction carries the exact `(requestId,
-clauseId, outcome)` read from that pinned contract's finalized state — never
-a generic event feed that could originate from an unrelated deployment.
-
-**The actual trust model, named rather than hidden.** Dropping LayerZero
-also drops whatever message authentication a real bridge would have
-provided (LayerZero's DVNs cryptographically verify a message's origin
-before delivery). This design has no equivalent: nothing cryptographically
-proves to Arc that GenLayer actually decided what the relay claims it
-decided. Concretely — **the relay's signing key is a settlement authority**,
-full stop, the same way `authorizedKeys` already is for CRE's reports
-(`cre/workflows/verify/workflow.ts`'s `Config.authorizedKeys` — "the gateway
-rejects any trigger request not signed by a key listed here... which is what
-stops a third party manufacturing verdicts by calling the workflow
-directly"). Pull payments settling on the relay's say-so do not authenticate
-that assertion on their own. Minimum mitigation, reusing that exact existing
-pattern rather than inventing a new one: gate the new
-`SemanticSettlementWritten` write path behind the same kind of
-registry-side `authorizedKeys` allowlist, so at least *who* holds settlement
-authority is a known, revocable, named key — not full compromise mitigation
-(there is still no cryptographic proof of what GenLayer actually decided),
-but the difference between an unbounded and a bounded, disclosed trust
-assumption is real and worth stating plainly in the submission rather than
-implying this is trustless when it isn't.
-
-**Replay protection, durable progress, retries, read-back — same shape as
-existing patterns in this repo, not new ones:**
-- Replay: `_semanticSettlements[requestId][clauseId].writtenAt != 0` gate,
-  mirroring `_recordVerdict`'s existing `DUPLICATE_REQUEST` check exactly.
-- Durable polling progress: the relay's "last processed claim" cursor must
-  survive a restart — reuse the Durable Object pattern already established
-  in this codebase (`proxy/src/pending-do.js`'s `PendingVerification`)
-  rather than an in-memory cursor that a restart silently resets.
-- Retries: settlement submission needs retry-with-backoff on transient
-  failure; safe by construction once replay protection exists (a retried
-  settlement for an already-written claim is a harmless no-op, not a double
-  write).
-- Read-back: **this repo already documented this exact failure mode** —
-  CLAUDE.md's "Two silent failures" section: "The KeystoneForwarder
-  swallows a receiver revert and mines anyway... read the value back." The
-  relay must read the resulting on-chain state after submitting a
-  settlement, not just check that the transaction didn't revert, for
-  exactly the reason already proven true once in this codebase.
+**Read-only Arc dependency, no trust model needed for settlement.** GenLayer
+still reads `VerdiktRegistry.getVerdict()` for eligibility (verified payer,
+a real verdict exists, service/slug match — see below), but a read has no
+settlement-authority problem: nothing writes back, so there is no signing
+key that becomes a de facto authority over anyone's funds, and no replay/
+retry/read-back engineering for a write that no longer happens.
 
 ### Claim eligibility gate: the part that was missing entirely
 
@@ -472,8 +435,11 @@ execution cost is spent:
   (`IVerdiktRegistry.sol:46-56` has no such field) — an Arc-side contract
   change, out of scope for this note, tracked separately.
 - **Bond.** `submit_claim` should verify a consumer bond was actually posted
-  for this `request_id` (economics section below) before proceeding — not
-  trust the caller, for the same reason as the payer check.
+  for this `request_id` (economics section below) before proceeding. Simpler
+  than originally scoped: the bond now lives in the same GenLayer contract
+  ecosystem as the check itself (custom settlement token, not a cross-chain
+  Arc deposit), so this is a plain same-chain balance/escrow read, not
+  another cross-chain trust question.
 - **Deadline.** Reject if called after the filing window (two-clocks design,
   above) has lapsed since `verdict.writtenAt`.
 - **Duplicate protection, corrected.** The claim key must be `(request_id,
@@ -511,133 +477,92 @@ same call. Correcting the framing everywhere it appears.
 That correction has real consequences, checked against the actual contract
 rather than assumed:
 
-**A GenLayer semantic verdict cannot reuse `VerdictWritten`.**
-`VerdiktRegistry.sol`'s `_recordVerdict` rejects outright: `if
-(_verdicts[requestId].writtenAt != 0) { emit VerdictRejected(...,
-DUPLICATE_REQUEST); return; }`. CRE already wrote a verdict for this
-`request_id` — attempting to relay GenLayer's outcome through the same path
-is silently rejected as a duplicate, not merged, not overwritten. The relay
-(#84) needs a genuinely new event and a new record, e.g. `_semanticSettlements[requestId][clauseId]`
-and `SemanticSettlementWritten(...)`, keyed the same composite way the
-GenLayer contract already keys claims — not a second write to `_verdicts`.
+**No `VerdictWritten` collision, by construction now.** Under the earlier
+relay design, settling GenLayer's outcome through Arc's verdict path would
+have collided with `VerdiktRegistry.sol`'s `_recordVerdict`, which rejects
+outright: `if (_verdicts[requestId].writtenAt != 0) { emit
+VerdictRejected(..., DUPLICATE_REQUEST); return; }`. Moot now — semantic
+settlement never touches `_verdicts` or Arc at all, so there is nothing to
+collide with. Its own event lives entirely on GenLayer, in the settlement
+token / claim contract's own state.
 
-**Refund must account for what CRE already credited, or the per-call cap
-breaks.** `_recordVerdict` already caps CRE's own refund at
-`min(FIXED_REFUND, paidNative, service.deposit)`
-(`VerdiktRegistry.sol:194-200`) — the invariant this protects is explicit
-elsewhere in the repo: "a refund larger than the payment makes
-induced-failure griefing profitable with no arbitration to fall back on." A
-call can get a CRE `FAIL` (refund already credited) *and* a semantic
-`BREACH` (a second, independent judgment) — settling the semantic refund as
-a fresh, uncapped allowance would let one paid call collect two refunds and
-blow through that cap. The settlement path must read the existing
-`getVerdict(requestId).refundCredited` (the same on-chain read the
-eligibility gate, #90, already needs) and cap the *additional* semantic
-credit at `FIXED_REFUND - existingCredited`, clamped to zero — never assume
-the semantic refund starts from a clean allowance.
+**The refund-cap double-dip concern, resolved by the currency split, not
+just re-capped.** The earlier design had both CRE's refund and semantic
+settlement drawing USDC from the same `service.deposit`, so a call getting
+both a CRE `FAIL` and a semantic `BREACH` risked collecting two refunds past
+`FIXED_REFUND`. That risk is gone by construction now: CRE's refund is
+still USDC from Arc's `service.deposit`, semantic settlement is the custom
+token from an entirely separate GenLayer-native pool. Two independent
+remedies in two independent currencies from two independent pools — nothing
+shared to double-spend against. Worth stating plainly as a real benefit of
+the currency-separation decision, not just a side effect.
 
-**Dashboard must show both, not collapse them.** A call's full record is now
-one CRE verdict plus zero or more semantic settlements (one per disputed
-clause), each independently outcome-bearing. Folding them into a single
-displayed status would misrepresent exactly the case that motivated this
-whole feature — CRE PASS, semantic BREACH.
+**Dashboard must show both, not collapse them.** A call's full record is
+still one CRE verdict (Arc, USDC) plus zero or more semantic settlements
+(GenLayer, custom token) — different chains and currencies now, if
+anything a *stronger* reason not to collapse them into a single displayed
+status. Folding them together would misrepresent exactly the case that
+motivated this feature — CRE PASS, semantic BREACH.
 
-**Reputation: a separate score, not folded into `conformance`.** The
-existing `conformance`/`availability` ENS text records are computed purely
-from `VerdictWritten` (Specification.md §1) and are already referenced in
-the frozen ETHOnline submission's evidence — silently changing what they
-measure would misrepresent those already-published numbers. Recommend a
-third score, e.g. `semanticConformance`, written by its own signer
-(mirroring the existing per-key EAC pattern `sla`/`conformance`/
-`availability` already uses) from `SemanticSettlementWritten` events, same
-1000-when-empty convention. Leaving it unaggregated anywhere means semantic
-failures never affect a provider's advertised standing at all — defeating
-the point of judging them.
+**Reputation: a separate score, sourced from GenLayer now, not
+`VerdictWritten`.** The existing `conformance`/`availability` ENS text
+records are computed purely from Arc's `VerdictWritten` events
+(Specification.md §1) and are already referenced in the frozen ETHOnline
+submission's evidence — unaffected by any of this, since semantic
+settlement never reaches Arc. A third score, e.g. `semanticConformance`
+(same 1000-when-empty convention, its own ENS signer role), would now be
+aggregated by reading GenLayer's own settlement events/state via its RPC,
+not an Arc log scan — a genuinely different aggregation mechanism from the
+existing hourly workflow, not a drop-in extension of it. Leaving it
+unaggregated anywhere still means semantic failures never affect a
+provider's advertised standing — same gap, different plumbing to fill it.
 
-### Withdrawal cooldown: the pre-filing escape route
+### Withdrawal cooldown: still needed, now single-chain
 
-Every mechanism above assumes the provider's deposit is still there when a
-semantic settlement needs it. Nothing currently guarantees that. Checked
-`VerdiktRegistry.sol`'s `deregister()` directly: while `ACTIVE`, a provider
-can deregister and receive their **entire remaining deposit, immediately,
-unconditionally** — `returned = service.deposit; service.deposit = 0; ...
-_send(msg.sender, returned)`, no cooldown, no pending-claim check.
+The underlying problem is unchanged, just relocated: whatever holds a
+provider's semantic-claims deposit must not let it be withdrawn instantly,
+or a provider can post the deposit, take calls, and withdraw before a
+consumer ever files — the same escape route originally found in
+`VerdiktRegistry.deregister()` (still real, still worth knowing: while
+`ACTIVE`, a provider can deregister and pull their **entire deposit,
+immediately, unconditionally**), just now against the new GenLayer-native
+settlement token's deposits instead of Arc's.
 
-CRE's own refund never had this problem because it's synchronous — the
-verdict is written, and any refund credited, inside the same call that
-evaluates the response, with no window for the provider to react in between.
-Semantic claims are the opposite by design: up to a 24-hour filing window
-plus adjudication time. A provider who suspects a semantic dispute is coming
-(or simply exits routinely) can deregister and withdraw before a consumer
-ever files — the claim can still resolve `BREACH`, but there is nothing left
-to draw a refund or the GenLayer-cost reimbursement from. This is a
-consequence of adding *any* delayed dispute mechanism on top of a
-deposit-return path that was built assuming only instant, synchronous
-settlement — not a flaw specific to this design's other pieces.
+**Materially simpler now.** This used to be a retrofit onto an
+already-deployed, currently-uncooled-down Arc contract with real state —
+now it's a cooldown designed into a brand-new GenLayer contract from the
+start, on a single chain, no cross-chain migration question at all.
 
 **Fix, specified, not yet implemented:**
+- Deregistration/withdrawal moves to a pending status with a cooldown
+  safely exceeding the filing + adjudication window (e.g. 72h, well past
+  the 24h + ~3h GenLayer appeal figures already in play elsewhere in this
+  doc).
+- Settlement re-clamps against the deposit's *current* balance at credit
+  time, not one checked earlier — handles concurrent liabilities if
+  multiple claims draw on the same provider's pool.
+- Insufficient funds clamp to whatever remains rather than reverting — the
+  judgment (`MET`/`BREACH`/`UNDETERMINED`/`CANCELLED`) is always recorded
+  regardless of whether funds backed it, same split CRE already has between
+  verdict and payout.
 
-- **Deregistration cooldown.** `deregister()` should stop returning funds
-  immediately. Move the service to a new `DEREGISTERING` status and start a
-  timer; the deposit becomes withdrawable only after a cooldown that safely
-  exceeds the filing window plus adjudication time (e.g. 72h, well past the
-  24h + ~3h GenLayer appeal figures already in play elsewhere in this doc —
-  pick with margin, not exactly at the boundary). A pending semantic claim
-  can still settle against the locked-but-not-yet-withdrawn deposit during
-  that window.
-- **Concurrent liabilities, re-checked at settlement, not just at
-  claim-open.** The refund-cap fix above (read `refundCredited`, cap the
-  additional semantic credit) is necessary but not sufficient on its own —
-  the deposit can shrink further between claim-submission and actual
-  settlement if other verdicts or other semantic settlements draw on the
-  same pool concurrently. Settlement must re-clamp against the *current*
-  `service.deposit` at the moment funds are actually credited, the same way
-  `_recordVerdict` already does for CRE (`credited = min(FIXED_REFUND,
-  paidNative, service.deposit)`) — not trust a balance checked earlier.
-- **Insufficient-funds behavior mirrors the existing pattern, not a new
-  failure mode.** If the deposit is fully drawn down by settlement time, the
-  semantic credit clamps to whatever remains (possibly zero) — it does not
-  revert, and the judgment (`MET`/`BREACH`/`UNDETERMINED`) is still recorded
-  regardless of whether funds were available to back it. Same separation
-  CRE already has between "the verdict" and "the payout."
+### Deployment: entirely new contracts on GenLayer, Arc untouched
 
-### Deployment: a companion contract, not an extension of the live registry
+**Simplified by the same currency decision.** The earlier "companion
+contract, not an extension" analysis is now moot in its original form —
+there is no Arc-side contract to deploy at all. `VerdiktRegistry` stays
+exactly as it is on Arc Testnet
+(`0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`), untouched, no migration
+question for its existing bonds, refunds, or registrations, because nothing
+new is deployed there. Everything new — the settlement token, the
+bonding/escrow logic — deploys fresh on GenLayer, which has no live state to
+protect yet. The "shared bond suspends CRE-judged calls" risk from the
+companion-contract design doesn't apply either: GenLayer's settlement pool
+and Arc's `service.deposit` are different chains now, not just different
+contracts, so there is no shared balance to drain in the first place.
 
-Every prior section said "extend the Arc registry" as if it were a source
-edit. It isn't. `VerdiktRegistry` is already deployed and live on Arc
-Testnet (`0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af`, per `CLAUDE.md`) with
-real state: registered services, bonded deposits, owed refunds, configured
-consumers. Solidity contracts are immutable — there is no "add a function to
-the live one." The real choices are redeploy-and-migrate, or don't touch it
-at all. Neither the eligibility gate, the withdrawal cooldown, nor the
-settlement issues specified what happens to existing bonds, owed refunds, or
-registrations under either path, which they need to before any of this is
-buildable.
-
-**Worse, a shared bond breaks the stated goal on its own.** The design so
-far has semantic settlement drawing from the *same* `service.deposit` CRE's
-own refund already draws from. Checked `_recordVerdict` directly: `if
-(service.deposit == 0 && service.status == Status.ACTIVE) { ... suspend
-... }` — draining the deposit to zero auto-suspends the service, blocking
-*every* future paid call, CRE-judged ones included. A semantic `BREACH`
-large enough to zero the shared deposit would suspend a service over a
-dimension CRE never touched, directly contradicting "CRE stays untouched" —
-true of the code path, false of the operational consequence.
-
-**Fix: a separate companion contract, not a modification.** A new
-`SemanticEscrow` (name TBD) contract, freshly deployed, holding its *own*
-provider deposits — opt-in, and now a real bond a provider posts *into this
-contract specifically*, not a flag. It reads `VerdiktRegistry.getVerdict()`
-(already a public view function, no changes needed to the live registry) for
-eligibility (#90) and writes its own `SemanticSettlementWritten` event and
-its own `_semanticSettlements` mapping, entirely independent of `_verdicts`
-and `service.deposit`. This resolves both problems in one move: the live
-registry is never touched, so there is no migration question for existing
-bonds/refunds/registrations at all; and semantic settlement can never
-suspend a service over CRE's own deposit, because it never shares the pool.
-The tradeoff, stated plainly: a provider now posts two separate deposits if
-they want both deterministic and semantic coverage, not one — a real
-UX/capital cost, not free.
+The only Arc dependency left is a read (`getVerdict()`, eligibility gate,
+above) — no write, no deployment, no migration.
 
 ### Claimant interface: not yet owned by any issue
 
@@ -646,88 +571,85 @@ But #86 (submission assets) only asked for a deployed judge — a hackathon
 reviewer needs to actually *use* the claim flow, not take deployment on
 faith. Nothing currently owns: a claimant-facing CLI (mirroring
 `scripts/pay-x402.mjs`'s existing pattern — a real interactive script, not a
-UI, given the time remaining) for opening a claim, posting a bond, checking
-status, and withdrawing a refund once settled. Tracked as its own issue.
+UI, given the time remaining) for minting test settlement tokens, opening a
+claim, posting a bond, checking status, and withdrawing once settled — all
+against GenLayer now, no Arc-side withdrawal step for this path. Tracked as
+its own issue.
 
 **Acceptance criteria for the demo, explicit:**
 - A claim that resolves `BREACH` (successful claimant) *and* one that
   resolves `MET` (rejected claimant) — not just one happy path.
-- Actual Arc balance read-back before and after settlement, not "the
-  transaction didn't revert" — the same lesson already learned once in this
-  codebase about the KeystoneForwarder swallowing failures silently.
+- Actual settlement-token balance read-back on GenLayer before and after
+  settlement, not "the transaction didn't revert" — the same lesson this
+  codebase already learned once about the KeystoneForwarder swallowing
+  failures silently, applied to the new chain doing the paying.
 - A demonstrated `CANCELLED` / infrastructure-failure recovery — the timeout
   path actually exercised, not just present in the contract.
 
-### Economics: two separate accounting lines, not one "refund + cost" blob
+### Economics: two separate accounting lines, both in the custom token now
 
-"Refund plus GenLayer execution cost," used loosely up to this point, was
-never actually specified — who fronts execution costs, who gets reimbursed,
-how a GEN-denominated cost is priced in USDC, what caps apply, and what
-happens to a claimant's own bond were all left open. Left underspecified,
-the execution-cost side in particular is a real drain vector: an unbounded
-or self-reported cost claim against a provider's deposit is the same shape
-of attack the refund cap already exists to prevent.
+"Refund plus GenLayer execution cost" was never actually specified — what
+caps apply and what happens to a claimant's own bond were left open. Left
+underspecified, an unbounded or self-reported cost claim against a
+provider's deposit is the same shape of attack the refund cap already
+exists to prevent. Re-specified for the GenLayer-native settlement token,
+not USDC on Arc:
 
 **Two lines, two independent caps, never merged:**
 
-- **Refund** — the existing shape, extended: `min(FIXED_REFUND, paidAmount,
-  remaining deposit)`, minus what CRE already credited (above). Tied to the
-  size of the original x402 payment, exactly like today.
-- **GenLayer execution-cost reimbursement** — a **fixed USDC bounty**
-  (e.g. `GENLAYER_COST_BOUNTY`, a protocol constant), *not* metered against
-  actual GEN gas spent. Metering would need a GEN/USDC price oracle and would
-  let whoever reports the cost claim an arbitrary amount — a fixed bounty
-  sidesteps both. Same cap regardless of whether the claim escalated to
-  GenLayer's own internal appeal jury (a bigger, more expensive round) — the
-  bounty does not grow with actual cost, it simply covers less of it.
+- **Compensation** — no longer literally "the refund" (that stays a CRE/
+  Arc/USDC-only concern, untouched). Sized to numerically match the
+  original `paidAmount` (read from Arc's `getVerdict()`, already needed for
+  eligibility) in the custom token's own units — not a currency conversion,
+  since the token isn't pegged to anything, just a legible number a demo
+  can compare against the original payment. Capped the same shape as
+  before: `min(compensation, remaining GenLayer-native deposit)`.
+- **GenLayer execution-cost bounty** — a **fixed** amount in the same
+  token (a protocol constant), not metered against actual gas spent —
+  avoids both a price-tracking dependency and letting a self-reported cost
+  claim an arbitrary amount. Same cap regardless of whether the claim
+  escalated to GenLayer's own internal appeal jury.
 
-**Who fronts vs. who's reimbursed.** Someone needs GEN in a GenLayer wallet
-*before* any Arc-side settlement can happen — the two chains settle on
-different timelines, and Arc reimbursement is necessarily after the fact.
-Realistically the relay (#84) fronts this, not the consumer directly
-(requiring end users to hold GEN defeats the point of a USDC-native
-marketplace). The relay is reimbursed the fixed bounty from whichever side's
-funds are liable once Arc-side settlement completes.
+**Who pays gas — simpler now, no relay to reimburse.** Since settlement
+happens natively inside `resolve_claim` (via `.emit(on='finalized')` to the
+settlement token, above), whoever calls `submit_claim`/`resolve_claim` —
+realistically the claimant, through the CLI (#94) — pays their own GEN gas
+directly, the same way any blockchain transaction works. No relay, so
+nothing to front or reimburse as a separate step. The execution-cost bounty
+still exists as a real line item: if the claimant wins, the provider's
+deposit reimburses the gas they spent pursuing a valid claim; if the
+claimant loses, their own bond absorbs it instead.
 
 **Bond disposition, fully specified:**
 
 - **Consumer wins (`BREACH`):** consumer's bond returned in full, untouched
-  — they were right. Provider's deposit pays the refund plus the fixed
-  bounty (reimbursing the relay).
-- **Consumer loses (`MET`):** consumer's bond pays the fixed bounty
-  (reimbursing the relay); any **surplus** above that fixed amount is
-  returned to the consumer, never kept as a default. Deters frivolous claims
-  without turning a lost claim into an uncapped penalty.
+  — they were right. Provider's GenLayer-native deposit pays the
+  compensation plus the execution-cost bounty.
+- **Consumer loses (`MET`):** consumer's bond pays the execution-cost
+  bounty; any **surplus** above that fixed amount is returned to the
+  consumer, never kept as a default. Deters frivolous claims without
+  turning a lost claim into an uncapped penalty.
 - **`UNDETERMINED`:** neither party's bond is charged — an evidence-envelope
-  failure is upstream of both parties. The relay still fronted real gas for
-  the attempt; for now that's an absorbed operating cost, not passed to
-  either party. Flagging as a business-model decision to revisit, not
-  settling it unilaterally here.
-- **`CANCELLED`** (new — see below): consumer's bond returned in full. A
-  resolution that never happens is an infrastructure failure, not a
-  judgment against the consumer.
+  failure is upstream of both parties. The claimant still spent real gas on
+  the attempt; for now that's an absorbed cost of trying, not passed to the
+  provider. Flagging as a business-model decision to revisit, not settling
+  it unilaterally here.
+- **`CANCELLED`:** consumer's bond returned in full. A resolution that never
+  happens is an infrastructure failure, not a judgment against the
+  consumer.
 
-**Timeout / cancellation path for infrastructure failure.** Nothing
-previously defined what happens if `resolve_claim` simply never succeeds —
-relay down, evidence expired before adjudication finished, ENS unreachable,
-GenLayer consensus itself failing to reach agreement. Without an explicit
-path, the consumer's bond would sit locked indefinitely with no judgment and
-no return — not forfeited, but not returned either, worse than either
-resolution. Fixed with a fourth outcome, `CANCELLED`, and a permissionless
-`cancel_claim(request_id, clause_id)`: anyone may call it once a resolution
-timeout has elapsed since `submit_claim` (sized past the filing +
-adjudication window with margin, mirroring the deregistration cooldown
-above), marking the claim `CANCELLED` and returning the consumer's bond in
-full. Mirrors GenLayer's own permissionless idleness-call pattern for
-stalled validator rounds, rather than inventing a new access-control shape.
-Implemented and reasoned through the same way as the rest of this contract
-(no PyPI/GitHub access in this sandbox to execute it) — `genlayer/contracts/sla_claim_judge.py`.
+**Timeout / cancellation path for infrastructure failure**, unchanged in
+concept from the earlier design, now entirely single-chain: `cancel_claim`
+(implemented, `genlayer/contracts/sla_claim_judge.py`) lets anyone close a
+claim permissionlessly once a resolution timeout elapses since
+`submit_claim`, returning the consumer's bond in full — mirrors GenLayer's
+own permissionless idleness-call pattern for stalled validator rounds.
 
-Settlement itself is applied back to Arc by the relay, reading the GenLayer
-verdict and calling the new `SemanticSettlementWritten` path (not
-`VerdictWritten`) on the escrow contract — not yet built, tracked in the
-GitHub issue, and now specified precisely enough to build correctly rather
-than reopening the refund-cap invariant by accident.
+Settlement itself now happens inside `resolve_claim`, via the settlement
+token's `.emit(on='finalized').transfer(...)` — not a relay, not a write to
+Arc. Not yet built — the current contract still needs the settlement token
+contract, the bonding logic in `submit_claim`, and the finalized-gated
+payout in `resolve_claim` added. Tracked in the GitHub issues.
 
 ## What's built vs. not (as of Sep 14, 2026)
 
@@ -755,16 +677,26 @@ than reopening the refund-cap invariant by accident.
 - [x] Direct-mode tests with mocked web/LLM (`genlayer/tests/direct/`)
 - [x] Local reference clones: `genlayer-boilerplate`,
       `genlayer-studio-bridge-boilerplate`
-- [ ] **Claim eligibility gate** — on-chain `getVerdict` check (registry
+- [ ] **Superseded architecture, not yet reflected in code:** the contract
+      still assumes Arc-side USDC settlement via a relay. Needs: a
+      GenLayer-native settlement token contract (permissionless `mint()`,
+      balances), bonding wired into `submit_claim`, and `resolve_claim`
+      paying out via `.emit(on='finalized').transfer(...)` instead of just
+      recording an outcome. No relay to build at all — deleted from scope,
+      not deferred.
+- [ ] **Claim eligibility gate** — on-chain `getVerdict` **read** (registry
       address, real verdict exists, verified payer, service/slug match,
-      bond posted, filing deadline), currently entirely missing; anyone can
-      call `submit_claim` against anyone's public `request_id` today
+      filing deadline; bond-posted check is now same-chain, not
+      cross-chain), currently entirely missing; anyone can call
+      `submit_claim` against anyone's public `request_id` today
 - [ ] Provider opt-in flag for semantic claims (ENS text record)
 - [ ] Proxy response cache for opted-in services, `GET /internal/sla/<slug>`,
       and the dispute-gated `GET /internal/evidence/<request_id>` (returns
       nothing until `submit_claim` has opened a claim for that id)
-- [ ] Consumer bonding + relay settlement back to Arc (including
-      `UNDETERMINED` releasing both bonds unspent)
+- [ ] Consumer bonding + native settlement (`UNDETERMINED` releasing both
+      bonds unspent) — entirely on GenLayer, no relay, no Arc write
+- [ ] Claimant CLI (#94): mint test tokens, open a claim, post a bond, check
+      status, withdraw
 - [ ] Deploy to Bradbury testnet
 - [ ] Submission assets (live demo URL — required, logo, 180-char one-liner,
       1000-char description, how-to steps, private verification notes,
