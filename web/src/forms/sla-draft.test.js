@@ -236,3 +236,25 @@ describe('citedClauseIds', () => {
     ])).toEqual({ 'price-band': 2, shape: 1 });
   });
 });
+
+// A semantic clause is valid SLA (docs/roadmap/genlayer.md) that the form has
+// no control for. The fall-through used to read anything unrecognised as a
+// schema clause, which would have lost the `criteria` and deleted the
+// provider's promise on the next save.
+describe('semantic clauses', () => {
+  const withSemantic = JSON.stringify({
+    version: 1,
+    clauses: [
+      { id: 'speed', type: 'latency', maxMs: 2000 },
+      { id: 'faithful', type: 'semantic', criteria: 'The summary must describe the document supplied.' }
+    ]
+  });
+
+  it('refuses to build a draft from one, so the composer falls back to JSON', () => {
+    expect(() => draftFromText(withSemantic)).toThrow(/semantic clause/);
+  });
+
+  it('names the clause, so the provider can find it in the JSON', () => {
+    expect(() => draftFromText(withSemantic)).toThrow(/faithful/);
+  });
+});

@@ -398,6 +398,14 @@ ignored the new one. ([#87](https://github.com/imajus/verdikt/issues/87))
   is well-formed but unenforceable — a dashboard warning, not a schema
   constraint.
 
+**The dashboard's SLA composer cannot author one yet.** Its clause editors cover
+`schema`, `latency` and `priceRange`, and the fall-through read anything else as
+a schema clause — which for a semantic clause means losing the `criteria` and
+deleting the provider's promise on the next save. `draftFromText` now throws on
+one instead, which routes the composer to its JSON view with the reason and the
+record intact. A provider can author a semantic clause there today; a proper
+form control is follow-up work nobody owns yet.
+
 The `criteria` text is **frozen into contract state at `submit_claim` time** and
 deliberately not re-read at `resolve_claim` time. A provider editing its SLA
 mid-dispute must not be able to change what is being judged — the same

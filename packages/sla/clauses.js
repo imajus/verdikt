@@ -84,17 +84,25 @@ export function evaluateClause(clause, observation) {
       };
     }
     case 'semantic':
-      // CRE cannot judge this — it is schema-valid but deliberately never
-      // evaluated here (docs/roadmap/genlayer.md). Always passes so a mixed
-      // SLA's other clauses still get a real deterministic verdict; a
-      // semantic clause is judged separately by GenLayer, on dispute, never
-      // by this per-call PASS/FAIL.
+      // Recognised, never enforced. `evaluate` is pure by invariant — no I/O,
+      // no clock, no network — so it cannot judge whether a response *meant*
+      // what was promised; that is what the GenLayer leg is for
+      // (docs/roadmap/genlayer.md).
+      //
+      // Passing is the only safe answer. Failing would let any provider who
+      // adds a semantic clause be refunded against on every call by a judge
+      // that never read the criteria, and throwing would drop the whole
+      // document to the status-only fallback, silently disabling every
+      // deterministic clause declared alongside it.
+      //
+      // It still appears in the result list, because a reader needs to see
+      // that the provider promised this and that CRE did not decide it.
       return {
         id: clause.id,
         type: 'semantic',
         pass: true,
-        expected: 'judged by GenLayer on dispute, not by this per-call check',
-        actual: 'not evaluated by CRE'
+        expected: clause.criteria,
+        actual: 'not judged here — semantic clauses are decided on dispute'
       };
     default:
       // Unreachable: the SLA is validated against schema.json first. Kept so a

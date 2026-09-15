@@ -128,13 +128,21 @@ interface SlaPriceRangeClause extends SlaClauseBase {
 }
 
 /**
- * Judged by a GenLayer Intelligent Contract on dispute, never by this engine
- * (docs/roadmap/genlayer.md) — `evaluateClause` always passes it. `criteria`
- * is the binding judgment text; unlike every other clause type, `description`
- * here stays decorative and is never what GenLayer judges against.
+ * A promise about what the response *says*, decided on dispute by GenLayer
+ * rather than per call by CRE (docs/roadmap/genlayer.md).
+ *
+ * `evaluate` recognises it and always passes it. The deterministic engine is
+ * pure by invariant and cannot judge meaning; the alternative — refusing to
+ * parse a document containing one — would fall back to status-only and lose
+ * every deterministic clause the provider declared alongside it.
  */
 interface SlaSemanticClause extends SlaClauseBase {
   type: 'semantic';
+  /**
+   * The binding judgment text, in plain language. Deliberately not the
+   * `description` field, which stays decorative on every clause type: a reader
+   * has to be able to tell what was promised from what was merely explained.
+   */
   criteria: string;
 }
 
