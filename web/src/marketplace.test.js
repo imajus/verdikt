@@ -39,8 +39,9 @@ const record = (overrides) => ({
  * @param {VerdictRecord[]} [options.verdicts]
  * @param {RefundRecord[]} [options.refunds]
  * @param {Record<string, ServiceRecord|Error>} [options.records]
+ * @param {GenLayerReader|null} [options.genlayer]
  */
-const deps = ({ services = [], verdicts = [], refunds = [], records = {} } = {}) => ({
+const deps = ({ services = [], verdicts = [], refunds = [], records = {}, genlayer = null } = {}) => ({
   registry: {
     listServices: async () => services,
     listVerdicts: async () => verdicts,
@@ -51,7 +52,24 @@ const deps = ({ services = [], verdicts = [], refunds = [], records = {} } = {})
     if (found instanceof Error) throw found;
     if (!found) throw new Error(`no record for ${slug}`);
     return found;
-  }
+  },
+  genlayer
+});
+
+/** @param {Partial<SemanticSettlement>} overrides @returns {SemanticSettlement} */
+const settlement = (overrides = {}) => ({
+  requestId: `0x${'ab'.repeat(32)}`,
+  clauseId: 'faithful',
+  slug: 'weather',
+  claimant: '0x1111111111111111111111111111111111111111',
+  criteria: 'The forecast must be for the coordinates given in the request.',
+  outcome: 'BREACH',
+  resolved: true,
+  reasoning: 'A station 40km away.',
+  paidAmount: 2500n,
+  compensation: 2500n,
+  bounty: 100n,
+  ...overrides
 });
 
 /**
@@ -1277,5 +1295,95 @@ describe('the service page after the layout change', () => {
     expect(html).not.toContain('Service id');
     expect(html).toContain('for="relay-help"');
     expect(html).toContain('for="address-help"');
+  });
+});
+
+// The whole point of the feature: two judgements of different questions, shown
+// side by side and never merged (docs/roadmap/genlayer.md).
+describe('semantic settlements', () => {
+  const REQUEST = `0x${'ab'.repeat(32)}`;
+
+  const withSettlements = (/** @type {SemanticSettlement[]} */ settlements) =>
+    deps({
+      services: [service('weather', HONEST)],
+      verdicts: [verdict(HONEST, 'PASS', REQUEST)],
+      records: { weather: record({}) },
+      genlayer: { judgeAddress: `0x${'ee'.repeat(20)}`, listSettlements: async () => settlements }
+    });
+
+  it('hangs a settlement off the verdict it disputes without changing it', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement()]));
+    const [listing] = services;
+
+    // The CRE verdict is untouched: PASS, no refund. That is the case worth
+    // showing — well-formed, on time, and not what was promised.
+    expect(listing.history[0].outcome).toBe('PASS');
+    expect(listing.history[0].refunded).toBe(0n);
+    expect(listing.history[0].settlements).toHaveLength(1);
+    expect(listing.history[0].settlements[0].outcome).toBe('BREACH');
+  });
+
+  it('carries several clauses disputed on one call', async () => {
+    const { services } = await loadMarketplace(
+      withSettlements([settlement({ clauseId: 'first' }), settlement({ clauseId: 'second' })])
+    );
+    expect(services[0].history[0].settlements).toHaveLength(2);
+  });
+
+  it('keeps a settlement for another service off this listing', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement({ slug: 'elsewhere' })]));
+    expect(services[0].semantic).toEqual([]);
+  });
+
+  // `null` means the dashboard can say nothing; `[]` means it looked and found
+  // nothing. Rendering those the same way would let an unconfigured dashboard
+  // read as a clean record.
+  it('reports null when no judge is configured', async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    expect(services[0].semantic).toBeNull();
+    expect(services[0].history).toEqual([]);
+  });
+
+  it('reports an empty list when the judge is read and nothing is disputed', async () => {
+    const { services } = await loadMarketplace(withSettlements([]));
+    expect(services[0].semantic).toEqual([]);
+  });
+
+  // Arc's verdicts are the record. A dashboard that refused to render them
+  // because GenLayer was unreachable would be reporting the wrong outage.
+  it('still renders the marketplace when GenLayer is unreachable', async () => {
+    const { services } = await loadMarketplace(
+      deps({
+        services: [service('weather', HONEST)],
+        verdicts: [verdict(HONEST, 'PASS', REQUEST)],
+        records: { weather: record({}) },
+        genlayer: {
+          judgeAddress: `0x${'ee'.repeat(20)}`,
+          listSettlements: async () => {
+            throw new Error('rpc down');
+          }
+        }
+      })
+    );
+    expect(services[0].history).toHaveLength(1);
+    expect(services[0].semantic).toBeNull();
+  });
+
+  it('shows the semantic outcome next to the CRE one on the service page', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement()]));
+    const page = renderDetail(services[0]);
+    expect(page).toContain('semantic BREACH');
+    expect(page).toContain('Contested on meaning');
+    expect(page).toContain('A station 40km away.');
+  });
+
+  it('says nothing at all about meaning when no judge is configured', async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    const page = renderDetail(services[0]);
+    expect(page).not.toContain('Contested on meaning');
   });
 });

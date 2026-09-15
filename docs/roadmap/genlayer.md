@@ -494,6 +494,32 @@ provider is free to promise little, and not to instruct its own adjudicator.
 This is a mitigation, not a proof, and it is the reason the judgment prompt is
 worth reviewing as carefully as the settlement arithmetic.
 
+## Showing it
+
+`web/src/genlayer.js` is the only file in the dashboard that knows GenLayer
+exists, for the same reason `packages/sdk/ens.js` is the only one that knows
+ENS does. It is in `web/` rather than in the SDK on purpose: the SDK is imported
+by the proxy and by the CRE workflow, and neither has any business reading
+GenLayer — the proxy relays, the workflow judges the deterministic half. Only
+the dashboard needs both judgements at once.
+
+Reads go through `genlayer-js`. GenLayer reads are `gen_call` over its own
+calldata encoding rather than ABI, so the alternative was hand-rolling that
+codec in JS; in a browser bundle the library is affordable where in a Worker it
+was not (see the evidence endpoint's round 4 above, which faced the same
+question and answered it differently for good reason). It costs about 29kB
+gzipped.
+
+**`null` and `[]` render differently and must keep doing so.** `null` means no
+judge is configured or GenLayer could not be read — the dashboard can say
+nothing about meaning. `[]` means it read fine and nothing was disputed.
+Collapsing them would let an unconfigured dashboard read as a clean record.
+
+And a GenLayer outage never empties the marketplace: Arc's verdicts are the
+record, semantic settlements are a second judgement, and a page that refused to
+render the first because the second was unreachable would be reporting the
+wrong outage.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.

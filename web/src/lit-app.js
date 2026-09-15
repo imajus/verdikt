@@ -1,5 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatWhen, scoreBand } from './format.js';
+import { formatMinorRange, formatMinorUsdc, formatNativeUsdc, formatRefundUsdc, formatScore, formatSettlementUnits, formatWhen, scoreBand } from './format.js';
 import { getConnectedAccount } from './wallet.js';
 import { getSession } from './session.js';
 import { ARC, SEPOLIA } from '@verdikt/sdk';
@@ -62,6 +62,30 @@ const statusMark = (status) => html`
 /** @param {SlaOutcome} outcome */
 const outcomeMark = (outcome) => html`
   <span class="outcome ${outcome.toLowerCase()}"><i class="dot"></i>${outcome}</span>`;
+
+/**
+ * The semantic judgement, shown next to the deterministic one and never merged
+ * into it.
+ *
+ * A call can be CRE PASS and semantically BREACH — well-formed, on time,
+ * correctly priced, and not what was promised — and that pairing is the only
+ * thing worth showing about it. Two questions, two chains, two currencies
+ * (docs/roadmap/genlayer.md).
+ *
+ * @param {SemanticSettlement[]} settlements
+ */
+const semanticMark = (settlements) => {
+  const breached = settlements.filter((settlement) => settlement.outcome === 'BREACH');
+  if (breached.length > 0) {
+    return html`<span class="semantic breach" title=${`Disputed on meaning and upheld: ${breached[0].reasoning}`}>semantic BREACH</span>`;
+  }
+  const open = settlements.filter((settlement) => !settlement.resolved);
+  if (open.length > 0) return html`<span class="semantic open" title="A semantic claim is open against this call.">disputed</span>`;
+  if (settlements[0].outcome !== 'MET') {
+    return html`<span class="semantic undetermined" title="Disputed on meaning; the validators reached no determination.">semantic ${settlements[0].outcome}</span>`;
+  }
+  return html`<span class="semantic met" title="Disputed on meaning and dismissed.">semantic ${settlements[0].outcome}</span>`;
+};
 
 /**
  * The four fields the marketplace's column headers can sort by (issue #64).
@@ -374,7 +398,36 @@ const deliveredSection = (listing, anchors) => {
             <span class="strip-note">oldest first</span>
           </p>
           <div class="scroll"><table class="ledger"><thead><tr><th>Block</th><th>Outcome</th><th>Broke</th><th class="num">Paid</th><th class="num">Refunded</th></tr></thead><tbody>
-            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${verdict.blockNumber === null ? html`<span class="muted">—</span>` : verdict.blockNumber}</td><td>${outcomeMark(verdict.outcome)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td></tr>`)}
+            ${listing.history.map((verdict) => html`<tr class="verdict ${verdict.outcome.toLowerCase()}"><td>${verdict.blockNumber === null ? html`<span class="muted">—</span>` : verdict.blockNumber}</td><td>${outcomeMark(verdict.outcome)}${verdict.settlements.length === 0 ? nothing : semanticMark(verdict.settlements)}</td><td>${failedClauseCell(verdict, anchors)}</td><td class="num">${figure(formatMinorUsdc(verdict.paidAmount))}</td><td class="num">${verdict.refunded > 0n ? figure(formatRefundUsdc(verdict.refunded)) : html`<span class="muted">—</span>`}</td></tr>`)}
+          </tbody></table></div>`}
+    </section>`;
+};
+
+/**
+ * Semantic settlements: the second, independent judgement.
+ *
+ * Its own section rather than extra columns on the verdict table, because it
+ * is not extra detail about a verdict — it is a different question, decided on
+ * a different chain, paid in a different currency, by a different mechanism,
+ * on dispute rather than per call. Merging them would imply one overrides the
+ * other, and neither does.
+ *
+ * `null` and `[]` are rendered differently on purpose: the first means nothing
+ * can be said, the second means nothing was disputed. Collapsing them would
+ * let an unconfigured dashboard read as a clean record.
+ *
+ * @param {Listing} listing
+ */
+const semanticSection = (listing) => {
+  if (listing.semantic === null) return nothing;
+  return html`
+    <section class="block">
+      <h3>Contested on meaning <small class="tally">${listing.semantic.length === 0 ? 'nothing disputed' : `${listing.semantic.length} claim${listing.semantic.length === 1 ? '' : 's'}`}</small></h3>
+      <p class="aside">A second, independent judgement — not an appeal. Chainlink CRE decides whether a response was well-formed, on time and correctly priced; it cannot decide whether the content was what was promised. A consumer who disagrees files a claim, and GenLayer’s validators judge it. A call can be PASS above and BREACH here, and that is the case worth seeing.</p>
+      ${listing.semantic.length === 0
+        ? nothing
+        : html`<div class="scroll"><table class="ledger"><thead><tr><th>Request</th><th>Clause</th><th>Outcome</th><th class="num">Paid for</th><th class="num">Compensated</th></tr></thead><tbody>
+            ${listing.semantic.map((settlement) => html`<tr class="verdict"><td><code title=${settlement.requestId}>${settlement.requestId.slice(0, 10)}…</code></td><td><code>${settlement.clauseId}</code></td><td>${semanticMark([settlement])}${settlement.reasoning ? html`<small class="reason">${settlement.reasoning}</small>` : nothing}</td><td class="num">${figure(formatMinorUsdc(settlement.paidAmount))}</td><td class="num">${settlement.compensation > 0n ? figure(formatSettlementUnits(settlement.compensation)) : html`<span class="muted">—</span>`}</td></tr>`)}
           </tbody></table></div>`}
     </section>`;
 };
@@ -446,7 +499,8 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
       <div>${callSection(listing, clauses)}${recordSection(listing, mode, go)}</div>
       ${promisedSection(listing, clauses, anchors)}
     </div>
-    ${deliveredSection(listing, anchors)}`;
+    ${deliveredSection(listing, anchors)}
+    ${semanticSection(listing)}`;
 };
 
 /** @param {'landing'|'marketplace'|'service'|'manage'|'provider'|'register'|'withdraw'|'how'|'terms'|'privacy'} view @param {'live'|'demo'} mode @param {'system'|'light'|'dark'} theme @param {string|null} account @param {(path: string) => void} go @param {() => void} connect @param {() => void} disconnect @param {(theme: 'system'|'light'|'dark') => void} changeTheme */

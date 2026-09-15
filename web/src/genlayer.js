@@ -1,0 +1,119 @@
+// Reading the semantic half of a verdict, off GenLayer.
+//
+// This is the only file in `web/` that knows GenLayer exists, for the same
+// reason `packages/sdk/ens.js` is the only file that knows ENS does: one place
+// to change when the shape of the read changes, and one place to look when it
+// is wrong.
+//
+// It is here rather than in `@verdikt/sdk` on purpose. The SDK is imported by
+// the proxy and by the CRE workflow, and neither has any business reading
+// GenLayer — the proxy relays, and the workflow judges the deterministic half.
+// Only the dashboard needs both judgements side by side.
+
+import { chains, createClient } from 'genlayer-js';
+
+/** The four outcomes `SlaClaimJudge` can record, plus the one it starts in. */
+export const SEMANTIC_OUTCOMES = Object.freeze(['OPEN', 'BREACH', 'MET', 'UNDETERMINED', 'CANCELLED']);
+
+/** Networks genlayer-js knows by name; a free-form label resolves to nothing. */
+const CHAINS = Object.freeze({
+  localnet: chains.localnet,
+  studionet: chains.studionet,
+  testnet_asimov: chains.testnetAsimov,
+  testnet_bradbury: chains.testnetBradbury
+});
+
+/**
+ * A claim as the dashboard shows it. Deliberately *not* merged into
+ * `ListingVerdict`: a call can be CRE PASS and semantically BREACH, and
+ * flattening the two would destroy the only fact worth showing — that the
+ * response was well-formed and wrong (docs/roadmap/genlayer.md).
+ *
+ * @param {Record<string, unknown>} raw one entry from `list_claims`
+ * @returns {SemanticSettlement}
+ */
+export function toSettlement(raw) {
+  const outcome = String(raw.outcome ?? 'OPEN');
+  return {
+    requestId: String(raw.request_id ?? ''),
+    clauseId: String(raw.clause_id ?? ''),
+    slug: String(raw.slug ?? ''),
+    claimant: String(raw.claimant ?? ''),
+    criteria: String(raw.criteria ?? ''),
+    // Unknown outcomes are surfaced as-is rather than coerced to a known one:
+    // a contract newer than this bundle is a fact the reader should show, not
+    // a value to guess at.
+    outcome: /** @type {SemanticOutcome} */ (SEMANTIC_OUTCOMES.includes(outcome) ? outcome : 'UNKNOWN'),
+    resolved: raw.resolved === true,
+    reasoning: String(raw.reasoning ?? ''),
+    paidAmount: BigInt(/** @type {string|number} */ (raw.paid_amount ?? 0)),
+    compensation: BigInt(/** @type {string|number} */ (raw.compensation ?? 0)),
+    bounty: BigInt(/** @type {string|number} */ (raw.bounty ?? 0))
+  };
+}
+
+/**
+ * Index settlements by the request they dispute.
+ *
+ * A map rather than a lookup per row: one verdict can carry several disputable
+ * clauses, so this is one-to-many, and the service page renders every verdict
+ * it has.
+ *
+ * @param {SemanticSettlement[]} settlements
+ * @returns {Map<string, SemanticSettlement[]>}
+ */
+export function byRequest(settlements) {
+  /** @type {Map<string, SemanticSettlement[]>} */
+  const index = new Map();
+  for (const settlement of settlements) {
+    const key = settlement.requestId.toLowerCase();
+    const existing = index.get(key);
+    if (existing) existing.push(settlement);
+    else index.set(key, [settlement]);
+  }
+  return index;
+}
+
+/**
+ * Whether a settlement is a finding against the provider.
+ *
+ * Only `BREACH` is. `MET` cleared them, and `UNDETERMINED`/`CANCELLED`
+ * deliberately decided nothing at all — counting either as a mark against a
+ * provider would make missing evidence worth manufacturing.
+ *
+ * @param {SemanticSettlement} settlement
+ */
+export const isBreach = (settlement) => settlement.outcome === 'BREACH';
+
+/**
+ * A reader over one deployed `SlaClaimJudge`, or `null` when none is
+ * configured.
+ *
+ * Absent is the normal state until the judge is deployed, and it has to stay
+ * distinguishable from "deployed, no claims": the first means the dashboard
+ * cannot say anything about semantic outcomes, the second means there are none.
+ *
+ * @param {{ network?: string, judgeAddress?: string, rpcUrl?: string }} options
+ * @returns {GenLayerReader | null}
+ */
+export function createGenLayerReader({ network, judgeAddress, rpcUrl } = {}) {
+  if (!judgeAddress) return null;
+  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'testnet_bradbury')];
+  if (!chain) return null;
+
+  const client = createClient(rpcUrl ? { chain, endpoint: rpcUrl } : { chain });
+
+  return {
+    judgeAddress,
+
+    async listSettlements() {
+      const claims = await client.readContract({
+        address: /** @type {`0x${string}`} */ (judgeAddress),
+        functionName: 'list_claims',
+        args: []
+      });
+      if (!Array.isArray(claims)) return [];
+      return claims.map((claim) => toSettlement(/** @type {Record<string, unknown>} */ (claim)));
+    }
+  };
+}
