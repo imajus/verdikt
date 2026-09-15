@@ -1,12 +1,19 @@
-"""The infrastructure-failure escape hatch."""
+"""The infrastructure-failure escape hatch, and the window that keeps it one."""
 
-from tests.direct.conftest import CLAUSE_ID, REQUEST_ID, SLUG, mock_evidence, mock_judgment, mock_sla
+from tests.direct.conftest import CLAUSE_ID, REQUEST_ID, SLUG, advance, mock_evidence, mock_judgment, mock_sla
+
+WINDOW = 24 * 60 * 60
 
 
-def test_claimant_can_cancel_an_open_claim(direct_vm, judge, direct_alice):
-    direct_vm.sender = direct_alice
+def _open_claim(direct_vm, judge, sender):
+    direct_vm.sender = sender
     mock_sla(direct_vm)
     judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
+
+
+def test_claimant_can_cancel_once_the_window_has_lapsed(direct_vm, judge, direct_alice):
+    _open_claim(direct_vm, judge, direct_alice)
+    advance(direct_vm, WINDOW + 1)
 
     judge.cancel_claim(REQUEST_ID, CLAUSE_ID)
 
@@ -15,10 +22,18 @@ def test_claimant_can_cancel_an_open_claim(direct_vm, judge, direct_alice):
     assert claim['resolved'] is True
 
 
+def test_cancelling_inside_the_window_refuses(direct_vm, judge, direct_alice):
+    """Otherwise cancelling is a free option: read the evidence, then withdraw."""
+    _open_claim(direct_vm, judge, direct_alice)
+    advance(direct_vm, WINDOW - 60)
+
+    with direct_vm.expect_revert('Adjudication window has not lapsed'):
+        judge.cancel_claim(REQUEST_ID, CLAUSE_ID)
+
+
 def test_a_stranger_cannot_cancel(direct_vm, judge, direct_alice, direct_bob):
-    direct_vm.sender = direct_alice
-    mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
+    _open_claim(direct_vm, judge, direct_alice)
+    advance(direct_vm, WINDOW + 1)
 
     direct_vm.sender = direct_bob
     with direct_vm.expect_revert('Only the claimant may cancel'):
@@ -26,12 +41,11 @@ def test_a_stranger_cannot_cancel(direct_vm, judge, direct_alice, direct_bob):
 
 
 def test_a_resolved_claim_cannot_be_cancelled(direct_vm, judge, direct_alice):
-    direct_vm.sender = direct_alice
-    mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
+    _open_claim(direct_vm, judge, direct_alice)
     mock_evidence(direct_vm)
     mock_judgment(direct_vm, 'BREACH')
     judge.resolve_claim(REQUEST_ID, CLAUSE_ID)
+    advance(direct_vm, WINDOW + 1)
 
     with direct_vm.expect_revert('Claim already resolved'):
         judge.cancel_claim(REQUEST_ID, CLAUSE_ID)

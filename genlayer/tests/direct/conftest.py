@@ -4,7 +4,10 @@ Direct mode runs the leader function only — `validator_fn` is never exercised
 here. Consensus behaviour belongs in integration tests against a real node.
 """
 
+import base64
+import datetime
 import json
+import sys
 
 import pytest
 
@@ -63,6 +66,7 @@ def evidence_envelope(
     status=200,
     content_type='application/json',
     response_body='{"summary": "A short summary of the document."}',
+    body_encoding='utf8',
     request_body='{"document": "..."}',
     method='POST',
 ):
@@ -74,10 +78,25 @@ def evidence_envelope(
             'status': status,
             'contentType': content_type,
             'body': response_body,
-            'bodyEncoding': 'utf8',
+            'bodyEncoding': body_encoding,
         },
         'cachedAt': 1789000000,
     }
+
+
+# A one-pixel PNG. Real bytes rather than a placeholder, because the contract
+# base64-decodes the envelope body before handing it to the model.
+PNG_PIXEL = base64.b64encode(
+    bytes.fromhex(
+        '89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4'
+        '890000000a49444154789c6360000002000100ffff03000006000557bfabd400'
+        '00000049454e44ae426082'
+    )
+).decode()
+
+
+def image_envelope(*, content_type='image/png', response_body=PNG_PIXEL, body_encoding='base64'):
+    return evidence_envelope(content_type=content_type, response_body=response_body, body_encoding=body_encoding)
 
 
 def mock_evidence(direct_vm, *, envelope=None, status=200):
@@ -87,3 +106,23 @@ def mock_evidence(direct_vm, *, envelope=None, status=200):
 
 def mock_judgment(direct_vm, outcome, reasoning='Because.'):
     direct_vm.mock_llm(r'.*adjudicating whether an API response.*', json.dumps({'outcome': outcome, 'reasoning': reasoning}))
+
+
+def advance(direct_vm, seconds):
+    """Move the clock the contract actually reads, forward from where it is now.
+
+    `direct_vm.warp` moves the stdlib clock but not `gl.message_raw['datetime']`,
+    which is where the VM puts the transaction timestamp and therefore what the
+    contract measures its deadlines against. Both are set, and the step is
+    relative to the current message time rather than to wall-clock now, so a
+    test that advances the clock cannot leave it somewhere that changes what a
+    later test means.
+    """
+    gl = sys.modules.get('genlayer.gl')
+    raw = getattr(gl, 'message_raw', None) if gl is not None else None
+    current = (raw or {}).get('datetime') or datetime.datetime.now(datetime.timezone.utc).isoformat()
+    when = datetime.datetime.fromisoformat(current.replace('Z', '+00:00')) + datetime.timedelta(seconds=seconds)
+    stamp = when.isoformat().replace('+00:00', 'Z')
+    direct_vm.warp(stamp)
+    if raw is not None:
+        raw['datetime'] = stamp

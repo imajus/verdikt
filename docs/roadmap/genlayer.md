@@ -146,6 +146,24 @@ An early draft had a single window and it conflated two unrelated things:
 With one clock, a claim filed on the last day of the filing window had no runway
 to be adjudicated in. They are separate because they answer different questions.
 
+The adjudication window is also what keeps `cancel_claim` an escape hatch rather
+than an exit. Cancelling settles nothing against either side, so a claimant free
+to cancel at will holds a free option: file, read the evidence, and withdraw
+whenever the judgment looks like going against them. Cancellation is therefore
+reachable only once the window has lapsed and `resolve_claim` — which anyone may
+call, including the provider — has had its full run at the evidence.
+
+**Where the clock comes from.** `gl.message_raw['datetime']`, the VM's
+transaction timestamp: the same instant for the leader and every validator,
+which is what makes a deadline judgeable under consensus at all. Two runner
+facts constrain this, both verified against the pinned runner rather than the
+docs. `gl.message` does not carry `datetime` — only `gl.message_raw` does. And
+`gl.vm.get_timestamp()`, the API the current executor documents for this,
+landed in a later runner than the one `sla_claim_judge.py` pins, so reaching for
+it raises `AttributeError`. Separately, `gltest`'s `direct_vm.warp()` moves the
+stdlib clock but *not* `message_raw['datetime']`, so direct-mode tests move both
+through the `advance()` helper in `tests/direct/conftest.py`.
+
 ## Evidence
 
 `GET /internal/evidence/<request_id>` on the proxy, redesigned three times.
@@ -181,6 +199,15 @@ Supported content types: `application/json`, `text/plain`, `text/html` for text
 judgment, `image/png` and `image/jpeg` via `exec_prompt(images=[…])`. Anything
 else, or an incomplete envelope, resolves `UNDETERMINED` — never a forced
 verdict.
+
+`bodyEncoding` is load-bearing rather than decorative, because an image cannot
+travel as JSON text: `utf8` (the default when absent) or `base64`, and any
+third value is a body this contract cannot read, which is a reason to reach no
+conclusion rather than a reason to guess. "Incomplete envelope" is checked
+before anything is formatted into a prompt and means what it says — a missing or
+wrongly-typed `request` or `response`, or a missing status, method or URL. The
+model is never asked for a binding `MET`/`BREACH` over a blank where half the
+evidence should have been.
 
 `request.body` is populated from the `bodyHex` the proxy already sends the
 workflow. An earlier draft of this section claimed the request body was
@@ -296,6 +323,25 @@ Errors carry the standard prefixes so validators know how to compare them:
 `[EXPECTED]` and `[EXTERNAL]` must match exactly, `[TRANSIENT]` agrees if both
 sides hit one, `[LLM_ERROR]` always disagrees to force rotation.
 
+### The attack consensus cannot catch
+
+Independent re-judgment defends against a leader that is wrong or dishonest. It
+does nothing about a prompt that is poisoned, because every validator rebuilds
+the *same* prompt from the same evidence and then agrees with itself —
+unanimously, and on the attacker's answer.
+
+Everything interpolated into the judgment prompt was written by a party to the
+dispute with money riding on the outcome: the `criteria` and the response body
+by the provider, the request body by the claimant. So the prompt fences each
+party's text into an explicitly marked block, tells the judge those blocks are
+evidence rather than instructions, and restates the standing orders *after* the
+evidence so the last word belongs to the contract. `criteria` is quoted as a
+description of what was owed, never as a directive addressed to the judge — a
+provider is free to promise little, and not to instruct its own adjudicator.
+
+This is a mitigation, not a proof, and it is the reason the judgment prompt is
+worth reviewing as carefully as the settlement arithmetic.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.
@@ -307,3 +353,9 @@ sides hit one, `[LLM_ERROR]` always disagrees to force rotation.
 - **Appeal semantics against a finalized payout.** `on='finalized'` is the
   mitigation, not a proof; a payout that finalizes and is then successfully
   appealed has no modelled recovery.
+- **Prompt injection by either party.** Fencing and restated orders are the
+  mitigation, not a proof, and consensus does not help here. Above.
+- **The adjudication window is a bare constant** in the contract, not yet tied
+  to the filing window or to the deposit cooldown that has to outlast both.
+  [#83](https://github.com/imajus/verdikt/issues/83),
+  [#93](https://github.com/imajus/verdikt/issues/93).
