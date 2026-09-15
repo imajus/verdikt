@@ -1,5 +1,5 @@
 genlayer-py @ git+https://github.com/genlayerlabs/genlayer-py@v0.18
-genlayer-test @ git+https://github.com/genlayerlabs/genlayer-testing-suite@v0.29
+genlayer-test[sim] @ git+https://github.com/genlayerlabs/genlayer-testing-suite@v0.29
 genvm-linter @ git+https://github.com/genlayerlabs/genvm-linter@main
 python-dotenv>=1.0.1
 eth-account>=0.13.3

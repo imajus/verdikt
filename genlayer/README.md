@@ -21,7 +21,9 @@ pnpm workspace, and `pnpm test` does not run it.
 ```
 contracts/sla_claim_judge.py   the Intelligent Contract that judges a claim
 contracts/settlement_token.py  what a claim settles in — a faucet-minted token, escrow included
+scripts/deploy.py              deploys both, then reads them back off chain
 tests/direct/                  fast in-memory tests, no node required
+tests/integration/             the cross-contract half; needs a node
 gltest.config.yaml             network table; `testnet_bradbury` is GenLayer's public testnet
 ```
 
@@ -51,13 +53,49 @@ python3 -m venv .venv
 
 ```bash
 .venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
-.venv/bin/python -m pytest tests/direct -q                # ~35s, no server
+.venv/bin/python -m pytest tests/direct -q                # ~35s cold, ~1s warm, no server
 .venv/bin/python -m pytest tests/direct/test_resolve_claim.py -q
 ```
+
+The integration suite needs a running node. `glsim` is the cheapest one, and it
+comes with the testing suite (via the `[sim]` extra, already in
+`requirements.txt`):
+
+```bash
+.venv/bin/glsim --port 4000 --no-browser &
+.venv/bin/gltest tests/integration -q
+```
+
+That suite exists for one reason: **direct mode cannot make cross-contract
+calls at all**, so the judge↔token wiring — escrow, deposits, release — is
+invisible to it. Nothing in there calls an LLM, so no provider key is needed.
+Judging a claim does, and that is deliberately left to a real node with real
+validators, which is the whole point of the judgment being non-deterministic.
 
 Run everything from `genlayer/`, not the repo root: `gltest.config.yaml` is
 found relative to the working directory, and `direct_deploy` resolves contract
 paths against it.
+
+## Deploying
+
+```bash
+cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
+.venv/bin/python scripts/deploy.py --network testnet_bradbury --dry-run
+.venv/bin/python scripts/deploy.py --network testnet_bradbury
+```
+
+The script deploys the token first (the judge takes its address in the
+constructor), then **reads both contracts back off chain** before writing
+`deployments/genlayer-bradbury.json`. That read-back is not a flourish: this
+repo has already shipped a deployment that mined and did nothing, because the
+KeystoneForwarder swallows a receiver revert and reports success. A deployment
+is finished when the contract answers, not when the call returns.
+
+**Funding is a manual step and there is no way around it.** The account needs
+test GEN, the faucet is at <https://testnet-faucet.genlayer.foundation/>, and it
+wants a signed-in wallet holding at least 0.01 ETH on mainnet — 100 GEN per
+claim, once a week. `--dry-run` reports the account and its balance without
+spending anything, which is the check to run before the real one.
 
 ## The runner pin
 
@@ -85,9 +123,8 @@ Two hard limits, both worth knowing before trusting a green run:
   `CallContract`/`PostMessage` operations are unhandled in direct mode unless
   glsim's hook is installed, so a judge wired to a token is untestable here.
   The fixtures deploy the judge with an empty `token_address`, which makes it
-  decide claims and settle nothing.
+  decide claims and settle nothing. `tests/integration/` covers that half.
 
-What that leaves is still most of the risk: the state machine, every refusal,
-the evidence handling, and — as a pure function, factored out for exactly this
-reason — the settlement arithmetic. The wiring between the two contracts needs
-a real node (#85).
+What direct mode does leave is most of the risk: the state machine, every
+refusal, the evidence handling, and — as a pure function, factored out for
+exactly this reason — the settlement arithmetic.
