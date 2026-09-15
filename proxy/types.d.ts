@@ -178,7 +178,11 @@ interface VerificationResult {
   status: number | null;
   headers: Record<string, string>;
   body: string;
-  /** The DON consensus observation is capped; a larger response comes back cut, and flagged. */
+  /**
+   * The enclave's reply is size-capped (`ExecutionResponseLimit`, 100kb); a
+   * larger response comes back cut, and flagged. Not the consensus observation
+   * limit this comment used to cite — the body never becomes one (#88).
+   */
   bodyTruncated?: boolean;
 }
 

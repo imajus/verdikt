@@ -300,19 +300,36 @@ and `main` had since shipped [#45](https://github.com/imajus/verdikt/pull/45),
 `origin/main`: `verified()` passes `bodyHex` into `workflow.verify()` and
 `VerifyRequest` carries it through.
 
-### The truncation the evidence path inherits
+### The truncation the evidence path inherited — root-caused, and gone
 
-`cre/workflows/verify/workflow.ts` truncates the relayed body to 20,000 chars,
-justified in-comment by "the DON consensus observation is capped (25kb in
-simulation)". The justification does not match the code path: the DON-signed
-report carries only `serviceId, requestId, outcome, payer, paidAmount,
-failedClause` and never the body, and `relay` reaches the proxy through a direct
-enclave-to-proxy POST that never crosses `donRuntime` at all.
+`cre/workflows/verify/workflow.ts` used to truncate the relayed body to 20,000
+characters, justified in-comment by "the DON consensus observation is capped
+(25kb in simulation)". That justification did not match the code path: the
+DON-signed report carries only `serviceId, requestId, outcome, payer,
+paidAmount, failedClause` and never the body, and `relay` reaches the proxy
+through a direct enclave-to-proxy POST that never crosses `donRuntime`.
 
-A silently truncated cache could omit exactly the content a semantic clause
-turns on, so this has to be root-caused before the evidence cache can claim to
-hold the full body. Tracked as
-[#88](https://github.com/imajus/verdikt/issues/88).
+**The comment was true when it was written.** At `a9bf43e` the payload came back
+as the handler's return value and nothing else; the callback push arrived later
+(CRE-9, `17f8b0b`), and the cap was never revisited. A stale justification, not
+a wrong one — which is why it read as plausible for weeks.
+
+The limits that do govern the relay are both in `cre/workflows/limits.json`:
+`ExecutionResponseLimit` at 100kb for the return value, and
+`ConfidentialHTTP.RequestSizeLimit` at 125kb for the callback POST. The smaller
+binds, so the budget is 90kb of serialized payload — and it is *measured*
+rather than assumed, because a character is not a byte twice over: multibyte
+UTF-8, and JSON escaping that can turn one character into six.
+
+`fitToBudget` (`cre/lib/relay-payload.js`) serializes and trims until it fits.
+It lives in `cre/lib` rather than in the workflow for the reason the workflow
+states about itself — it bundles to WASM and cannot be unit tested, so logic
+that lives only there is logic nothing tests, and deciding how much of a paid-for
+response gets delivered is exactly that class of code.
+
+Practical effect for evidence: bodies up to ~90kb now survive whole instead of
+being clipped at 20k, and anything genuinely larger is still flagged rather than
+silently cut. [#88](https://github.com/imajus/verdikt/issues/88).
 
 Until it is, the flag is *told to the judge* rather than acted on in code. Both
 alternatives are worse. Refusing every truncated body outright hands any
