@@ -130,3 +130,11 @@ def test_a_second_judge_cannot_touch_the_first_judge_s_escrow(deployed):
 # line. What survives is the test above — withdrawal without a request, which
 # short-circuits before the clock is read — plus the rules themselves as a pure
 # function in tests/direct/test_cooldown.py.
+#
+# The same limitation covers `request_withdrawal`'s "must be currently funded"
+# guard and `fund_deposit`'s reset of a stale pending request: reaching a slug
+# with `deposit_owner` set but `deposit_amount` at zero requires a completed
+# `withdraw_deposit`, which requires a completed `request_withdrawal` — the one
+# call glsim never lets run. Both guards are one-line, reviewed-in-the-diff
+# checks rather than arithmetic, which is the same trade the cooldown rules
+# above make.

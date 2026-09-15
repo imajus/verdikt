@@ -206,6 +206,12 @@ class SlaClaimJudge(gl.Contract):
         to an empty account. It releases once the incumbent has withdrawn back
         to zero with no claim open, so a different account may then bind it.
 
+        Clears any pending withdrawal on the slug. Without that, a provider
+        could withdraw once, request another withdrawal against the emptied
+        slug to pre-age a cooldown with nothing at risk, then re-fund and
+        withdraw again the moment that stale cooldown expires — collecting a
+        second deposit on a clock that never measured its exposure.
+
         **Known gap, stated rather than papered over: nothing here checks that
         the caller is the slug's actual registered provider.** Minting is
         permissionless, so anyone can escrow a trivial amount and bind an
@@ -237,6 +243,7 @@ class SlaClaimJudge(gl.Contract):
         self.deposit_owner[slug] = sender
         self.deposit_amount[slug] = u256(allocatable)
         self.deposit_committed[sender] = u256(committed_elsewhere + allocatable)
+        self.withdrawal_requested_at[slug] = u256(0)
 
     @gl.public.write
     def submit_claim(self, request_id: str, clause_id: str, slug: str, disclosure_signature: str) -> None:
@@ -331,10 +338,26 @@ class SlaClaimJudge(gl.Contract):
         backed has passed its filing deadline and any claim that was going to be
         filed has been.
 
+        That argument covers calls made at or before this call. It does not,
+        by itself, cover a call made near the end of the cooldown: nothing
+        here stops one, and its filing deadline can still fall after the
+        deposit becomes withdrawable. Closing that requires the marketplace or
+        proxy to stop routing paid calls to a slug once its withdrawal is
+        pending — out of reach for this contract alone; see
+        docs/roadmap/genlayer.md, "What is unresolved".
+
         The deposit stays escrowed and fully liable throughout. This records
         an intention, not a release.
+
+        Refuses on an unfunded slug — `deposit_owner` outlives a completed
+        withdrawal (the binding is permanent) while `deposit_amount` drops to
+        zero, and without this check that former owner could start a cooldown
+        aging against nothing, then land it the instant a real deposit
+        arrives.
         """
         self._require_depositor(slug)
+        if self.deposit_amount.get(slug, 0) <= 0:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit to withdraw')
         # `get_deposit` is where a provider reads when this becomes
         # withdrawable; one place to ask beats a return value and a view.
         self.withdrawal_requested_at[slug] = u256(self._now_bucketed())
