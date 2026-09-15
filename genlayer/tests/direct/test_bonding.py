@@ -14,6 +14,7 @@ import pytest
 
 from tests.direct.conftest import (
     ARC_RPC,
+    COOLDOWN,
     BOUNTY,
     CLAUSE_ID,
     FILING_WINDOW,
@@ -39,7 +40,9 @@ ADJUDICATION_WINDOW_SECONDS = 24 * 60 * 60
 @pytest.fixture
 def bonded_judge(direct_deploy):
     """A judge that demands a bond, with no token to post one into."""
-    return direct_deploy('contracts/sla_claim_judge.py', PROXY, '', 1000, BOUNTY, REGISTRY, ARC_RPC, FILING_WINDOW)
+    return direct_deploy(
+        'contracts/sla_claim_judge.py', PROXY, '', 1000, BOUNTY, REGISTRY, ARC_RPC, FILING_WINDOW, COOLDOWN
+    )
 
 
 def test_config_reports_the_economics(judge):
@@ -132,9 +135,19 @@ class TestDeposits:
             judge.fund_deposit(SLUG)
 
     def test_an_unfunded_slug_reports_no_owner(self, judge):
-        assert judge.get_deposit(SLUG) == {'slug': SLUG, 'owner': None, 'amount': 0, 'open_claims': 0}
+        assert judge.get_deposit(SLUG) == {
+            'slug': SLUG,
+            'owner': None,
+            'amount': 0,
+            'open_claims': 0,
+            'withdrawal_requested_at': 0,
+            'withdrawable_at': 0,
+        }
 
     def test_withdrawing_from_a_slug_with_no_deposit_refuses(self, direct_vm, judge, direct_alice):
         direct_vm.sender = direct_alice
         with direct_vm.expect_revert('has no deposit'):
             judge.withdraw_deposit(SLUG)
+
+    def test_config_reports_the_cooldown(self, judge):
+        assert judge.get_config()['cooldown_seconds'] == COOLDOWN

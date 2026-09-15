@@ -554,6 +554,66 @@ and the key-scoped resolver — and the file between them is a feature: for a
 number that ranks providers publicly, the exact input it came from is worth
 being able to look at. Both halves read back what they wrote.
 
+## Provider deposit cooldown, as built
+
+Withdrawal is two steps: `request_withdrawal` starts the clock,
+`withdraw_deposit` releases once it has run out. The deposit stays escrowed and
+fully liable throughout — a request records an intention, not a release.
+
+One step is an escape route. Refusing while claims are open only protects
+disputes already filed; a provider could still take calls all day, watch for
+trouble, and withdraw before anyone got around to filing. The cooldown removes
+the timing advantage.
+
+The constructor **refuses a cooldown shorter than twice the filing window**,
+because one that does not outlast the exposure is not a shorter cooldown — it is
+no cooldown, and it would look configured. The factor of two is the filing
+window plus an adjudication runway assumed no longer than it; the proxy owns the
+real adjudication clock, and duplicating that number in the contract would only
+give it somewhere to drift to.
+
+The clock is Arc's, like the filing deadline — "the cooldown outlasts the filing
+window" is only a comparison if both are measured against the same thing. It is
+**floored to ten-minute buckets before any validator sees it**: `strict_eq`
+compares what the block returns, and two validators reading a raw timestamp a
+second apart would disagree on every single call, so the cooldown would never
+start. Ten minutes on a multi-day cooldown costs nothing.
+
+### The trap underneath all of this
+
+A nondet block runs in a sub-VM the contract module is not importable from, so a
+closure that calls a module-level helper **by name** fails there with
+`name '…' is not defined` — while passing every direct-mode test, because direct
+mode is in-process. Binding the function to a local alias does not help; it is
+still pickled by reference. Values captured as locals do travel.
+
+Found on a real node, not by reading. It would have broken `submit_claim`,
+`resolve_claim` and `request_withdrawal` in production with the whole direct
+suite green — the same shape as the two silent failures in CLAUDE.md, and worth
+the same standing warning. Everything nondet is now inlined; the pure
+helpers (`settlement_for`, `check_eligibility`, `withdrawal_refusal`) are safe
+because nothing nondet calls them.
+
+### Pre-aging a cooldown against nothing
+
+`deposit_owner` outlives a completed withdrawal — the slug stays pointed at the
+outgoing owner until some other account binds it, which `fund_deposit` permits
+only once the deposit is back to zero with no claim open — while
+`deposit_amount` drops to zero. Until that rebinding happens, the former owner
+is still the depositor of record, and without a further check that left two
+escape routes: they could call `request_withdrawal` again with no deposit at
+risk, aging a cooldown against nothing; and `fund_deposit` never cleared a
+stale `withdrawal_requested_at`, so a real deposit landing after that pre-aged
+cooldown had already expired could be pulled out immediately, on a clock that
+never measured its actual exposure. `request_withdrawal` now refuses on an
+unfunded slug, and `fund_deposit` clears any pending request on every call.
+Both guards are one-line checks, not arithmetic, and — like the release past
+cooldown itself — cannot be exercised by either test suite: reaching
+`deposit_owner` set with `deposit_amount` at zero needs a completed
+`withdraw_deposit`, which needs a completed `request_withdrawal`, the one call
+glsim will not let a write transaction make. See the comment in
+`tests/integration/test_escrow_flow.py`.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.
@@ -571,6 +631,20 @@ being able to look at. Both halves read back what they wrote.
   to the filing window or to the deposit cooldown that has to outlast both.
   [#83](https://github.com/imajus/verdikt/issues/83),
   [#93](https://github.com/imajus/verdikt/issues/93).
+- **Nothing stops a service taking new calls while its withdrawal is
+  pending.** The cooldown's safety argument — "by the time the deposit can
+  leave, every call it backed has passed its filing deadline" — only holds for
+  calls made at or before `request_withdrawal`. `cooldown_seconds >=
+  2*filing_window_seconds` covers a call made shortly after the request, but
+  not one made near the end of the cooldown itself: its filing deadline can
+  still fall after `withdraw_deposit` becomes callable. `submit_claim` does not
+  gate on deposit state, so such a call can still be claimed — it just
+  settles against a deposit already emptied. Closing this properly means the
+  marketplace or proxy delisting a service (or otherwise refusing to route new
+  paid calls to it) the moment `request_withdrawal` is called, which this
+  contract cannot do itself and which `web/src/genlayer.js` being the only
+  file that knows GenLayer exists (CLAUDE.md) currently keeps the proxy from
+  doing either. [#93](https://github.com/imajus/verdikt/issues/93).
 
 ## Sources
 

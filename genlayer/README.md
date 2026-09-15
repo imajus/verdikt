@@ -78,6 +78,13 @@ invisible to it. Nothing in there calls an LLM, so no provider key is needed.
 Judging a claim does, and that is deliberately left to a real node with real
 validators, which is the whole point of the judgment being non-deterministic.
 
+glsim has its own limit, worth knowing before writing a test against it:
+**it reverts any write transaction that performs a nondet web call**, at the EVM
+consensus layer, before the contract executes. Checked against a local HTTP stub
+as well as a real RPC, so it is neither the URL nor network egress. That puts
+`submit_claim`, `resolve_claim` and `request_withdrawal` out of reach there —
+their rules are covered as pure functions in `tests/direct/` instead.
+
 Run everything from `genlayer/`, not the repo root: `gltest.config.yaml` is
 found relative to the working directory, and `direct_deploy` resolves contract
 paths against it.
@@ -102,6 +109,24 @@ test GEN, the faucet is at <https://testnet-faucet.genlayer.foundation/>, and it
 wants a signed-in wallet holding at least 0.01 ETH on mainnet — 100 GEN per
 claim, once a week. `--dry-run` reports the account and its balance without
 spending anything, which is the check to run before the real one.
+
+## A trap worth knowing: nondet closures cannot call module-level functions
+
+A nondet block (`strict_eq`, `run_nondet_unsafe`) runs in a sub-VM that the
+contract module is **not importable from**. A closure that calls a module-level
+helper by name fails there with `name '…' is not defined` — while passing every
+direct-mode test, because direct mode is in-process and resolves the global
+just fine.
+
+So the rule is: inside a nondet closure, inline the work. Values captured as
+locals travel (they are pickled by value); functions do not, and binding one to
+a local alias does not help — it is still pickled by reference.
+
+This cost a real debugging session and would have broken `submit_claim`,
+`resolve_claim` and `request_withdrawal` on any real node while the whole direct
+suite stayed green. The pure helpers outside the closures — `settlement_for`,
+`check_eligibility`, `withdrawal_refusal` — are safe precisely because nothing
+nondet calls them.
 
 ## The runner pin
 

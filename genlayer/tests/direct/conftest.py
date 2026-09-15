@@ -29,6 +29,11 @@ BOUNTY = 100
 ARC_RPC = 'https://arc.test/rpc'
 REGISTRY = '0xE182626142E63EF440421cb0c5e4DEbeEF76E4Af'
 FILING_WINDOW = 86_400
+# Twice the filing window is the constructor's floor: filing plus an
+# adjudication runway assumed no longer than it.
+COOLDOWN = 3 * 86_400
+# The contract floors Arc's clock to this before any validator sees it.
+CLOCK_BUCKET = 600
 # Arc's clock, as the mocked `eth_getBlockByNumber` reports it. The verdict
 # below is written well inside the filing window of this.
 NOW = 1_789_400_000
@@ -50,7 +55,9 @@ def judge(direct_deploy):
     The Arc eligibility gate is *not* in that category: it is a web call, which
     direct mode mocks, so it is exercised for real below.
     """
-    return direct_deploy('contracts/sla_claim_judge.py', PROXY, '', 0, BOUNTY, REGISTRY, ARC_RPC, FILING_WINDOW)
+    return direct_deploy(
+        'contracts/sla_claim_judge.py', PROXY, '', 0, BOUNTY, REGISTRY, ARC_RPC, FILING_WINDOW, COOLDOWN
+    )
 
 
 @pytest.fixture

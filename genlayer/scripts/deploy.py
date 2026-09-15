@@ -41,6 +41,11 @@ DEFAULT_BOUNTY = 100_000
 # adjudication clock (docs/roadmap/genlayer.md, "Two clocks, not one").
 DEFAULT_FILING_WINDOW_SECONDS = 24 * 60 * 60
 
+# How long a requested withdrawal waits before a deposit may leave. Must be at
+# least twice the filing window — the constructor refuses otherwise — because a
+# cooldown that does not outlast the exposure is no cooldown at all.
+DEFAULT_COOLDOWN_SECONDS = 72 * 60 * 60
+
 
 def load_env() -> dict:
     """Read the repo's `.env` without adding a dependency to do it."""
@@ -68,6 +73,7 @@ def main() -> int:
     parser.add_argument('--registry', default=None, help='VerdiktRegistry on Arc; defaults to deployments/arc-testnet.json')
     parser.add_argument('--arc-rpc-url', default=None, help='defaults to ARC_RPC_URL')
     parser.add_argument('--filing-window', type=int, default=DEFAULT_FILING_WINDOW_SECONDS)
+    parser.add_argument('--cooldown', type=int, default=DEFAULT_COOLDOWN_SECONDS)
     parser.add_argument('--token-name', default='Verdikt Settlement')
     parser.add_argument('--token-symbol', default='VSET')
     parser.add_argument('--dry-run', action='store_true', help='check the account and balance, deploy nothing')
@@ -119,7 +125,10 @@ def main() -> int:
 
     if args.dry_run:
         print(f'\nwould deploy with proxy_base_url={proxy_base_url} bond={args.bond} bounty={args.bounty}')
-        print(f'                 registry={registry} arc_rpc={arc_rpc_url} filing_window={args.filing_window}s')
+        print(
+            f'                 registry={registry} arc_rpc={arc_rpc_url} '
+            f'filing_window={args.filing_window}s cooldown={args.cooldown}s'
+        )
         return 0
 
     token_code = (CONTRACTS / 'settlement_token.py').read_text()
@@ -132,7 +141,10 @@ def main() -> int:
     print('deploying SlaClaimJudge…')
     judge_address = client.deploy_contract(
         code=judge_code,
-        args=[proxy_base_url, token_address, args.bond, args.bounty, registry, arc_rpc_url, args.filing_window],
+        args=[
+            proxy_base_url, token_address, args.bond, args.bounty,
+            registry, arc_rpc_url, args.filing_window, args.cooldown,
+        ],
     )
     judge_address = _address_of(client, judge_address)
     print(f'  {judge_address}')
@@ -163,6 +175,7 @@ def main() -> int:
         'bountyAmount': args.bounty,
         'registryAddress': registry,
         'filingWindowSeconds': args.filing_window,
+        'cooldownSeconds': args.cooldown,
     }
     out = REPO / 'deployments' / f'genlayer-{args.network.replace("testnet_", "")}.json'
     out.write_text(json.dumps(record, indent=2) + '\n')
