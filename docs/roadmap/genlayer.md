@@ -178,8 +178,49 @@ own consensus, which needs several independent validators to fetch the same
 evidence.
 
 **Round 2 — provider opt-in plus dispute gating**, where `submit_claim` unlocks
-disclosure. Correct, and still the shape. But "fetchable for the resolution
-round" is where the two clocks above got conflated.
+disclosure. Correct in shape. But "fetchable for the resolution round" is where
+the two clocks above got conflated.
+
+**Round 4, at implementation — the gate is the payer's signature, not the
+existence of a claim.** Round 2's gate asked "has a claim been filed?", which
+means the proxy reading GenLayer contract state. GenLayer reads go through
+`gen_call` with its own calldata encoding, not ABI; there is no JS path to that
+short of shipping `genlayer-js` (1.2MB, viem-dependent) into a Worker, or
+hand-rolling the codec. Both are a lot of risk for a question that has a better
+answer.
+
+What disclosure actually needs to establish is that the party entitled to the
+response consents to it being shown. So the caller presents an EIP-191
+signature over `Verdikt evidence disclosure\nrequest: <id>`, and the proxy
+checks it recovers to the payer `getVerdict` booked — one Arc read the proxy
+already knows how to make.
+
+This is *stronger* than round 2's gate, not weaker. "A claim exists" proves
+somebody, possibly anybody, filed against a public request id. "The payer
+signed" proves the one party entitled to the response asked for it to be
+disclosed. It also lands squarely on the existing invariant: the observed value
+never goes on chain and reaches the paying agent on its own response, "which is
+the one party entitled to it" — this discloses that agent's own response, to
+adjudicators that agent chose.
+
+`submit_claim` therefore takes the signature and stores it, so every validator
+re-fetching the evidence presents the same token, and a claim is only openable
+by someone holding the payer's consent.
+
+**This also removes the provider opt-in**, and that is a real deviation from
+round 2 rather than an oversight. Two reasons. Practically: an opt-in flag
+belongs on ENS as a fifth text record, and every already-minted subname would
+need its per-key roles re-authorised before a provider could write it — the
+feature would be dead on the live testnet. Substantively: the flag was
+protecting the wrong thing. The disclosed bytes are a response the payer already
+holds; a provider has no standing to forbid the payer from showing its own
+purchase to an adjudicator. If an opt-in is still wanted later, it is a fifth
+ENS key plus a role migration, and it gates *caching*, not disclosure.
+
+The cost of dropping it is that every verified call with a verdict is cached for
+the filing window, whether or not its SLA has a semantic clause. That is
+storage the deterministic leg did not previously spend. Bounded by the window,
+and noted rather than hidden.
 
 **Round 3 — a body is not evidence; an envelope is.** A response body on its own
 cannot be judged, because the criteria are about whether the response answered

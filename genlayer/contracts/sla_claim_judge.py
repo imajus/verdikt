@@ -37,6 +37,10 @@ OUTCOME_CANCELLED = 'CANCELLED'
 
 RESOLVED_OUTCOMES = (OUTCOME_BREACH, OUTCOME_MET, OUTCOME_UNDETERMINED)
 
+# Mirrors EVIDENCE_AUTH_HEADER in proxy/src/evidence.js. Renaming one without
+# the other makes every disclosure refuse, which reads as a claimant error.
+EVIDENCE_AUTH_HEADER = 'x-verdikt-evidence-auth'
+
 # Everything else resolves UNDETERMINED rather than being forced into a verdict.
 TEXT_CONTENT_TYPES = ('application/json', 'text/plain', 'text/html')
 IMAGE_CONTENT_TYPES = ('image/png', 'image/jpeg')
@@ -65,6 +69,12 @@ class Claim:
     # Transaction time of `submit_claim`, in epoch seconds. Start of the
     # adjudication window — the claim's own clock, not the paid call's.
     filed_at: u256
+    # The payer's EIP-191 signature over `Verdikt evidence disclosure\nrequest:
+    # <id>`. It is what unlocks the response body from the proxy: evidence is
+    # the agent's own purchased response, and this is the agent saying the
+    # adjudicators may read it. Held in state rather than passed per call so
+    # every validator re-fetching the evidence presents the same token.
+    disclosure_signature: str
     resolved: bool
     outcome: str
     reasoning: str
@@ -85,16 +95,23 @@ class SlaClaimJudge(gl.Contract):
     # ------------------------------------------------------------------ writes
 
     @gl.public.write
-    def submit_claim(self, request_id: str, clause_id: str, slug: str) -> None:
+    def submit_claim(self, request_id: str, clause_id: str, slug: str, disclosure_signature: str) -> None:
         """
         Open a claim against one semantic clause of one paid call.
 
         The key is composite: a single verdict can carry several disputable
         semantic clauses, and each is judged on its own evidence.
+
+        `disclosure_signature` is the payer's consent to have its own response
+        body shown to validators. It is not checked here — the proxy checks it
+        against the payer Arc booked, which is the only party that can say — so
+        a wrong one costs the claimant a resolution, not a judgment.
         """
         key = _claim_key(request_id, clause_id)
         if key in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Claim already exists')
+        if not disclosure_signature.startswith('0x'):
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Disclosure signature must be 0x-prefixed hex')
 
         criteria = self._fetch_criteria(slug, clause_id)
 
@@ -105,6 +122,7 @@ class SlaClaimJudge(gl.Contract):
             claimant=gl.message.sender_address,
             criteria=criteria,
             filed_at=u256(_now()),
+            disclosure_signature=disclosure_signature,
             resolved=False,
             outcome=OUTCOME_OPEN,
             reasoning='',
@@ -117,7 +135,7 @@ class SlaClaimJudge(gl.Contract):
         key = _claim_key(request_id, clause_id)
         claim = self._require_open(key)
 
-        judgment = self._judge(claim.request_id, claim.criteria)
+        judgment = self._judge(claim.request_id, claim.criteria, claim.disclosure_signature)
 
         claim.outcome = judgment['outcome']
         claim.reasoning = judgment['reasoning']
@@ -220,7 +238,7 @@ class SlaClaimJudge(gl.Contract):
 
         raise gl.vm.UserError(f'{ERROR_EXPECTED} Clause {clause_id} is not in the SLA')
 
-    def _judge(self, request_id: str, criteria: str) -> dict:
+    def _judge(self, request_id: str, criteria: str, disclosure_signature: str) -> dict:
         """
         The one genuinely subjective call, and the reason this runs on GenLayer.
 
@@ -232,13 +250,15 @@ class SlaClaimJudge(gl.Contract):
         """
         url = f'{self.proxy_base_url}/internal/evidence/{request_id}'
 
+        auth = {EVIDENCE_AUTH_HEADER: disclosure_signature}
+
         def leader_fn() -> dict:
-            return _decide(url, criteria)
+            return _decide(url, criteria, auth)
 
         def validator_fn(leaders_res: gl.vm.Result) -> bool:
             if not isinstance(leaders_res, gl.vm.Return):
                 return _agree_on_error(leaders_res, leader_fn)
-            mine = _decide(url, criteria)
+            mine = _decide(url, criteria, auth)
             return mine['outcome'] == leaders_res.calldata['outcome']
 
         return gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
@@ -279,6 +299,7 @@ def _claim_to_dict(claim: Claim) -> dict:
         'claimant': claim.claimant.as_hex,
         'criteria': claim.criteria,
         'filed_at': int(claim.filed_at),
+        'disclosure_signature': claim.disclosure_signature,
         'resolved': claim.resolved,
         'outcome': claim.outcome,
         'reasoning': claim.reasoning,
@@ -312,8 +333,8 @@ def _undetermined(reason: str) -> dict:
     return {'outcome': OUTCOME_UNDETERMINED, 'reasoning': reason}
 
 
-def _decide(evidence_url: str, criteria: str) -> dict:
-    envelope = _fetch_evidence(evidence_url)
+def _decide(evidence_url: str, criteria: str, auth: dict) -> dict:
+    envelope = _fetch_evidence(evidence_url, auth)
     if envelope is None:
         return _undetermined('No evidence is available for this request')
 
@@ -384,13 +405,18 @@ def _raw_body(response: dict):
     return None
 
 
-def _fetch_evidence(url: str):
-    res = gl.nondet.web.get(url)
-    # 404 means the proxy is not serving evidence for this request: no claim
-    # opened, provider never opted in, or the window has closed. None of those
-    # is an error — they are all reasons a judgment cannot be reached.
+def _fetch_evidence(url: str, auth: dict):
+    res = gl.nondet.web.get(url, headers=auth)
+    # 404 means there is nothing to judge: never cached, or the window closed.
+    # Not an error — a provider that lost a dispute because a cache expired
+    # would be convicted of Verdikt's bookkeeping.
     if res.status == 404:
         return None
+    # 401/403 mean the disclosure signature is wrong or missing. That is the
+    # claimant's own mistake and it is fixable, so it must not resolve the
+    # claim against anybody — it refuses, and the claim stays open.
+    if res.status in (401, 403):
+        raise gl.vm.UserError(f'{ERROR_EXPECTED} Evidence disclosure was refused ({res.status})')
     if 400 <= res.status < 500:
         raise gl.vm.UserError(f'{ERROR_EXTERNAL} Evidence read returned {res.status}')
     if res.status >= 500:

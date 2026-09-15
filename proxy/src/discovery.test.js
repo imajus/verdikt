@@ -118,7 +118,7 @@ describe('the routes', () => {
   const deps = (marketplace) => ({
     config,
     marketplace,
-    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
+    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }), getVerdict: async () => null },
     resolveServiceRecord: async () => {
       throw new Error('unused');
     }

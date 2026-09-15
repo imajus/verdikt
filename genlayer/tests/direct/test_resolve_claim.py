@@ -3,6 +3,7 @@
 from tests.direct.conftest import (
     CLAUSE_ID,
     REQUEST_ID,
+    SIGNATURE,
     SLUG,
     evidence_envelope,
     image_envelope,
@@ -15,7 +16,7 @@ from tests.direct.conftest import (
 def _open_claim(direct_vm, judge, sender):
     direct_vm.sender = sender
     mock_sla(direct_vm)
-    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG)
+    judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
 
 
 def test_breach(direct_vm, judge, direct_alice):
@@ -196,3 +197,14 @@ def test_resolving_an_unknown_claim_refuses(direct_vm, judge, direct_alice):
 
     with direct_vm.expect_revert('No such claim'):
         judge.resolve_claim(REQUEST_ID, CLAUSE_ID)
+
+
+def test_a_refused_disclosure_leaves_the_claim_open(direct_vm, judge, direct_alice):
+    """A wrong signature is the claimant's own fixable mistake, not a finding against anyone."""
+    _open_claim(direct_vm, judge, direct_alice)
+    mock_evidence(direct_vm, status=403)
+
+    with direct_vm.expect_revert('disclosure was refused'):
+        judge.resolve_claim(REQUEST_ID, CLAUSE_ID)
+
+    assert judge.get_claim(REQUEST_ID, CLAUSE_ID)['outcome'] == 'OPEN'
