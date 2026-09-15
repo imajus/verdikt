@@ -226,6 +226,14 @@ export function draftFromText(text) {
       const base = { id: clause.id, idTouched: true, originalId: clause.id, description: /** @type {{description?: string}} */ (clause).description ?? '' };
       if (clause.type === 'latency') return { ...base, kind: 'latency', maxMs: String(clause.maxMs) };
       if (clause.type === 'priceRange') return { ...base, kind: 'priceRange', min: minorUnitsToUsdc(clause.minMinorUnits), max: minorUnitsToUsdc(clause.maxMinorUnits), asset: clause.asset };
+      // The form has no control for a semantic clause yet, and the fall-through
+      // below would read one as an empty schema clause — which loses the
+      // `criteria` and deletes the provider's promise on the next save. Throw
+      // instead: the composer answers a throw by showing the record as JSON
+      // with the reason, which leaves the SLA intact and editable.
+      if (clause.type === 'semantic') {
+        throw new Error(`the form cannot edit a semantic clause yet ("${clause.id}") — edit this SLA as JSON`);
+      }
       return { ...base, kind: 'schema', sample: '', schemaText: '', root: schemaToNode(clause.schema) };
     })
   };
