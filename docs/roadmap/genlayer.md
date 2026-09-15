@@ -554,6 +554,46 @@ and the key-scoped resolver — and the file between them is a feature: for a
 number that ranks providers publicly, the exact input it came from is worth
 being able to look at. Both halves read back what they wrote.
 
+## Provider deposit cooldown, as built
+
+Withdrawal is two steps: `request_withdrawal` starts the clock,
+`withdraw_deposit` releases once it has run out. The deposit stays escrowed and
+fully liable throughout — a request records an intention, not a release.
+
+One step is an escape route. Refusing while claims are open only protects
+disputes already filed; a provider could still take calls all day, watch for
+trouble, and withdraw before anyone got around to filing. The cooldown removes
+the timing advantage.
+
+The constructor **refuses a cooldown shorter than twice the filing window**,
+because one that does not outlast the exposure is not a shorter cooldown — it is
+no cooldown, and it would look configured. The factor of two is the filing
+window plus an adjudication runway assumed no longer than it; the proxy owns the
+real adjudication clock, and duplicating that number in the contract would only
+give it somewhere to drift to.
+
+The clock is Arc's, like the filing deadline — "the cooldown outlasts the filing
+window" is only a comparison if both are measured against the same thing. It is
+**floored to ten-minute buckets before any validator sees it**: `strict_eq`
+compares what the block returns, and two validators reading a raw timestamp a
+second apart would disagree on every single call, so the cooldown would never
+start. Ten minutes on a multi-day cooldown costs nothing.
+
+### The trap underneath all of this
+
+A nondet block runs in a sub-VM the contract module is not importable from, so a
+closure that calls a module-level helper **by name** fails there with
+`name '…' is not defined` — while passing every direct-mode test, because direct
+mode is in-process. Binding the function to a local alias does not help; it is
+still pickled by reference. Values captured as locals do travel.
+
+Found on a real node, not by reading. It would have broken `submit_claim`,
+`resolve_claim` and `request_withdrawal` in production with the whole direct
+suite green — the same shape as the two silent failures in CLAUDE.md, and worth
+the same standing warning. Everything nondet is now inlined; the pure
+helpers (`settlement_for`, `check_eligibility`, `withdrawal_refusal`) are safe
+because nothing nondet calls them.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.

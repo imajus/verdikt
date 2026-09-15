@@ -41,6 +41,11 @@ RESOLVED_OUTCOMES = (OUTCOME_BREACH, OUTCOME_MET, OUTCOME_UNDETERMINED)
 # uint256, uint64, bytes32 — seven words, encoded in place.
 VERDICT_WORDS = 7
 
+# Arc's clock, coarsened before any validator sees it. Ten minutes on a
+# multi-day cooldown costs nothing, and a raw timestamp would make every
+# validator disagree with every other one.
+CLOCK_BUCKET_SECONDS = 600
+
 # Mirrors EVIDENCE_AUTH_HEADER in proxy/src/evidence.js. Renaming one without
 # the other makes every disclosure refuse, which reads as a claimant error.
 EVIDENCE_AUTH_HEADER = 'x-verdikt-evidence-auth'
@@ -108,6 +113,10 @@ class SlaClaimJudge(gl.Contract):
     # provider's exposure; the adjudication runway is the proxy's separate
     # clock (docs/roadmap/genlayer.md, "Two clocks, not one").
     filing_window_seconds: u256
+    # How long a requested withdrawal waits. Must cover the filing window plus
+    # an adjudication runway, or the cooldown does not actually outlast the
+    # exposure it exists to outlast — the constructor refuses otherwise.
+    cooldown_seconds: u256
     # The settlement token. Empty means this judge decides claims and settles
     # nothing — useful for a smoke test, useless for a demo.
     token_address: str
@@ -137,6 +146,10 @@ class SlaClaimJudge(gl.Contract):
     # as collateral for each slug independently.
     deposit_committed: TreeMap[Address, u256]
     open_claims: TreeMap[str, u256]
+    # When a withdrawal was requested, or 0 for none pending. The deposit stays
+    # escrowed and fully liable for the whole cooldown — this records an
+    # intention, not a release.
+    withdrawal_requested_at: TreeMap[str, u256]
     # Per claimant, the bond total across their still-open claims. Without it
     # one escrow would back an unlimited number of simultaneous claims.
     bonded: TreeMap[Address, u256]
@@ -150,6 +163,7 @@ class SlaClaimJudge(gl.Contract):
         registry_address: str,
         arc_rpc_url: str,
         filing_window_seconds: int,
+        cooldown_seconds: int,
     ):
         self.owner = gl.message.sender_address
         self.proxy_base_url = proxy_base_url.rstrip('/')
@@ -159,6 +173,17 @@ class SlaClaimJudge(gl.Contract):
         self.registry_address = registry_address
         self.arc_rpc_url = arc_rpc_url
         self.filing_window_seconds = u256(filing_window_seconds)
+        # Checked here rather than left to the operator, because a cooldown
+        # shorter than the exposure is not a shorter cooldown — it is no
+        # cooldown at all, and it would look configured. The factor of two is
+        # the filing window plus an adjudication runway assumed to be no longer
+        # than it; the proxy owns the real adjudication clock, and duplicating
+        # that number here would only give it somewhere to drift to.
+        if cooldown_seconds < filing_window_seconds * 2:
+            raise gl.vm.UserError(
+                f'{ERROR_EXPECTED} cooldown_seconds must be at least twice filing_window_seconds'
+            )
+        self.cooldown_seconds = u256(cooldown_seconds)
 
     # ------------------------------------------------------------------ writes
 
@@ -294,29 +319,62 @@ class SlaClaimJudge(gl.Contract):
         self._settle(claim, gl.message.sender_address)
 
     @gl.public.write
+    def request_withdrawal(self, slug: str) -> None:
+        """
+        Start the cooldown on a slug's deposit.
+
+        Withdrawal is two steps because one step is an escape route. Refusing
+        while claims are open only protects disputes that have already been
+        filed; a provider could still take calls all day, watch for trouble, and
+        withdraw before anyone got around to filing. The cooldown removes the
+        timing advantage: by the time the deposit can leave, every call it
+        backed has passed its filing deadline and any claim that was going to be
+        filed has been.
+
+        The deposit stays escrowed and fully liable throughout. This records
+        an intention, not a release.
+        """
+        self._require_depositor(slug)
+        # `get_deposit` is where a provider reads when this becomes
+        # withdrawable; one place to ask beats a return value and a view.
+        self.withdrawal_requested_at[slug] = u256(self._now_bucketed())
+
+    @gl.public.write
+    def cancel_withdrawal(self, slug: str) -> None:
+        """Stand down a pending withdrawal, and with it the clock."""
+        self._require_depositor(slug)
+        if self.withdrawal_requested_at.get(slug, 0) == 0:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} No withdrawal is pending for {slug}')
+        self.withdrawal_requested_at[slug] = u256(0)
+
+    @gl.public.write
     def withdraw_deposit(self, slug: str) -> None:
         """
         Release a slug's deposit back to the account that posted it.
 
-        Refused while any claim against the slug is still open — a provider must
-        not be able to empty its bond out from under a dispute in progress.
-        #93 adds the cooldown that closes the remaining gap: withdrawing
-        *before* anyone files.
+        Two guards, and they close different holes. Open claims must be settled
+        first — a provider must not empty its bond out from under a dispute in
+        progress. And the cooldown requested above must have elapsed, which is
+        what stops the provider withdrawing *before* anyone files.
         """
-        sender = gl.message.sender_address
-        owner = self.deposit_owner.get(slug)
-        if owner is None:
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit')
-        if owner != sender:
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the depositor may withdraw')
-        if self.open_claims.get(slug, 0) > 0:
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has open claims')
+        owner = self._require_depositor(slug)
+        requested_at = int(self.withdrawal_requested_at.get(slug, 0))
+        refusal = withdrawal_refusal(
+            open_claims=int(self.open_claims.get(slug, 0)),
+            requested_at=requested_at,
+            # Only read the clock once the cheap checks have passed: a provider
+            # withdrawing against an open claim should not cost an RPC call.
+            cooldown_elapsed=requested_at != 0 and self._cooldown_elapsed(requested_at),
+        )
+        if refusal is not None:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {refusal} ({slug})')
 
         # Only this slug's own allocated share, never the owner's whole escrow
         # bucket — a bucket the owner may also be backing other slugs from.
         amount = self.deposit_amount.get(slug, 0)
         self.deposit_amount[slug] = u256(0)
         self.deposit_committed[owner] = u256(max(0, self.deposit_committed.get(owner, 0) - amount))
+        self.withdrawal_requested_at[slug] = u256(0)
         if amount > 0:
             self._release(owner, owner, amount)
 
@@ -369,16 +427,23 @@ class SlaClaimJudge(gl.Contract):
             'registry_address': self.registry_address,
             'arc_rpc_url': self.arc_rpc_url,
             'filing_window_seconds': self.filing_window_seconds,
+            'cooldown_seconds': self.cooldown_seconds,
         }
 
     @gl.public.view
     def get_deposit(self, slug: str) -> dict:
         owner = self.deposit_owner.get(slug)
+        requested_at = self.withdrawal_requested_at.get(slug, 0)
         return {
             'slug': slug,
             'owner': owner.as_hex if owner is not None else None,
             'amount': self.deposit_amount.get(slug, 0),
             'open_claims': self.open_claims.get(slug, 0),
+            'withdrawal_requested_at': requested_at,
+            # A plain timestamp beats "seconds remaining", which would be stale
+            # the moment it was read and would need a clock this view has no
+            # business fetching.
+            'withdrawable_at': 0 if requested_at == 0 else requested_at + self.cooldown_seconds,
         }
 
     @gl.public.view
@@ -456,6 +521,75 @@ class SlaClaimJudge(gl.Contract):
     def _release(self, owner: Address, to: Address, amount: int) -> None:
         self._token().emit(on='finalized').release(owner.as_hex, to.as_hex, amount)
 
+    def _require_depositor(self, slug: str) -> Address:
+        owner = self.deposit_owner.get(slug)
+        if owner is None:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit')
+        if owner != gl.message.sender_address:
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the depositor may withdraw')
+        return owner
+
+    def _now_bucketed(self) -> int:
+        """
+        Arc's clock, coarsened so validators can agree on it.
+
+        The same clock the filing deadline uses, and that is the point rather
+        than a convenience: "the cooldown outlasts the filing window" is only a
+        comparison if both are measured against the same thing. GenVM exposes no
+        block timestamp of its own.
+
+        **A raw timestamp cannot be returned from here.** `strict_eq` compares
+        the returned value, and two validators reading a block a second apart
+        would disagree on every single call — the cooldown would never start.
+        So it is floored to `CLOCK_BUCKET_SECONDS`, which they do agree on
+        except across a bucket boundary, where disagreeing and rotating is the
+        right answer. A ten-minute granularity on a multi-day cooldown costs
+        nothing.
+        """
+        rpc_url = self.arc_rpc_url
+        bucket, transient = CLOCK_BUCKET_SECONDS, ERROR_TRANSIENT
+
+        def read() -> str:
+            payload = json.dumps(
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getBlockByNumber', 'params': ['latest', False]}
+            )
+            res = gl.nondet.web.post(
+                rpc_url, body=payload.encode('utf-8'), headers={'Content-Type': 'application/json'}
+            )
+            if res.status >= 400 or res.body is None:
+                raise gl.vm.UserError(f'{transient} Arc RPC clock read failed ({res.status})')
+            block = json.loads(bytes(res.body).decode('utf-8')).get('result') or {}
+            now = int(str(block['timestamp']), 16)
+            return str(now - (now % bucket))
+
+        return int(gl.eq_principle.strict_eq(read))
+
+    def _cooldown_elapsed(self, requested_at: int) -> bool:
+        """
+        Whether the cooldown is up — the *boolean*, not the clock.
+
+        Same reason as above, one step further: this compares a decision rather
+        than a reading, so validators agree everywhere except within one bucket
+        of the deadline itself.
+        """
+        rpc_url = self.arc_rpc_url
+        cooldown = int(self.cooldown_seconds)
+        transient = ERROR_TRANSIENT
+
+        def read() -> str:
+            payload = json.dumps(
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_getBlockByNumber', 'params': ['latest', False]}
+            )
+            res = gl.nondet.web.post(
+                rpc_url, body=payload.encode('utf-8'), headers={'Content-Type': 'application/json'}
+            )
+            if res.status >= 400 or res.body is None:
+                raise gl.vm.UserError(f'{transient} Arc RPC clock read failed ({res.status})')
+            block = json.loads(bytes(res.body).decode('utf-8')).get('result') or {}
+            return 'yes' if int(str(block['timestamp']), 16) - requested_at >= cooldown else 'no'
+
+        return gl.eq_principle.strict_eq(read) == 'yes'
+
     def _require_open(self, key: str) -> Claim:
         if key not in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} No such claim')
@@ -486,13 +620,70 @@ class SlaClaimJudge(gl.Contract):
         rpc_url = self.arc_rpc_url
         registry = self.registry_address
         window = int(self.filing_window_seconds)
+        external, transient = ERROR_EXTERNAL, ERROR_TRANSIENT
+        words = VERDICT_WORDS
+        selector = Keccak256(b'getVerdict(bytes32)').digest()[:4]
 
         def read() -> str:
-            verdict = read_verdict_and_clock(rpc_url, registry, request_id)
+            # Inlined rather than calling a module-level helper. A nondet block
+            # runs in a sub-VM the contract module is not importable from, so a
+            # closure that calls one by name raises `name '…' is not defined`
+            # there — while passing in direct mode, which is in-process. Values
+            # captured as locals travel; functions do not.
+            batch = [
+                {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_call',
+                 'params': [{'to': registry, 'data': '0x' + (selector + bytes.fromhex(request_id[2:])).hex()},
+                            'latest']},
+                {'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getBlockByNumber', 'params': ['latest', False]},
+            ]
+            res = gl.nondet.web.post(
+                rpc_url, body=json.dumps(batch).encode('utf-8'), headers={'Content-Type': 'application/json'}
+            )
+            if 400 <= res.status < 500:
+                raise gl.vm.UserError(f'{external} Arc RPC refused the read ({res.status})')
+            if res.status >= 500 or res.body is None:
+                raise gl.vm.UserError(f'{transient} Arc RPC unavailable ({res.status})')
+            answers = json.loads(bytes(res.body).decode('utf-8'))
+            if not isinstance(answers, list):
+                raise gl.vm.UserError(f'{external} Arc RPC did not answer the batch as an array')
+            # A node may answer a batch out of order, so the ids are what pair a
+            # result with its question.
+            by_id = {}
+            for answer in answers:
+                if not isinstance(answer, dict):
+                    continue
+                if 'error' in answer:
+                    # The node's answer, not a network failure: deterministic,
+                    # so validators must agree on it exactly.
+                    raise gl.vm.UserError(f'{external} Arc RPC error: {answer["error"]}')
+                by_id[answer.get('id')] = answer.get('result')
+            if 1 not in by_id or 2 not in by_id:
+                raise gl.vm.UserError(f'{external} Arc RPC answered only part of the batch')
+            block = by_id[2]
+            if not isinstance(block, dict) or 'timestamp' not in block:
+                raise gl.vm.UserError(f'{external} Arc RPC returned no block timestamp')
+
+            raw_hex = str(by_id[1])
+            raw = bytes.fromhex(raw_hex[2:] if raw_hex.startswith('0x') else raw_hex)
+            if len(raw) < words * 32:
+                raise gl.vm.UserError(f'{external} Registry returned {len(raw)} bytes, expected {words * 32}')
+            verdict = {
+                'service_id': '0x' + raw[0:32].hex(),
+                'outcome': int.from_bytes(raw[32:64], 'big'),
+                'payer': '0x' + raw[64:96][12:].hex(),
+                'paid_amount': int.from_bytes(raw[96:128], 'big'),
+                'refund_credited': int.from_bytes(raw[128:160], 'big'),
+                # The "no verdict recorded" sentinel: `getVerdict` on an unset
+                # key returns Solidity's zero-valued struct rather than
+                # reverting, so this is the only field that can say there was no
+                # such call.
+                'written_at': int.from_bytes(raw[160:192], 'big'),
+                'failed_clause': '0x' + raw[192:224].hex(),
+            }
             # The clock itself never leaves this function. What validators
             # compare is the derived boolean, which is stable everywhere except
             # within seconds of the deadline.
-            now = verdict.pop('now')
+            now = int(str(block['timestamp']), 16)
             verdict['within_filing_window'] = verdict['written_at'] != 0 and now - verdict['written_at'] <= window
             # Serialized because `strict_eq` compares the returned value, and a
             # canonical string compares unambiguously.
@@ -510,6 +701,7 @@ class SlaClaimJudge(gl.Contract):
         the part that needs a real comparison.
         """
         url = f'{self.proxy_base_url}/internal/sla/{slug}'
+        expected, external, transient = ERROR_EXPECTED, ERROR_EXTERNAL, ERROR_TRANSIENT
 
         def fetch() -> str:
             res = gl.nondet.web.get(url)
@@ -517,12 +709,14 @@ class SlaClaimJudge(gl.Contract):
             # for one that publishes no `sla` record. Neither is judgeable and
             # the claimant can act on either, so they share a message.
             if res.status == 404:
-                raise gl.vm.UserError(f'{ERROR_EXPECTED} No SLA published for {slug}')
+                raise gl.vm.UserError(f'{expected} No SLA published for {slug}')
             if 400 <= res.status < 500:
-                raise gl.vm.UserError(f'{ERROR_EXTERNAL} SLA read returned {res.status}')
+                raise gl.vm.UserError(f'{external} SLA read returned {res.status}')
             if res.status >= 500:
-                raise gl.vm.UserError(f'{ERROR_TRANSIENT} SLA read unavailable ({res.status})')
-            return _decode_body(res.body)
+                raise gl.vm.UserError(f'{transient} SLA read unavailable ({res.status})')
+            if res.body is None:
+                raise gl.vm.UserError(f'{external} SLA read returned an empty body')
+            return bytes(res.body).decode('utf-8', errors='replace')
 
         payload = _parse_json(gl.eq_principle.strict_eq(fetch), 'SLA response')
         sla = payload.get('sla')
@@ -594,6 +788,29 @@ def _now() -> int:
     if not isinstance(stamp, str) or not stamp:
         raise gl.vm.UserError(f'{ERROR_EXPECTED} Transaction carries no timestamp')
     return int(datetime.datetime.fromisoformat(stamp.replace('Z', '+00:00')).timestamp())
+
+
+def withdrawal_refusal(*, open_claims: int, requested_at: int, cooldown_elapsed: bool) -> str | None:
+    """
+    Whether a deposit may leave. Pure — the refusal text, or `None` to proceed.
+
+    Two guards closing two different holes, and both are needed. Open claims
+    stop a provider emptying its bond out from under a dispute already in
+    progress. The cooldown stops it withdrawing *before* anyone files, which is
+    the escape route the first guard does not touch: take calls all day, watch
+    for trouble, leave ahead of the paperwork.
+
+    Split out for the same reason as `settlement_for` and `check_eligibility` —
+    it is where being wrong lets money escape, and it is testable exhaustively
+    without a chain or a token.
+    """
+    if open_claims > 0:
+        return 'Settle the open claims first'
+    if requested_at == 0:
+        return 'Call request_withdrawal first; this deposit has a cooldown'
+    if not cooldown_elapsed:
+        return 'The cooldown has not elapsed; see withdrawable_at in get_deposit'
+    return None
 
 
 def _is_request_id(value: str) -> bool:
@@ -718,61 +935,6 @@ def _claim_to_dict(claim: Claim) -> dict:
         'compensation': claim.compensation,
         'bounty': claim.bounty,
     }
-
-
-def read_verdict_and_clock(rpc_url: str, registry: str, request_id: str) -> dict:
-    """
-    One batched JSON-RPC round trip: the verdict, and Arc's own clock.
-
-    Batched rather than two POSTs because the deadline compares two timestamps
-    that must come from the same chain at the same moment — and because a
-    metered runtime should not pay for two round trips to answer one question.
-    Confirmed working against Arc Testnet's RPC.
-
-    The clock comes from Arc rather than from a time API for the same reason:
-    `writtenAt` is an Arc block timestamp, so measuring against anything else
-    would be comparing two different clocks.
-    """
-    batch = [
-        {'jsonrpc': '2.0', 'id': 1, 'method': 'eth_call',
-         'params': [{'to': registry, 'data': _encode_get_verdict(request_id)}, 'latest']},
-        {'jsonrpc': '2.0', 'id': 2, 'method': 'eth_getBlockByNumber', 'params': ['latest', False]},
-    ]
-    res = gl.nondet.web.post(
-        rpc_url, body=json.dumps(batch).encode('utf-8'), headers={'Content-Type': 'application/json'}
-    )
-    if 400 <= res.status < 500:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC refused the read ({res.status})')
-    if res.status >= 500:
-        raise gl.vm.UserError(f'{ERROR_TRANSIENT} Arc RPC unavailable ({res.status})')
-
-    try:
-        answers = json.loads(_decode_body(res.body))
-    except Exception:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC response is not valid JSON')
-    # A node may answer a batch out of order, so the ids are what pair a result
-    # with its question.
-    if not isinstance(answers, list):
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC did not answer the batch as an array')
-    by_id = {}
-    for answer in answers:
-        if not isinstance(answer, dict):
-            continue
-        if 'error' in answer:
-            # The node's answer, not a network failure: deterministic, so
-            # validators must agree on it exactly.
-            raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC error: {answer["error"]}')
-        by_id[answer.get('id')] = answer.get('result')
-
-    if 1 not in by_id or 2 not in by_id:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC answered only part of the batch')
-    block = by_id[2]
-    if not isinstance(block, dict) or 'timestamp' not in block:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Arc RPC returned no block timestamp')
-
-    verdict = _decode_verdict(str(by_id[1]))
-    verdict['now'] = int(str(block['timestamp']), 16)
-    return verdict
 
 
 def _decode_body(body) -> str:
