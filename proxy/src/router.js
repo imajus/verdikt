@@ -190,6 +190,19 @@ export async function handleRequest(request, deps = {}) {
     return handleCallback(request, { config, workflow });
   }
 
+  const slaSlug = request.method === 'GET' ? url.pathname.match(/^\/internal\/sla\/([^/]+)$/) : null;
+  if (slaSlug) {
+    return handleSlaRead(slaSlug[1], { config, resolve });
+  }
+
+  // `/internal/` is reserved as a whole, not route by route. In the path form
+  // the catch-all below would otherwise read `internal` as a slug and relay to
+  // whatever service happened to be registered under that name — so a POST to
+  // a GET-only internal route, or a typo in one, became a proxied call.
+  if (url.pathname === '/internal' || url.pathname.startsWith('/internal/')) {
+    return json({ error: 'unknown_internal_route', detail: `${request.method} ${url.pathname}` }, 404);
+  }
+
   const route = routeOf(request, config);
   if (!route) {
     return json({ error: 'unknown_service', detail: 'no valid service slug in the host or path' }, 404);
@@ -482,6 +495,53 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
   // SLA failure that `evaluate` has already judged — turning it into a proxy
   // error would hide from the agent what it actually bought.
   return new Response(result.body, { status: result.status ?? 502, headers: { ...result.headers, ...headers } });
+}
+
+/**
+ * The service's SLA, over HTTP, for a caller that cannot import the SDK.
+ *
+ * `SlaClaimJudge` runs inside GenVM and has no way to reach `packages/sdk` or
+ * an ENS library, so this exposes the one `resolveServiceRecord` call it needs
+ * to freeze the disputed clause's `criteria` at claim-open time
+ * (docs/roadmap/genlayer.md).
+ *
+ * Deliberately unauthenticated. The `sla` and `url` text records are public on
+ * Sepolia and readable by anyone with an RPC endpoint; a token here would
+ * protect nothing and would have to be shared with every GenLayer validator,
+ * which is the opposite of a secret. `/internal/` is the namespace for
+ * machine-facing routes, not a claim that they are private — the evidence
+ * endpoint next door is gated because what it serves is genuinely not public.
+ *
+ * It adds no ENS logic of its own: `packages/sdk/ens.js` stays the only file
+ * that knows ENS exists.
+ *
+ * @param {string} slug
+ * @param {{ config: ProxyConfig, resolve: typeof resolveServiceRecord }} deps
+ */
+async function handleSlaRead(slug, { config, resolve }) {
+  if (!SLUG.test(slug)) {
+    return json({ error: 'unknown_service', slug, detail: 'not a valid service slug' }, 404);
+  }
+
+  /** @type {ServiceRecord} */
+  let record;
+  try {
+    record = await resolve(slug, { cacheTtlMs: config.ensCacheTtlMs });
+  } catch (error) {
+    // Distinguished from "no SLA published" on purpose: a judge that reads an
+    // ENS outage as an absent SLA would refuse claims that are perfectly valid.
+    return json({ error: 'naming_layer_unavailable', detail: /** @type {Error} */ (error).message }, 503);
+  }
+
+  if (!record.sla) {
+    return json({ error: 'no_sla', slug, detail: `${slug} publishes no sla record` }, 404);
+  }
+
+  // `sla` is relayed exactly as ENS holds it — a raw, unparsed string. Parsing
+  // belongs to @verdikt/sla, which the proxy must not depend on, and the judge
+  // needs the bytes the provider actually published rather than a re-serialised
+  // copy of them.
+  return json({ slug, sla: record.sla, url: record.url });
 }
 
 /**
