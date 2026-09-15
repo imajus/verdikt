@@ -78,7 +78,17 @@ export async function loadMarketplace({ registry, resolve, genlayer = null }) {
       sla,
       slaRaw: record?.sla ?? null,
       /** As published on ENS — the number a consumer actually ranks on. */
-      published: { conformance: record?.conformance ?? null, availability: record?.availability ?? null },
+      published: {
+        conformance: record?.conformance ?? null,
+        availability: record?.availability ?? null,
+        /**
+         * Published separately, by a different signer, from a different chain
+         * — and shown separately. Never averaged into the other two: they
+         * measure different questions of different traffic, and one merged
+         * figure would answer neither (docs/roadmap/genlayer.md).
+         */
+        semanticConformance: record?.semanticConformance ?? null
+      },
       /**
        * The same computation the hourly workflow runs, over the same events.
        * Shown only where nothing is published yet, and labelled as such: it is

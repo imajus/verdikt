@@ -146,6 +146,18 @@ interface SlaSemanticClause extends SlaClauseBase {
   criteria: string;
 }
 
+/**
+ * The semantic ratio, kept apart from the other two on purpose
+ * (docs/roadmap/genlayer.md). Different question, different traffic: every paid
+ * call versus only the disputed ones.
+ */
+interface SemanticScore {
+  /** 0–1000. `MET / (MET + BREACH)`, floored. 1000 when nothing was decided. */
+  semanticConformance: number;
+  /** `undecided` is OPEN, UNDETERMINED and CANCELLED — none of them count. */
+  counts: { met: number; breach: number; undecided: number; decided: number };
+}
+
 /** The two marketplace ratios plus the tallies they came from (Specification.md §1). */
 interface ReputationScores {
   /** 0–1000. `PASS / (PASS + FAIL)`, floored. 1000 when nothing arrived. */

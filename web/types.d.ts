@@ -84,8 +84,14 @@ interface Listing {
   contested: boolean;
   sla: SlaDocument | null;
   slaRaw: string | null;
-  /** As published on ENS by the hourly workflow. `null` before its first run. */
-  published: { conformance: number | null; availability: number | null };
+  /**
+   * As published on ENS. `conformance` and `availability` come from the hourly
+   * CRE workflow; `semanticConformance` from a separate aggregation over
+   * GenLayer, written by its own signer. All `null` before a first run — and
+   * `semanticConformance` stays null on any subname minted before that key
+   * existed.
+   */
+  published: { conformance: number | null; availability: number | null; semanticConformance: number | null };
   /** The same shared computation, shown only where nothing is published yet. */
   unpublished: ReputationScores;
   /**

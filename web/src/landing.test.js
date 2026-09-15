@@ -35,7 +35,7 @@ const listing = (slug, history) => ({
   contested: false,
   sla: null,
   slaRaw: null,
-  published: { conformance: 1000, availability: 1000 },
+  published: { conformance: 1000, availability: 1000, semanticConformance: null },
   unpublished: { conformance: 1000, availability: 1000, counts: { pass: history.length, fail: 0, down: 0, total: history.length } },
   semantic: null,
   history

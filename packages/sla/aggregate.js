@@ -75,3 +75,52 @@ export function aggregateWindow(verdicts) {
     counts: { pass, fail, down, total }
   };
 }
+
+/**
+ * The semantic ratio: how often a dispute about *meaning* went against the
+ * provider.
+ *
+ * A third score, deliberately not folded into `conformance`
+ * (docs/roadmap/genlayer.md). The two measure different questions of different
+ * traffic — every paid call versus only the disputed ones — and averaging them
+ * would produce a number that answers neither. A provider with a spotless
+ * `conformance` and a poor `semanticConformance` is exactly the case the whole
+ * GenLayer leg exists to surface, and one merged figure would hide it.
+ *
+ * **Only `MET` and `BREACH` count.** `UNDETERMINED` and `CANCELLED` decided
+ * nothing at all, and `OPEN` has not decided yet — folding any of them in
+ * would let a claimant move a provider's public standing by filing claims that
+ * never resolve. That is the same reasoning as `DOWN` leaving the conformance
+ * denominator: a non-answer is not an answer.
+ *
+ * Empty scores 1000, on the same principle as the other two: absence of
+ * evidence is not evidence of failure, and a provider nobody has disputed is
+ * not thereby suspect.
+ *
+ * @param {Iterable<string | { outcome: string }>} settlements
+ * @returns {SemanticScore}
+ */
+export function aggregateSemantic(settlements) {
+  let met = 0;
+  let breach = 0;
+  let undecided = 0;
+
+  for (const entry of settlements) {
+    const outcome = typeof entry === 'string' ? entry : entry?.outcome;
+    if (outcome === 'MET') met += 1;
+    else if (outcome === 'BREACH') breach += 1;
+    else if (outcome === 'OPEN' || outcome === 'UNDETERMINED' || outcome === 'CANCELLED') undecided += 1;
+    else {
+      // Same rule as `aggregateWindow`: a settlement nobody can classify must
+      // not quietly join a denominator, or a published score moves for a
+      // reason no event explains.
+      throw new Error(`aggregateSemantic: unknown outcome ${JSON.stringify(outcome)}`);
+    }
+  }
+
+  const decided = met + breach;
+  return {
+    semanticConformance: decided === 0 ? NO_DATA_SCORE : Math.floor((met * SCORE_SCALE) / decided),
+    counts: { met, breach, undecided, decided }
+  };
+}

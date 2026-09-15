@@ -42,6 +42,15 @@ interface ServiceRecord {
   /** 0–1000, written hourly by the aggregate workflow. `null` before the first run. */
   availability: number | null;
   /**
+   * 0–1000, the GenLayer half (docs/roadmap/genlayer.md). `null` means nothing
+   * has been published — which includes every subname minted before this key
+   * existed, since nobody is authorised to write it there.
+   *
+   * Never averaged with `conformance`. They measure different questions of
+   * different traffic: every paid call versus only the disputed ones.
+   */
+  semanticConformance: number | null;
+  /**
    * The subname registry's `latestOwner` for this slug's ENS token — `null`
    * when nobody has claimed the subname yet. Compared against the Arc
    * `provider` by the proxy's `checkOwnership`: a permissionless registrar

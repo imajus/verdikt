@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { NO_DATA_SCORE, SCORE_SCALE, aggregateWindow } from './aggregate.js';
+import { NO_DATA_SCORE, SCORE_SCALE, aggregateSemantic, aggregateWindow } from './aggregate.js';
 
 /** @param {{ pass?: number, fail?: number, down?: number }} counts */
 const window = ({ pass = 0, fail = 0, down = 0 }) => [
@@ -81,5 +81,52 @@ describe('aggregateWindow', () => {
 
   it('refuses an outcome it cannot classify rather than quietly skewing a denominator', () => {
     expect(() => aggregateWindow(['PASS', /** @type {never} */ ('FAIL_CONFORMANCE')])).toThrow(/unknown outcome/);
+  });
+});
+
+// A third score, deliberately not folded into `conformance`
+// (docs/roadmap/genlayer.md): different question, different traffic.
+describe('aggregateSemantic', () => {
+  it('is the share of decided disputes the provider won', () => {
+    expect(aggregateSemantic(['MET', 'MET', 'MET', 'BREACH']).semanticConformance).toBe(750);
+  });
+
+  it('scores 1000 for a provider nobody has disputed', () => {
+    expect(aggregateSemantic([]).semanticConformance).toBe(NO_DATA_SCORE);
+  });
+
+  // Letting an unresolved claim move a published score would let a claimant
+  // damage a provider's standing by filing claims that never resolve. Same
+  // reasoning as DOWN leaving the conformance denominator: a non-answer is not
+  // an answer.
+  it('scores 1000 when every claim is still undecided', () => {
+    const score = aggregateSemantic(['OPEN', 'UNDETERMINED', 'CANCELLED']);
+    expect(score.semanticConformance).toBe(NO_DATA_SCORE);
+    expect(score.counts).toEqual({ met: 0, breach: 0, undecided: 3, decided: 0 });
+  });
+
+  it('leaves undecided claims out of the denominator entirely', () => {
+    const withNoise = aggregateSemantic(['MET', 'BREACH', 'OPEN', 'UNDETERMINED', 'CANCELLED']);
+    expect(withNoise.semanticConformance).toBe(aggregateSemantic(['MET', 'BREACH']).semanticConformance);
+    expect(withNoise.counts.decided).toBe(2);
+  });
+
+  it('floors rather than rounds, same as the other two', () => {
+    // 2/3 is 666.67; a provider's public number understates rather than flatters.
+    expect(aggregateSemantic(['MET', 'MET', 'BREACH']).semanticConformance).toBe(666);
+  });
+
+  it('scores 0 when every decided dispute went against the provider', () => {
+    expect(aggregateSemantic(['BREACH', 'BREACH']).semanticConformance).toBe(0);
+  });
+
+  it('accepts settlement objects as well as bare outcomes', () => {
+    expect(aggregateSemantic([{ outcome: 'MET' }, { outcome: 'BREACH' }]).counts.decided).toBe(2);
+  });
+
+  // A settlement nobody can classify must not quietly join a denominator, or a
+  // published score moves for a reason no event explains.
+  it('throws on an outcome it does not recognise', () => {
+    expect(() => aggregateSemantic(['SOMETHING_NEW'])).toThrow(/unknown outcome/);
   });
 });

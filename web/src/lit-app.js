@@ -477,6 +477,9 @@ export const detailTemplate = (listing, mode = 'live', go = () => {}) => {
         <dl class="scores">
           <div><dt>Conformance</dt><dd>${scoreCell(listing.published.conformance)}</dd></div>
           <div><dt>Availability</dt><dd>${availabilityCell(listing)}</dd></div>
+          ${listing.published.semanticConformance === null
+            ? nothing
+            : html`<div><dt title="How often a dispute about what the response meant went the provider's way. A separate score from a separate chain — never averaged with conformance.">Semantic</dt><dd>${scoreCell(listing.published.semanticConformance)}</dd></div>`}
           <div><dt>Bond</dt><dd>${figure(formatNativeUsdc(listing.deposit))}</dd>
             ${refunded > 0n ? html`<dd class="score-note">${formatRefundUsdc(refunded)} refunded out</dd>` : nothing}</div>
         </dl>
