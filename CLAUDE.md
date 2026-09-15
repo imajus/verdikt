@@ -13,7 +13,7 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/Tasks.md` — the phased build plan, ordered by risk
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
-- `docs/roadmap/genlayer.md` — **active build**, on the `feat/genlayer` branch: a second claim type judged by a GenLayer Intelligent Contract for deliverables CRE can't schema-check. `main` stays untouched by this; read it before touching anything under `genlayer/`
+- `docs/roadmap/genlayer.md` — the live design for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). `feat/genlayer` only; `main` is frozen and untouched by it. Read it before changing anything under `genlayer/` — it is newer than the issues
 
 ## Working branch
 
@@ -54,6 +54,12 @@ forge build
 forge test
 forge test --match-test testRefund     # single test
 forge test --match-contract Registry   # single contract
+```
+
+```bash
+cd genlayer                                               # Python, not the pnpm workspace
+.venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
+.venv/bin/python -m pytest tests/direct -q                # ~35s, no node needed
 ```
 
 ```bash
