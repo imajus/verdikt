@@ -5,6 +5,7 @@
 // injected readers, which is what makes it testable without either chain.
 
 import { aggregateWindow, parseSla } from '@verdikt/sla';
+import { byRequest } from './genlayer.js';
 import { WINDOW_SECONDS } from '@verdikt/cre/reputation';
 import { matchFailedClause } from '@verdikt/sdk/registry';
 
@@ -19,12 +20,19 @@ import { matchFailedClause } from '@verdikt/sdk/registry';
  * @param {MarketplaceDeps} deps
  * @returns {Promise<Marketplace>}
  */
-export async function loadMarketplace({ registry, resolve }) {
+export async function loadMarketplace({ registry, resolve, genlayer = null }) {
   const [services, verdicts, refunds] = await Promise.all([
     registry.listServices(),
     registry.listVerdicts(),
     registry.listRefunds()
   ]);
+
+  // A GenLayer outage must not empty the marketplace. Arc's verdicts are the
+  // record; semantic settlements are a second, independent judgement, and a
+  // dashboard that refused to render the first because the second was
+  // unreachable would be reporting the wrong outage.
+  const settlements = genlayer ? await genlayer.listSettlements().catch(() => null) : null;
+  const settlementsByRequest = byRequest(settlements ?? []);
 
   // A service whose subname is unreachable is still a listing — it has a bond
   // and a verdict history on Arc. Dropping it because Sepolia was down would
@@ -46,7 +54,11 @@ export async function loadMarketplace({ registry, resolve }) {
       .map((verdict) => ({
         ...verdict,
         refunded: refundsByRequest.get(verdict.requestId)?.amount ?? 0n,
-        failedClauseId: matchFailedClause(verdict.failedClause, sla)
+        failedClauseId: matchFailedClause(verdict.failedClause, sla),
+        // Alongside the verdict, never folded into it. A call can be CRE PASS
+        // and semantically BREACH; collapsing them would lose the one fact
+        // that pairing exists to show.
+        settlements: settlementsByRequest.get(verdict.requestId.toLowerCase()) ?? []
       }))
       .reverse();
 
@@ -74,6 +86,13 @@ export async function loadMarketplace({ registry, resolve }) {
        * still not what the marketplace ranks on.
        */
       unpublished: aggregateWindow(own),
+      /**
+       * `null` means no judge is configured or GenLayer could not be read —
+       * the dashboard can say nothing about semantic outcomes. An empty array
+       * means it read fine and nothing was disputed. Those are different
+       * claims and the UI must not render them the same way.
+       */
+      semantic: settlements === null ? null : settlements.filter((s) => s.slug === service.slug),
       history
     };
   });

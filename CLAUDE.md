@@ -148,6 +148,7 @@ Both shipped green for days. Neither raised an error anywhere; both were caught 
 
 These are load-bearing, not organizational:
 
+- **`web/src/genlayer.js` is the only file that knows GenLayer exists**, and it lives in `web/` rather than the SDK because the SDK is imported by the proxy and the CRE workflow, neither of which has any business reading GenLayer. `null` (no judge configured, or unreadable) and `[]` (read fine, nothing disputed) are different answers and must render differently.
 - **`packages/sdk/ens.js` is the only file that knows ENS exists.** Every read and write goes through it, returning one `ServiceRecord`. This exists so the unresolved ENSv2→v1 question touches one file instead of rippling through the CRE workflow, proxy, and dashboard. Do not import an ENS library anywhere else, and do not make two calls where one returns everything — `resolveServiceRecord` batches the four text keys and the address record into a single round trip.
 - **`resolveServiceRecord` returns `sla` raw and unparsed.** Parsing belongs to `packages/sla`, so the ENS layer carries no SLA-schema knowledge.
 - **`packages/sla` has no dependencies and must keep none** — it bundles into the CRE workflow. Hand-roll the JSON Schema subset rather than pulling ajv.

@@ -17,6 +17,7 @@ const verdict = (overrides) => ({
   transactionHash: null,
   refunded: 0n,
   failedClauseId: null,
+  settlements: [],
   ...overrides
 });
 
@@ -36,6 +37,7 @@ const listing = (slug, history) => ({
   slaRaw: null,
   published: { conformance: 1000, availability: 1000 },
   unpublished: { conformance: 1000, availability: 1000, counts: { pass: history.length, fail: 0, down: 0, total: history.length } },
+  semantic: null,
   history
 });
 
