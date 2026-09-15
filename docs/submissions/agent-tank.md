@@ -36,10 +36,10 @@ Verdikt
 ## One-liner (max 180)
 
 ```
-Every paid API call gets a verdict. Chainlink CRE judges what a machine can check; a GenLayer jury judges whether the answer was any good. Refunds settle on-chain, with no arbiter.
+Every delivered API call gets a verdict. Chainlink CRE judges what a machine can check; a GenLayer jury judges whether the answer was good. Refunds settle on-chain, no arbiter.
 ```
 
-*180 characters.*
+*176 characters.*
 
 ## Description (max 1000)
 
@@ -94,15 +94,17 @@ every verdict and score on it was read back off a chain.
        .venv/bin/gltest tests/integration -q             # the judge and the token, wired together
 
 6. Deploy the pair to Bradbury:
+       cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
        .venv/bin/python scripts/deploy.py --network testnet_bradbury
-   It deploys the token first, the judge second, and reads both back off chain
-   before it writes deployments/genlayer-bradbury.json.
+   The key needs testnet GEN to deploy; the script refuses at the balance
+   check otherwise. It deploys the token first, the judge second, and reads
+   both back off chain before it writes deployments/genlayer-bradbury.json.
 ```
 
 ## Private notes for judges (max 500)
 
 ```
-Honest scope: the deterministic leg (CRE, Arc, ENS) is live on testnets and has been for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: contracts, 61 direct tests, 5 integration tests against a real node, and a deploy script verified end-to-end on glsim.
+Honest scope: the deterministic leg (CRE, Arc, ENS) is live on testnets and has been for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: contracts, 72 direct tests, 5 integration tests against a real node, and a deploy script verified end-to-end on glsim.
 
 The Bradbury deployment is blocked on the faucet — it wants a signed-in wallet with 0.01 ETH on mainnet. Everything up to it runs. Please judge the design and the tests, not a testnet address.
 ```
