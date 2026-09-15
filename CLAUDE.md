@@ -59,7 +59,10 @@ forge test --match-contract Registry   # single contract
 ```bash
 cd genlayer                                               # Python, not the pnpm workspace
 .venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
-.venv/bin/python -m pytest tests/direct -q                # ~35s, no node needed
+.venv/bin/python -m pytest tests/direct -q                # no node needed
+.venv/bin/glsim --port 4000 --no-browser &                # a local node, for the rest
+.venv/bin/gltest tests/integration -q                     # the cross-contract half direct mode cannot reach
+.venv/bin/python scripts/deploy.py --network testnet_bradbury --dry-run
 ```
 
 ```bash
