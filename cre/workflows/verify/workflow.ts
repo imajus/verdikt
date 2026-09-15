@@ -27,8 +27,8 @@ import {
 import { encodeAbiParameters, keccak256, parseAbiParameters, toHex, type Address, type Hex } from 'viem';
 
 import { requestBodyField } from '@verdikt/cre/http-request';
+import { fitToBudget } from '@verdikt/cre/relay-payload';
 import { failedClauseOf, judge, observationFrom, shouldWriteVerdict } from '@verdikt/cre/judge';
-import { relayPayload } from '@verdikt/cre/relay';
 import { outcomeToOrdinal } from '@verdikt/sdk/registry';
 
 export type Config = {
@@ -180,25 +180,21 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
     })
   );
 
-  // The payload has to travel back through this return value.
+  // The payload travels back two ways, and both carry the whole thing: as this
+  // handler's return value, and as the callback POST `finish` makes.
   //
   // The trigger response does not carry it (Spike B, CRE-3), and the proxy
   // cannot fetch it itself — an x402 payment settles once, so the call made
   // above IS the call, and its response is the only copy of what the agent
-  // bought. Two consequences worth stating rather than discovering:
+  // bought. One consequence worth stating rather than discovering: the body
+  // leaves the enclave, so it is no longer only ever inside it. What
+  // attestation still buys is that the code *judging* it is fixed and
+  // published — which is §2's actual claim — but a provider should be told
+  // this plainly rather than left to assume otherwise.
   //
-  //   - the body crosses the DON boundary, so it is no longer only ever inside
-  //     the enclave. What attestation still buys is that the code *judging* it
-  //     is fixed and published — which is §2's actual claim — but a provider
-  //     should be told this plainly rather than left to assume otherwise;
-  //   - the DON consensus observation is capped (25kb in simulation). A larger
-  //     response cannot come back whole, so it is truncated and flagged rather
-  //     than silently cut: the agent paid for it and has to be able to tell.
-  //
-  // Assembled in `@verdikt/cre/relay` rather than here, because what this
-  // payload carries decides whether a semantic claim can be judged at all, and
-  // logic that lives only in this file is logic nothing tests.
-  const relay = relayPayload({ status, contentType, bodyText });
+  // Whether it fits is `finish`'s problem, because only `finish` knows how
+  // large the serialized payload actually is.
+  const relay = { status, body: bodyText ?? '' };
 
   // A 4xx under the status-only fallback writes nothing at all. `onReport` has
   // no way to express that — every report it accepts writes a verdict — so the
@@ -274,7 +270,7 @@ const finish = (
   callbackToken: string | undefined,
   result: Record<string, unknown>
 ): string => {
-  const payload = JSON.stringify({ requestId: request.requestId, ...result });
+  const payload = fitToBudget(request.requestId, result);
   if (request.callbackUrl) {
     try {
       new HTTPClient()
