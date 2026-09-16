@@ -1,5 +1,7 @@
 #!/usr/bin/env python
-"""
+# Raw, because the shell transcript below ends a line with a backslash: `\ ` is
+# not a valid escape and Python already warns that it will stop being ignored.
+r"""
 The claimant's CLI: file a semantic claim and see it through (issue #94).
 
 A CLI rather than a web UI, matching `scripts/pay-x402.mjs` and `pnpm onboard`
@@ -166,7 +168,7 @@ def cmd_open(args):
     if not args.signature:
         raise SystemExit('no --signature — run `claim.py sign --request-id …` first; without it evidence stays sealed')
     write(client, judge, 'submit_claim', [args.request_id, args.clause, args.slug, args.signature])
-    return cmd_status(args)
+    return cmd_status(args, client, judge)
 
 
 def cmd_resolve(args):
@@ -221,12 +223,17 @@ def cmd_cancel(args):
     client, _ = connect(args)
     judge, _ = addresses(args)
     write(client, judge, 'cancel_claim', [args.request_id, args.clause])
-    return cmd_status(args)
+    return cmd_status(args, client, judge)
 
 
-def cmd_status(args):
-    client, _ = connect(args)
-    judge, _ = addresses(args)
+def cmd_status(args, client=None, judge=None):
+    """Read a claim back. Reuses the caller's client when it already has one —
+    `open` and `cancel` both end here, and reconnecting would re-sign a fresh
+    account for a read they are already authenticated for."""
+    if client is None:
+        client, _ = connect(args)
+    if judge is None:
+        judge, _ = addresses(args)
     claim = client.read_contract(address=judge, function_name='get_claim', args=[args.request_id, args.clause])
     print(json.dumps(claim, indent=2, default=str))
     return 0

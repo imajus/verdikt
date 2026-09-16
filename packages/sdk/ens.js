@@ -437,9 +437,12 @@ export async function writeServiceScores(slug, scores, options) {
  * compromised GenLayer aggregator should not be able to move a provider's
  * `conformance`.
  *
- * The signer must be scoped to `semanticConformance` on the subname. It is not
- * granted by the registrar at mint time, so an existing subname needs the role
- * granted before the first write — see `scripts/grant-semantic-role.mjs`.
+ * The signer must be scoped to `semanticConformance` on the subname.
+ * `VerdiktSubnameRegistrar.claim` grants it at mint time, but only where the
+ * registrar was deployed with a `SEMANTIC_SCORE_WRITER` — a subname minted
+ * before that key existed has nobody authorised for it and the first write
+ * reverts with `EACUnauthorizedAccountRoles` until the role is granted by
+ * `node scripts/publish-semantic-scores.mjs --grant --send`.
  *
  * @param {string} slug
  * @param {number} semanticConformance 0–1000 integer

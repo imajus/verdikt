@@ -120,12 +120,29 @@ const json = (body, status = 200, headers = {}) =>
  */
 export function routeOf(request, config) {
   const url = new URL(request.url);
-  const fromHost = hostSlug(url, config);
-  if (fromHost) return { slug: fromHost, rest: url.pathname.replace(/^\/+/, '') };
-
+  // A request that arrived on the service wildcard is resolved by its host and
+  // by nothing else. Falling through to the path form when the host label is
+  // not a slug would let `a.b.verdikt.bond/weather/...` be served as `weather`.
+  if (onServiceHost(url, config)) {
+    const fromHost = hostSlug(url, config);
+    return fromHost === null ? null : { slug: fromHost, rest: url.pathname.replace(/^\/+/, '') };
+  }
   const [, slug, ...rest] = url.pathname.split('/');
   if (!slug || !SLUG.test(slug)) return null;
   return { slug, rest: rest.join('/') };
+}
+
+/**
+ * Whether the request arrived on the `<slug>.verdikt.bond` wildcard at all —
+ * separate from whether the label is a usable slug, because the two answers
+ * are needed in different places.
+ *
+ * @param {URL} url
+ * @param {ProxyConfig} config
+ * @returns {boolean}
+ */
+function onServiceHost(url, config) {
+  return url.hostname.toLowerCase().endsWith(`.${config.publicHost.toLowerCase()}`);
 }
 
 /**
@@ -136,10 +153,9 @@ export function routeOf(request, config) {
  * @returns {string | null}
  */
 function hostSlug(url, config) {
+  if (!onServiceHost(url, config)) return null;
   const host = url.hostname.toLowerCase();
-  const suffix = `.${config.publicHost.toLowerCase()}`;
-  if (!host.endsWith(suffix)) return null;
-  const slug = host.slice(0, -suffix.length);
+  const slug = host.slice(0, -(config.publicHost.length + 1));
   return SLUG.test(slug) ? slug : null;
 }
 
@@ -172,7 +188,7 @@ export async function handleRequest(request, deps = {}) {
   // reserved here is a provider path made unreachable: an agent calling
   // `weather.verdikt.bond/internal/status` would get a proxy 404 rather than
   // the provider's answer. Only the path form has a slug to disambiguate.
-  if (!hostSlug(url, config)) {
+  if (!onServiceHost(url, config)) {
     const own = await proxyRoute(request, url, { config, marketplace, workflow, resolve, registry, evidence });
     if (own) return own;
   }
@@ -628,20 +644,25 @@ async function handleSlaRead(slug, { config, resolve }) {
  * the proxy is misconfigured and the claimant should come back, which the judge
  * reads as `[TRANSIENT]` rather than as a finding against anyone.
  *
- * @param {string} requestId
+ * @param {string} pathRequestId
  * @param {Request} request
  * @param {{ config: ProxyConfig, registry: Pick<RegistryReader, 'getVerdict'>, evidence: EvidenceStore|null }} deps
  */
-async function handleEvidenceRead(requestId, request, { config, registry, evidence }) {
+async function handleEvidenceRead(pathRequestId, request, { config, registry, evidence }) {
   if (!evidence) {
     return json(
       { error: 'evidence_unavailable', detail: 'this proxy is not configured with an evidence store' },
       503
     );
   }
-  if (!/^0x[0-9a-fA-F]{64}$/.test(requestId)) {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(pathRequestId)) {
     return json({ error: 'bad_request_id', detail: 'a request id is 32 bytes as 0x-prefixed hex' }, 400);
   }
+  // Lower-cased once, here. `disclosureMessage` already lower-cases what it
+  // signs, so a caller presenting the id in upper case passed the gate and
+  // then missed the store — which the judge reads as "no evidence", the one
+  // answer that quietly resolves a real claim UNDETERMINED.
+  const requestId = pathRequestId.toLowerCase();
 
   const gate = await authorizeDisclosure({
     requestId,

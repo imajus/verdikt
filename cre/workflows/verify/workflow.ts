@@ -194,7 +194,17 @@ export const onVerifyRequest = (runtime: TeeRuntime<Config>, trigger: HTTPPayloa
   //
   // Whether it fits is `finish`'s problem, because only `finish` knows how
   // large the serialized payload actually is.
-  const relay = { status, body: bodyText ?? '' };
+  //
+  // The provider's own `content-type` travels with it. Reading it and then
+  // dropping it is not a cosmetic loss: the proxy's evidence envelope takes
+  // `response.contentType` from here, and `SlaClaimJudge` refuses to judge an
+  // envelope whose content type it does not recognise — so a missing header
+  // resolves every semantic claim `UNDETERMINED` rather than failing loudly.
+  const relay = {
+    status,
+    headers: contentType ? { 'content-type': contentType } : {},
+    body: bodyText ?? ''
+  };
 
   // A 4xx under the status-only fallback writes nothing at all. `onReport` has
   // no way to express that — every report it accepts writes a verdict — so the

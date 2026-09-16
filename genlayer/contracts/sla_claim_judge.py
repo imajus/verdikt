@@ -506,11 +506,22 @@ class SlaClaimJudge(gl.Contract):
         # advertised as holding, however much escrow the owner still has.
         available = min(self._escrow_of(provider), self.deposit_amount.get(claim.slug, 0)) if provider is not None else 0
 
+        # The consumer side gets the same clamp for the same reason. `release`
+        # raises when the escrow is short, and `_settle` is the only way out of
+        # an OPEN claim — both `resolve_claim` and `cancel_claim` go through
+        # here — so a release that reverts strands the claim OPEN forever with
+        # the judgment unrecorded. `settlement_for` is deliberately total; that
+        # is only true end to end if what it is handed is what is actually
+        # there. A bond can fall short of what was recorded because every
+        # release is emitted `on='finalized'`: the escrow a settled claim gave
+        # back has not left yet when the next claim is filed against it.
+        bond_available = min(self._escrow_of(claim.claimant), claim.bond) if claim.bond > 0 else 0
+
         plan = settlement_for(
             outcome=claim.outcome,
             paid_amount=claim.paid_amount,
             deposit_available=available,
-            bond=claim.bond,
+            bond=bond_available,
             bounty=self.bounty_amount,
         )
         claim.compensation = u256(plan['compensation'])
@@ -532,7 +543,9 @@ class SlaClaimJudge(gl.Contract):
         # has no owner-side unescrow (see `SettlementToken.release`), so a
         # self-release — owner and recipient the same account — is how a bond
         # that was never spent, or only partly spent, stops being encumbered.
-        surplus = claim.bond - plan['from_consumer']
+        # Off what the escrow actually holds, not off what was recorded: the
+        # difference is escrow that is already on its way out.
+        surplus = bond_available - plan['from_consumer']
         if surplus > 0:
             self._release(claim.claimant, claim.claimant, surplus)
 
@@ -1067,12 +1080,6 @@ def _claim_to_dict(claim: Claim) -> dict:
         'compensation': claim.compensation,
         'bounty': claim.bounty,
     }
-
-
-def _decode_body(body) -> str:
-    if body is None:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Empty response body')
-    return bytes(body).decode('utf-8', errors='replace')
 
 
 def _parse_json(text: str, what: str) -> dict:
