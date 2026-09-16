@@ -149,7 +149,7 @@ interface MarketplaceFilters {
 }
 
 /** The SLA composer's model (forms/sla-draft.js). */
-type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange';
+type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange' | 'semantic';
 
 /** `any` is a schema node with no single named `type`; its constraints ride in `extra`. */
 type SlaDraftNodeType = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'any';
@@ -200,7 +200,13 @@ interface SlaDraftPriceClause extends SlaDraftClauseBase {
   asset: string;
 }
 
-type SlaDraftClause = SlaDraftSchemaClause | SlaDraftLatencyClause | SlaDraftPriceClause;
+interface SlaDraftSemanticClause extends SlaDraftClauseBase {
+  kind: 'semantic';
+  /** The binding judgment text, in plain language — judged on dispute by GenLayer, never enforced by CRE. */
+  criteria: string;
+}
+
+type SlaDraftClause = SlaDraftSchemaClause | SlaDraftLatencyClause | SlaDraftPriceClause | SlaDraftSemanticClause;
 
 interface SlaDraft {
   clauses: SlaDraftClause[];
@@ -211,7 +217,7 @@ interface SlaDraft {
 interface SlaDraftProblem {
   /** Index into `SlaDraft.clauses`. */
   clause: number;
-  /** `id`, `maxMs`, `min`, `max`, `shape`, or a `/path.min` style pointer into a schema tree. */
+  /** `id`, `maxMs`, `min`, `max`, `shape`, `criteria`, or a `/path.min` style pointer into a schema tree. */
   field: string;
   message: string;
 }
