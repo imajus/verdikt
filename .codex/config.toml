@@ -1,0 +1,8 @@
+[mcp_servers.ens]
+url = "https://ens-mcp.namespace.ninja/mcp"
+
+[mcp_servers.ethereum]
+url = "https://ethereum-mcp.gregskril.workers.dev/mcp"
+
+[mcp_servers.alchemy]
+url = "https://mcp.alchemy.com/mcp"
