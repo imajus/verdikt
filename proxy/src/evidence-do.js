@@ -63,7 +63,10 @@ export class EvidenceCache {
     // adjudication runway, so several validators re-reading it keep working
     // even for a claim filed at the very end of the filing window.
     if ((await this.state.storage.get(DISCLOSED_KEY)) !== true) {
-      const extended = Date.now() + adjudicationTtlMs;
+      // A preview during the filing window must never reduce that window.
+      // Keep whichever deadline is later, then guarantee the full runway from
+      // the authorised disclosure.
+      const extended = Math.max(expiresAt, Date.now() + adjudicationTtlMs);
       await this.state.storage.put({ [DISCLOSED_KEY]: true, [EXPIRES_KEY]: extended });
       await this.state.storage.setAlarm(extended);
     }

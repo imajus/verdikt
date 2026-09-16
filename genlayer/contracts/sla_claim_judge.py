@@ -236,7 +236,10 @@ class SlaClaimJudge(gl.Contract):
         if existing == sender:
             committed_elsewhere -= previous
         escrowed = self._escrow_of(sender)
-        allocatable = escrowed - committed_elsewhere
+        # Deposits and claim bonds draw on the same per-owner escrow bucket.
+        # A provider may also be a claimant, so neither allocation may pretend
+        # the other liability is unreserved.
+        allocatable = available_escrow(escrowed, committed_elsewhere, self.bonded.get(sender, 0))
         if allocatable <= 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Escrow settlement tokens to this contract first')
 
@@ -264,13 +267,12 @@ class SlaClaimJudge(gl.Contract):
         and every check that runs before it is one an ineligible claimant pays
         for in gas rather than in someone else's money.
         """
+        if not disclosure_signature.startswith('0x'):
+            raise gl.vm.UserError(f'{ERROR_EXPECTED} Disclosure signature must be 0x-prefixed hex')
+        request_id = _canonical_request_id(request_id)
         key = _claim_key(request_id, clause_id)
         if key in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Claim already exists')
-        if not disclosure_signature.startswith('0x'):
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} Disclosure signature must be 0x-prefixed hex')
-        if not _is_request_id(request_id):
-            raise gl.vm.UserError(f'{ERROR_EXPECTED} Request id must be 32 bytes of 0x-prefixed hex')
 
         claimant = gl.message.sender_address
         committed = self.bonded.get(claimant, 0)
@@ -279,7 +281,8 @@ class SlaClaimJudge(gl.Contract):
             # without that, one bond would back every claim the account cares to
             # file, and filing would be free after the first.
             escrowed = self._escrow_of(claimant)
-            if escrowed < committed + self.bond_amount:
+            deposits = self.deposit_committed.get(claimant, 0)
+            if available_escrow(escrowed, deposits, committed) < self.bond_amount:
                 raise gl.vm.UserError(
                     f'{ERROR_EXPECTED} Escrow {self.bond_amount} more to this contract to post the bond'
                 )
@@ -315,6 +318,7 @@ class SlaClaimJudge(gl.Contract):
     @gl.public.write
     def resolve_claim(self, request_id: str, clause_id: str) -> None:
         """Judge an open claim against the evidence the proxy cached for it."""
+        request_id = _canonical_request_id(request_id)
         key = _claim_key(request_id, clause_id)
         claim = self._require_open(key)
 
@@ -413,7 +417,7 @@ class SlaClaimJudge(gl.Contract):
         either side, which is exactly why it must not be reachable while a real
         judgment is still possible.
         """
-        key = _claim_key(request_id, clause_id)
+        key = _claim_key(_canonical_request_id(request_id), clause_id)
         claim = self._require_open(key)
         if gl.message.sender_address != claim.claimant:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the claimant may cancel')
@@ -429,7 +433,7 @@ class SlaClaimJudge(gl.Contract):
 
     @gl.public.view
     def get_claim(self, request_id: str, clause_id: str) -> dict:
-        key = _claim_key(request_id, clause_id)
+        key = _claim_key(_canonical_request_id(request_id), clause_id)
         if key not in self.claims:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} No such claim')
         return _claim_to_dict(self.claims[key])
@@ -771,16 +775,110 @@ class SlaClaimJudge(gl.Contract):
         deciding alone.
         """
         url = f'{self.proxy_base_url}/internal/evidence/{request_id}'
-
         auth = {EVIDENCE_AUTH_HEADER: disclosure_signature}
+        # Nondeterministic closures execute in a sub-VM that cannot import this
+        # contract module. Keep every value they need in their captured state;
+        # in particular, do not delegate to a module helper from either
+        # closure. Direct mode would otherwise hide the fault.
+        expected = ERROR_EXPECTED
+        external = ERROR_EXTERNAL
+        transient = ERROR_TRANSIENT
+        llm = ERROR_LLM
+        resolved_outcomes = tuple(RESOLVED_OUTCOMES)
+        text_content_types = tuple(TEXT_CONTENT_TYPES)
+        image_content_types = tuple(IMAGE_CONTENT_TYPES)
+        judgment_prompt = _JUDGMENT_PROMPT
+        image_judgment_prompt = _IMAGE_JUDGMENT_PROMPT
+        truncation_notice = _TRUNCATION_NOTICE
+        no_truncation_notice = _NO_TRUNCATION_NOTICE
+        json_loads = json.loads
+        b64decode = base64.b64decode
 
         def leader_fn() -> dict:
-            return _decide(url, slug, criteria, auth)
+            res = gl.nondet.web.get(url, headers=auth)
+            if res.status == 404:
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'No evidence is available for this request'}
+            if res.status in (401, 403):
+                raise gl.vm.UserError(f'{expected} Evidence disclosure was refused ({res.status})')
+            if 400 <= res.status < 500:
+                raise gl.vm.UserError(f'{external} Evidence read returned {res.status}')
+            if res.status >= 500:
+                raise gl.vm.UserError(f'{transient} Evidence read unavailable ({res.status})')
+            if res.body is None:
+                raise gl.vm.UserError(f'{external} Empty response body')
+            try:
+                envelope = json_loads(bytes(res.body).decode('utf-8', errors='replace'))
+            except Exception:
+                raise gl.vm.UserError(f'{external} Evidence envelope is not valid JSON')
+            if not isinstance(envelope, dict):
+                raise gl.vm.UserError(f'{external} Evidence envelope is not a JSON object')
+            served = envelope.get('slug')
+            if not isinstance(served, str) or served.strip().lower() != slug.strip().lower():
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'The evidence was served by a different service than the claim names'}
+            request = envelope.get('request')
+            response = envelope.get('response')
+            if not isinstance(request, dict) or not isinstance(response, dict):
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'Evidence envelope is not a request/response pair'}
+            status = response.get('status')
+            if not isinstance(status, int) or isinstance(status, bool):
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'Evidence envelope declares no response status'}
+            method = request.get('method')
+            request_url = request.get('url')
+            if not isinstance(method, str) or not method or not isinstance(request_url, str) or not request_url:
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'Evidence envelope does not say what was requested'}
+            content_type = str(response.get('contentType') or '').split(';')[0].strip().lower()
+            if content_type not in text_content_types and content_type not in image_content_types:
+                return {'outcome': 'UNDETERMINED', 'reasoning': f'Unsupported evidence content type: {content_type or "unknown"}'}
+            if content_type in image_content_types and str(response.get('bodyEncoding') or '').strip().lower() != 'base64':
+                return {'outcome': 'UNDETERMINED', 'reasoning': f'Image evidence must arrive base64-encoded, not as {content_type} text'}
+            encoded_body = response.get('body')
+            if not isinstance(encoded_body, str) or not encoded_body:
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'Evidence envelope carries no usable response body'}
+            encoding = str(response.get('bodyEncoding') or 'utf8').strip().lower()
+            try:
+                body = encoded_body.encode('utf-8') if encoding == 'utf8' else b64decode(encoded_body, validate=True) if encoding == 'base64' else None
+            except Exception:
+                body = None
+            if body is None:
+                return {'outcome': 'UNDETERMINED', 'reasoning': 'Evidence envelope carries no usable response body'}
+            common = {'criteria': criteria, 'method': method, 'url': request_url,
+                      'request_body': request.get('body') if isinstance(request.get('body'), str) and request.get('body') else '(none)',
+                      'status': status, 'content_type': content_type,
+                      'truncation': truncation_notice if response.get('bodyTruncated') is True else no_truncation_notice}
+            if content_type in image_content_types:
+                analysis = gl.nondet.exec_prompt(image_judgment_prompt.format(**common), response_format='json', images=[body])
+            else:
+                analysis = gl.nondet.exec_prompt(judgment_prompt.format(response_body=body.decode('utf-8', errors='replace'), **common), response_format='json')
+            if not isinstance(analysis, dict):
+                raise gl.vm.UserError(f'{llm} Judgment was not an object: {type(analysis)}')
+            raw = analysis.get('outcome')
+            if raw is None:
+                for alt in ('verdict', 'result', 'decision'):
+                    if alt in analysis:
+                        raw = analysis[alt]
+                        break
+            outcome = str(raw or '').strip().upper()
+            if outcome not in resolved_outcomes:
+                raise gl.vm.UserError(f'{llm} Judgment named no known outcome: {raw!r}')
+            reasoning = analysis.get('reasoning') or analysis.get('analysis') or ''
+            return {'outcome': outcome, 'reasoning': str(reasoning)[:1024]}
 
         def validator_fn(leaders_res: gl.vm.Result) -> bool:
             if not isinstance(leaders_res, gl.vm.Return):
-                return _agree_on_error(leaders_res, leader_fn)
-            mine = _decide(url, slug, criteria, auth)
+                leader_msg = getattr(leaders_res, 'message', '')
+                try:
+                    leader_fn()
+                    return False
+                except gl.vm.UserError as e:
+                    mine = getattr(e, 'message', str(e))
+                    if mine.startswith(expected) or mine.startswith(external):
+                        return mine == leader_msg
+                    return mine.startswith(transient) and leader_msg.startswith(transient)
+                except Exception:
+                    return False
+            # `leader_fn` is itself fully self-contained. Calling it here runs
+            # the validator's own fresh evidence fetch and model judgment.
+            mine = leader_fn()
             return mine['outcome'] == leaders_res.calldata['outcome']
 
         return gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
@@ -794,7 +892,18 @@ class SlaClaimJudge(gl.Contract):
 
 
 def _claim_key(request_id: str, clause_id: str) -> str:
-    return f'{request_id}:{clause_id}'
+    return f'{request_id.lower()}:{clause_id}'
+
+
+def _canonical_request_id(value: str) -> str:
+    if not _is_request_id(value):
+        raise gl.vm.UserError(f'{ERROR_EXPECTED} Request id must be 32 bytes of 0x-prefixed hex')
+    return '0x' + value[2:].lower()
+
+
+def available_escrow(escrowed: int, deposits: int, bonds: int) -> int:
+    """The portion of one owner's shared token escrow that remains uncommitted."""
+    return escrowed - deposits - bonds
 
 
 def _now() -> int:
@@ -974,172 +1083,6 @@ def _parse_json(text: str, what: str) -> dict:
     if not isinstance(parsed, dict):
         raise gl.vm.UserError(f'{ERROR_EXTERNAL} {what} is not a JSON object')
     return parsed
-
-
-def _undetermined(reason: str) -> dict:
-    """
-    Every path that cannot honestly reach a conclusion lands here.
-
-    Not an error: `UNDETERMINED` charges neither side, and that is the point.
-    Forcing a binary outcome out of incomplete evidence would make missing
-    evidence adjudicable, and therefore worth manufacturing.
-    """
-    return {'outcome': OUTCOME_UNDETERMINED, 'reasoning': reason}
-
-
-def _decide(evidence_url: str, slug: str, criteria: str, auth: dict) -> dict:
-    envelope = _fetch_evidence(evidence_url, auth)
-    if envelope is None:
-        return _undetermined('No evidence is available for this request')
-
-    # The criteria were frozen from *this* slug's SLA; the envelope says which
-    # service actually served the call. Nothing so far forces them to be the
-    # same service: a claimant holding one disclosure signature can name a
-    # different slug and have service B's promises applied to service A's
-    # response, which is a binding MET/BREACH about a promise the provider that
-    # was called never made. #90's eligibility gate closes this properly against
-    # Arc (`verdict.serviceId == keccak256(slug)`); this closes it here, where
-    # the envelope already carries the answer.
-    served = envelope.get('slug')
-    if not isinstance(served, str) or served.strip().lower() != slug.strip().lower():
-        return _undetermined('The evidence was served by a different service than the claim names')
-
-    # Shape-check before anything is formatted into a prompt. An envelope with a
-    # missing or wrongly-typed half is incomplete evidence, and incomplete
-    # evidence is `UNDETERMINED` by design — never a binding MET/BREACH asked of
-    # the model over a blank where the request or the status should have been.
-    request = envelope.get('request')
-    response = envelope.get('response')
-    if not isinstance(request, dict) or not isinstance(response, dict):
-        return _undetermined('Evidence envelope is not a request/response pair')
-
-    status = response.get('status')
-    if not isinstance(status, int) or isinstance(status, bool):
-        return _undetermined('Evidence envelope declares no response status')
-
-    method = request.get('method')
-    url = request.get('url')
-    if not isinstance(method, str) or not method or not isinstance(url, str) or not url:
-        return _undetermined('Evidence envelope does not say what was requested')
-
-    content_type = str(response.get('contentType') or '').split(';')[0].strip().lower()
-    if content_type not in TEXT_CONTENT_TYPES and content_type not in IMAGE_CONTENT_TYPES:
-        return _undetermined(f'Unsupported evidence content type: {content_type or "unknown"}')
-
-    # An image declared as `utf8` is not an image. The CRE relay decodes every
-    # response body as text before the proxy ever sees it, so a PNG arrives with
-    # its non-UTF-8 bytes already replaced; re-encoding that and calling it the
-    # delivered image would put bytes in front of the model that the provider
-    # never sent. Refusing keeps the base64 path ready for a relay that carries
-    # binary losslessly, and refuses to guess until there is one.
-    if content_type in IMAGE_CONTENT_TYPES and str(response.get('bodyEncoding') or '').strip().lower() != 'base64':
-        return _undetermined(f'Image evidence must arrive base64-encoded, not as {content_type} text')
-
-    body = _raw_body(response)
-    if body is None:
-        return _undetermined('Evidence envelope carries no usable response body')
-
-    request_body = request.get('body')
-    common = {
-        'criteria': criteria,
-        'method': method,
-        'url': url,
-        'request_body': request_body if isinstance(request_body, str) and request_body else '(none)',
-        'status': status,
-        'content_type': content_type,
-        # Told to the judge rather than acted on here. Refusing every truncated
-        # body outright would hand any provider a way to become unjudgeable —
-        # pad past the cap and no semantic clause can ever be enforced — while
-        # judging one silently lets a MET rest on the part that went missing. So
-        # the judge is told what it is holding and instructed when that is
-        # enough. The cap itself is #88.
-        'truncation': _TRUNCATION_NOTICE if response.get('bodyTruncated') is True else _NO_TRUNCATION_NOTICE,
-    }
-
-    if content_type in IMAGE_CONTENT_TYPES:
-        prompt = _IMAGE_JUDGMENT_PROMPT.format(**common)
-        return _judgment_from(gl.nondet.exec_prompt(prompt, response_format='json', images=[body]))
-
-    prompt = _JUDGMENT_PROMPT.format(response_body=body.decode('utf-8', errors='replace'), **common)
-    return _judgment_from(gl.nondet.exec_prompt(prompt, response_format='json'))
-
-
-def _raw_body(response: dict):
-    """
-    The delivered body as bytes, or None if the envelope's encoding is unusable.
-
-    The envelope declares `bodyEncoding` because an image cannot travel as JSON
-    text. Anything other than the two encodings it can declare is evidence this
-    contract cannot read, which is a reason to reach no conclusion rather than a
-    reason to guess.
-    """
-    body = response.get('body')
-    if not isinstance(body, str) or not body:
-        return None
-    encoding = str(response.get('bodyEncoding') or 'utf8').strip().lower()
-    if encoding == 'utf8':
-        return body.encode('utf-8')
-    if encoding == 'base64':
-        try:
-            return base64.b64decode(body, validate=True)
-        except Exception:
-            return None
-    return None
-
-
-def _fetch_evidence(url: str, auth: dict):
-    res = gl.nondet.web.get(url, headers=auth)
-    # 404 means there is nothing to judge: never cached, or the window closed.
-    # Not an error — a provider that lost a dispute because a cache expired
-    # would be convicted of Verdikt's bookkeeping.
-    if res.status == 404:
-        return None
-    # 401/403 mean the disclosure signature is wrong or missing. That is the
-    # claimant's own mistake and it is fixable, so it must not resolve the
-    # claim against anybody — it refuses, and the claim stays open.
-    if res.status in (401, 403):
-        raise gl.vm.UserError(f'{ERROR_EXPECTED} Evidence disclosure was refused ({res.status})')
-    if 400 <= res.status < 500:
-        raise gl.vm.UserError(f'{ERROR_EXTERNAL} Evidence read returned {res.status}')
-    if res.status >= 500:
-        raise gl.vm.UserError(f'{ERROR_TRANSIENT} Evidence read unavailable ({res.status})')
-    return _parse_json(_decode_body(res.body), 'Evidence envelope')
-
-
-def _judgment_from(analysis) -> dict:
-    if not isinstance(analysis, dict):
-        raise gl.vm.UserError(f'{ERROR_LLM} Judgment was not an object: {type(analysis)}')
-
-    raw = analysis.get('outcome')
-    if raw is None:
-        for alt in ('verdict', 'result', 'decision'):
-            if alt in analysis:
-                raw = analysis[alt]
-                break
-    outcome = str(raw or '').strip().upper()
-    if outcome not in RESOLVED_OUTCOMES:
-        raise gl.vm.UserError(f'{ERROR_LLM} Judgment named no known outcome: {raw!r}')
-
-    reasoning = analysis.get('reasoning') or analysis.get('analysis') or ''
-    return {'outcome': outcome, 'reasoning': str(reasoning)[:1024]}
-
-
-def _agree_on_error(leaders_res, leader_fn) -> bool:
-    leader_msg = getattr(leaders_res, 'message', '')
-    try:
-        leader_fn()
-        # The leader failed where we succeeded: disagree rather than ratify a
-        # failure that was not reproducible.
-        return False
-    except gl.vm.UserError as e:
-        mine = getattr(e, 'message', str(e))
-        if mine.startswith(ERROR_EXPECTED) or mine.startswith(ERROR_EXTERNAL):
-            return mine == leader_msg
-        if mine.startswith(ERROR_TRANSIENT) and leader_msg.startswith(ERROR_TRANSIENT):
-            return True
-        return False
-    except Exception:
-        return False
 
 
 # Every field interpolated below was written by one of the two parties to the

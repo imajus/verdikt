@@ -58,6 +58,20 @@ def test_duplicate_claim_refuses(direct_vm, judge, direct_alice):
         judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
 
 
+def test_request_id_case_cannot_create_a_second_claim(direct_vm, judge, direct_alice):
+    direct_vm.sender = direct_alice
+    mock_sla(direct_vm)
+    mock_arc(direct_vm, payer=to_hex(direct_alice))
+    mixed_case = '0x' + REQUEST_ID[2:].upper()
+
+    judge.submit_claim(mixed_case, CLAUSE_ID, SLUG, SIGNATURE)
+
+    claim = judge.get_claim(REQUEST_ID, CLAUSE_ID)
+    assert claim['request_id'] == REQUEST_ID
+    with direct_vm.expect_revert('Claim already exists'):
+        judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
+
+
 def test_unknown_clause_refuses(direct_vm, judge, direct_alice):
     direct_vm.sender = direct_alice
     mock_sla(direct_vm)

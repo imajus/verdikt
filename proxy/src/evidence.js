@@ -167,7 +167,8 @@ export function createMemoryEvidenceStore({ now = Date.now } = {}) {
       // window still has time to be judged.
       if (!entry.disclosed) {
         entry.disclosed = true;
-        entry.expiresAt = now() + adjudicationTtlMs;
+        // Reading evidence early cannot shorten its original filing deadline.
+        entry.expiresAt = Math.max(entry.expiresAt, now() + adjudicationTtlMs);
       }
       return entry.envelope;
     }

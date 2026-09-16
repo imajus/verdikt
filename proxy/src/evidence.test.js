@@ -231,6 +231,16 @@ describe('the store', () => {
     expect(await store.read(REQUEST_ID, 5000)).not.toBeNull();
   });
 
+  it('does not shorten the filing window when evidence is previewed early', async () => {
+    let now = 0;
+    const store = createMemoryEvidenceStore({ now: () => now });
+    await store.store(REQUEST_ID, envelope(), 5000);
+
+    await store.read(REQUEST_ID, 1000);
+    now = 1500;
+    expect(await store.read(REQUEST_ID, 1000)).not.toBeNull();
+  });
+
   it('does not extend a second time, so the runway is bounded', async () => {
     let now = 0;
     const store = createMemoryEvidenceStore({ now: () => now });

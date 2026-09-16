@@ -114,6 +114,22 @@ describe('EvidenceCache', () => {
     }
   });
 
+  it('keeps the filing deadline when an early read has a shorter runway', async () => {
+    const { state, alarms } = fakeState();
+    const cache = new EvidenceCache(state);
+    vi.useFakeTimers();
+    try {
+      await cache.fetch(new Request('http://x/store', { method: 'POST', body: JSON.stringify({ envelope: envelope(), ttlMs: 5000 }) }));
+      const filingDeadline = alarms.alarm;
+      await cache.fetch(new Request('http://x/read', { method: 'POST', body: JSON.stringify({ adjudicationTtlMs: 1000 }) }));
+      expect(alarms.alarm).toBe(filingDeadline);
+      vi.advanceTimersByTime(1500);
+      expect((await cache.fetch(new Request('http://x/read', { method: 'POST', body: JSON.stringify({ adjudicationTtlMs: 1000 }) }))).status).toBe(200);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('empties itself when the alarm fires', async () => {
     const { state, values } = fakeState();
     const cache = new EvidenceCache(state);

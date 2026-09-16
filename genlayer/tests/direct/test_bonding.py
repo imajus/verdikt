@@ -29,12 +29,20 @@ from tests.direct.conftest import (
     mock_evidence,
     mock_judgment,
     mock_sla,
+    load_judge_module,
     to_hex,
 )
 
 # The claim's own clock, mirrored from the contract so a change to the window
 # there fails this file rather than silently changing what it proves.
 ADJUDICATION_WINDOW_SECONDS = 24 * 60 * 60
+
+
+def test_deposits_and_bonds_reserve_the_same_escrow(judge) -> None:
+    """Neither commitment can be allocated a second time by the other path."""
+    judge_module = load_judge_module()
+    assert judge_module.available_escrow(10_000, deposits=7_000, bonds=3_000) == 0
+    assert judge_module.available_escrow(10_000, deposits=7_000, bonds=2_000) == 1_000
 
 
 @pytest.fixture
