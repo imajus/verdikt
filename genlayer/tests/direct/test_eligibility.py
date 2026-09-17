@@ -78,6 +78,9 @@ class TestRefusals:
         with direct_vm.expect_revert('No verdict was written'):
             judge.submit_claim(REQUEST_ID, CLAUSE_ID, SLUG, SIGNATURE)
 
+    # TEMPORARY (hackathon demo): skipped, not deleted. The rule it covers is
+    # commented out in `check_eligibility`; this comes back with it.
+    @pytest.mark.skip(reason='TEMPORARY (hackathon demo): the payer check is disabled in check_eligibility')
     def test_someone_who_did_not_pay_for_the_call(self, direct_vm, judge, direct_alice):
         direct_vm.sender = direct_alice
         mock_sla(direct_vm)
@@ -202,7 +205,10 @@ class TestPureRules:
         }
         assert judge_module.check_eligibility(good, OTHER_PAYER, SLUG) is None
         assert judge_module.check_eligibility({**good, 'written_at': 0}, OTHER_PAYER, SLUG) is not None
-        assert judge_module.check_eligibility(good, ZERO_ADDRESS, SLUG) is not None
+        # TEMPORARY (hackathon demo): the payer rule is commented out in
+        # `check_eligibility`, so a non-payer is no longer refused here.
+        # Restore this line with it.
+        # assert judge_module.check_eligibility(good, ZERO_ADDRESS, SLUG) is not None
         assert judge_module.check_eligibility(good, OTHER_PAYER, 'elsewhere') is not None
         assert judge_module.check_eligibility({**good, 'within_filing_window': False}, OTHER_PAYER, SLUG) is not None
 

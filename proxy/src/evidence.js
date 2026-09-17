@@ -87,14 +87,35 @@ export function buildEnvelope({ requestId, slug, method, url, requestBody, resul
  * @returns {Promise<{ ok: true, payer: string } | { ok: false, status: number, error: string, detail: string }>}
  */
 export async function authorizeDisclosure({ requestId, signature, registry }) {
-  if (!signature) {
-    return {
-      ok: false,
-      status: 401,
-      error: 'disclosure_unauthorized',
-      detail: `evidence is disclosed only to the payer; sign ${JSON.stringify(disclosureMessage(requestId))} and present it in ${EVIDENCE_AUTH_HEADER}`
-    };
-  }
+  // TEMPORARY (hackathon demo): the payer-signature gate is disabled, so this
+  // endpoint discloses a paid response body to anyone who asks for it by
+  // request id — and every request id is public in the `VerdictWritten` event.
+  //
+  // `grep -rn 'TEMPORARY (hackathon demo)'` is the revert list. This is the
+  // more dangerous of the two entries on it: the observed value is deliberately
+  // kept off chain precisely because it is a slice of a response an agent paid
+  // for, and this hands it to anybody. Do not leave it on, and do not leave
+  // this deployed against a registry carrying real traffic.
+  //
+  // Why it is off: `aisa` is the only registered service with a `semantic`
+  // clause, it is payable only via `GatewayWalletBatched`, so its verdicts book
+  // the agent wallet's backing EOA (0xe1107cc4…) — an address Circle refuses to
+  // sign as (`Wallet not found`). Without this, the matching bypass in
+  // `check_eligibility` is useless: a claim would open and then fail to
+  // resolve on the 401/403 this used to return.
+  //
+  // Still enforced below: a verdict must exist for the request id, so this
+  // only ever discloses calls that were actually paid for and judged.
+  //
+  // if (!signature) {
+  //   return {
+  //     ok: false,
+  //     status: 401,
+  //     error: 'disclosure_unauthorized',
+  //     detail: `evidence is disclosed only to the payer; sign ${JSON.stringify(disclosureMessage(requestId))} and present it in ${EVIDENCE_AUTH_HEADER}`
+  //   };
+  // }
+  void signature;
 
   /** @type {StoredVerdict|null} */
   let verdict;
@@ -110,24 +131,30 @@ export async function authorizeDisclosure({ requestId, signature, registry }) {
     return { ok: false, status: 404, error: 'no_verdict', detail: `no verdict was written for ${requestId}` };
   }
 
+  // TEMPORARY (hackathon demo): the signature is no longer checked against the
+  // payer — see the note at the top of this function. Restore both together.
+  //
   // Malformed signature bytes make viem throw rather than return false, and
   // "the caller sent nonsense" is the same answer as "the caller is not the
   // payer" — neither may read.
-  let valid;
-  try {
-    valid = await verifyPersonalMessage(verdict.payer, disclosureMessage(requestId), signature);
-  } catch {
-    valid = false;
-  }
-  if (!valid) {
-    return {
-      ok: false,
-      status: 403,
-      error: 'disclosure_unauthorized',
-      detail: 'the signature does not recover to the payer this verdict booked'
-    };
-  }
+  //
+  // let valid;
+  // try {
+  //   valid = await verifyPersonalMessage(verdict.payer, disclosureMessage(requestId), signature);
+  // } catch {
+  //   valid = false;
+  // }
+  // if (!valid) {
+  //   return {
+  //     ok: false,
+  //     status: 403,
+  //     error: 'disclosure_unauthorized',
+  //     detail: 'the signature does not recover to the payer this verdict booked'
+  //   };
+  // }
 
+  // The true payer either way: the envelope still reports who actually paid,
+  // which is the one thing the bypass must not misreport.
   return { ok: true, payer: verdict.payer };
 }
 

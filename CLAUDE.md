@@ -13,11 +13,7 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/Tasks.md` — the phased build plan, ordered by risk
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
-- `docs/roadmap/genlayer.md` — the live design for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). `feat/genlayer` only; `main` is frozen and untouched by it. Read it before changing anything under `genlayer/` — it is newer than the issues
-
-## Working branch
-
-Work happens on `feat/genlayer`, never on `main`. Branch from it, commit to it, and open every new PR with `feat/genlayer` as the **base** — not `main`. `main` is only ever fast-forwarded from the remote. Drop this section once `feat/genlayer` merges.
+- `docs/roadmap/genlayer.md` — the live design for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). Read it before changing anything under `genlayer/` — it is newer than the issues
 
 ## Current state
 
