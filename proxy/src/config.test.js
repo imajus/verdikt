@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import deployment from '../../deployments/genlayer-studio-devnet.json' with { type: 'json' };
 import { PAYMENT_CHAIN_IDS, loadConfig } from './config.js';
 
 describe('payment-chain RPCs', () => {
@@ -37,5 +38,37 @@ describe('payment-chain RPCs', () => {
   it('maps the chains the marketplace’s own providers charge on', () => {
     expect(PAYMENT_CHAIN_IDS.BASE).toBe(8453);
     expect(PAYMENT_CHAIN_IDS.XLAYER).toBe(196);
+  });
+});
+
+describe('the GenLayer judge (issue #114)', () => {
+  // The pin: nothing in the environment names the judge, so a redeploy that
+  // updates this record updates what every paid response tells a disputing
+  // agent. A copy anywhere else would go stale here without failing.
+  it('comes from deployments/genlayer-studio-devnet.json with nothing configured', () => {
+    expect(loadConfig({}).genlayer).toEqual({
+      chainId: deployment.chainId,
+      judgeAddress: deployment.slaClaimJudge
+    });
+  });
+
+  it('lets a fork override either half on its own, the way VERDIKT_REGISTRY_ADDRESS does', () => {
+    const forked = `0x${'ab'.repeat(20)}`;
+    expect(loadConfig({ GENLAYER_JUDGE_ADDRESS: forked }).genlayer).toEqual({
+      chainId: deployment.chainId,
+      judgeAddress: forked
+    });
+    expect(loadConfig({ GENLAYER_JUDGE_CHAIN_ID: '61999' }).genlayer).toEqual({
+      chainId: 61999,
+      judgeAddress: deployment.slaClaimJudge
+    });
+  });
+
+  // `Number('61997x')` is NaN, and an unchecked NaN ships as the literal
+  // header value `NaN` — an unreachable judge, announced confidently.
+  it('refuses a malformed override rather than relaying NaN or a typo’d address', () => {
+    expect(loadConfig({ GENLAYER_JUDGE_CHAIN_ID: '61997x' }).genlayer).toBeNull();
+    expect(loadConfig({ GENLAYER_JUDGE_CHAIN_ID: '0' }).genlayer).toBeNull();
+    expect(loadConfig({ GENLAYER_JUDGE_ADDRESS: '0xnope' }).genlayer).toBeNull();
   });
 });

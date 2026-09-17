@@ -647,6 +647,58 @@ transaction finalizes rather than when the judgment lands. The CLI prints the
 balance either side of that on purpose: those are two events, and showing them
 as one would misrepresent when a claimant is actually paid.
 
+## Judge discovery
+
+`claim.py` is fine for the operator following this repo's how-to, but nothing
+in a paid call itself ever named the judge's address — an agent acting on its
+own had no way to find the contract it would need to dispute at
+([#114](https://github.com/imajus/verdikt/issues/114)). The fix does not
+publish an ABI, a method list, or a claim-filing SDK: GenLayer contracts are
+already self-describing (`getContractSchema(address)` for method signatures,
+`get_config()` for the token address, bond amount, filing window and bounty),
+so one address and one chain id bootstrap the entire flow. Anything more would
+be duplicating what the chain already answers and would drift from the
+contract the next time it changes.
+
+An ENS text record was the obvious place and is exactly what the provider
+opt-in flag above hit: a new key needs every already-minted subname's per-key
+roles re-authorised, which would leave the feature dead on the live testnet.
+The judge address also cannot be provider-authored data (the SLA document, or
+anything else a provider writes) — a provider could otherwise point a
+disputing agent at a judge of its own.
+
+So the proxy relays `x-verdikt-judge-chain-id` / `x-verdikt-judge-address` on
+every verified response that carries a verdict, read by `genlayerConfig` in
+`proxy/src/config.js` straight out of `deployments/genlayer-studio-devnet.json`
+— the same record `_networks.py` treats as the judge's source of truth on the
+Python side, and that `web/src/genlayer.js` and `runner/bin/resolve-claims.mjs`
+already import on the JS side. Not copied into `proxy/wrangler.jsonc`, for the
+reason `VERDIKT_REGISTRY_ADDRESS` is absent from that file too: a checked-in
+deployment record is neither secret nor environment-varying, and a second
+hand-kept copy of it goes stale on the next redeploy with nothing failing —
+it just points every disputing agent at a dead contract.
+`GENLAYER_JUDGE_ADDRESS` / `GENLAYER_JUDGE_CHAIN_ID` stay readable as
+overrides for a fork or a second deployment, which is the meaning
+`.env.example` already gives the first of them.
+
+A call with no verdict — the 402 replay and 4xx carve-outs — is the one
+verified response that says nothing: no envelope was cached and there is
+nothing on Arc for a claim to bind to, so naming a judge there would advertise
+a claim that can never be opened.
+
+This is deliberately not a GenLayer dependency crossing the proxy
+boundary: the proxy imports no GenLayer library and evaluates nothing about a
+claim, it only relays an address and a chain id it was told, which is why
+`web/src/genlayer.js` staying the only file that knows the *protocol* exists
+is unaffected.
+
+What the pair does **not** yet carry is an endpoint. Chain 61997 is GenLayer
+Studio Devnet, which `genlayer-js@1.x` does not know by id or by name —
+`web/src/genlayer.js` has to hand-build it, RPC included — so an agent given
+only a chain id still cannot resolve `https://studio-dev.genlayer.com/api`
+from any public registry. Until the chain is one an SDK ships, "needs nothing
+out of band" holds for the contract and not yet for the node.
+
 ## What is unresolved
 
 - **Circle Gateway payers cannot file.** Above.
@@ -675,9 +727,12 @@ as one would misrepresent when a claimant is actually paid.
   settles against a deposit already emptied. Closing this properly means the
   marketplace or proxy delisting a service (or otherwise refusing to route new
   paid calls to it) the moment `request_withdrawal` is called, which this
-  contract cannot do itself and which `web/src/genlayer.js` being the only
-  file that knows GenLayer exists (CLAUDE.md) currently keeps the proxy from
-  doing either. [#93](https://github.com/imajus/verdikt/issues/93).
+  contract cannot do itself. The proxy now carries the judge's *identity*
+  (above), but that is a relayed constant, not a read: making the routing
+  decision means the proxy calling `get_deposit` on GenLayer, which is exactly
+  the decoding CLAUDE.md's boundary keeps out of it — `web/src/genlayer.js`
+  remains the only file that *talks to* GenLayer.
+  [#93](https://github.com/imajus/verdikt/issues/93).
 
 ## Sources
 

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SERVICE_RECORD, SLA_TEXT } from '@verdikt/fixtures';
+import deployment from '../../deployments/genlayer-studio-devnet.json' with { type: 'json' };
 import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
@@ -436,6 +437,40 @@ describe('the verified branch — outcomes that are not PASS', () => {
   it('flags a truncated payload rather than letting it look complete', async () => {
     const { deps } = harness({ result: verdict({ bodyTruncated: true }) });
     expect((await paidCall(deps)).headers['x-verdikt-body-truncated']).toBe('true');
+  });
+});
+
+// Issue #114: an agent that wants to dispute a call needs the GenLayer judge's
+// address and chain id, and should find them on the response it already has
+// rather than reading this repo.
+describe('the verified branch — where to dispute the call (issue #114)', () => {
+  it('names the GenLayer judge on the response, so a disputing agent needs nothing out of band', async () => {
+    const { deps } = harness();
+    const response = await paidCall(deps);
+    expect(response.headers['x-verdikt-judge-chain-id']).toBe(String(deployment.chainId));
+    expect(response.headers['x-verdikt-judge-address']).toBe(deployment.slaClaimJudge);
+  });
+
+  it('says nothing about a judge when none resolves, rather than a stale or empty header', async () => {
+    const noJudge = loadConfig({
+      PROXY_PUBLIC_HOST: 'verdikt.bond',
+      VERDIKT_REGISTRY_ADDRESS: '0x01',
+      GENLAYER_JUDGE_ADDRESS: '0xnope'
+    });
+    const { deps } = harness({ config: noJudge });
+    const response = await paidCall(deps);
+    expect(response.headers['x-verdikt-judge-chain-id']).toBeUndefined();
+    expect(response.headers['x-verdikt-judge-address']).toBeUndefined();
+  });
+
+  // No verdict means no evidence was cached and there is nothing on Arc for a
+  // claim to be bound to, so a judge address here would name a claim the agent
+  // can never open — the same carve-out the evidence cache already makes.
+  it('stays silent on a call no verdict was written for, rather than promising a claim that cannot be opened', async () => {
+    const { deps } = harness({ result: verdict({ outcome: null, mode: 'status-only', status: 404, tx: null }) });
+    const response = await paidCall(deps);
+    expect(response.headers['x-verdikt-verdict']).toBe('NONE');
+    expect(response.headers['x-verdikt-judge-address']).toBeUndefined();
   });
 });
 

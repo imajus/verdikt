@@ -48,6 +48,12 @@ function context(env) {
   if (!evidence) {
     console.warn('[verdikt] EVIDENCE_CACHE binding missing — semantic claims cannot be judged');
   }
+  // Said out loud for the same reason as the three above: unset, the paid
+  // response simply stops naming a judge, and a disputing agent is back to
+  // reading this repo with nothing anywhere reporting why (issue #114).
+  if (!config.genlayer) {
+    console.warn('[verdikt] no GenLayer judge resolved — paid responses will not say where to dispute');
+  }
   cached = { config, registry, workflow, evidence };
   return cached;
 }

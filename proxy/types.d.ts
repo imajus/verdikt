@@ -27,6 +27,13 @@ interface ProxyConfig {
    */
   paymentRpcUrls: Record<number, string>;
   /**
+   * The GenLayer claim judge's address and chain id, from
+   * `deployments/genlayer-studio-devnet.json` — `null` only when that record
+   * names no judge or an override is malformed. See `genlayerConfig` in
+   * config.js for why relaying these is not a GenLayer dependency (issue #114).
+   */
+  genlayer: { chainId: number; judgeAddress: string } | null;
+  /**
    * How long a cached evidence envelope survives before anyone asks for it.
    * This is the *filing* window: it bounds how late a consumer may open a
    * semantic claim at all (docs/roadmap/genlayer.md).
