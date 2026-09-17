@@ -130,6 +130,12 @@ Consensus takes **minutes**, not the 30 seconds the client waits by default;
 `scripts/claim.py` is the claimant's CLI — a CLI rather than a web UI, because
 the audience is an operator who already has a key and a request id.
 
+`scripts/claim.mjs` in the repo root's `scripts/` is the same claimant path in
+JavaScript — `sign`, `mint`, `bond`, `open`, `status`, `cancel` — for an agent
+with no Python toolchain. Same flags, same output. It resolves nothing:
+`runner/bin/resolve-claims.mjs` does that from a distinct account, which is what
+keeps a `MET` outcome costing the claimant its bounty.
+
 The judge and token addresses come from `deployments/genlayer-studio-devnet.json`,
 so there is nothing to export but the key. `--judge`/`--token`, or
 `GENLAYER_JUDGE_ADDRESS`/`GENLAYER_TOKEN_ADDRESS`, override them for a fork or
