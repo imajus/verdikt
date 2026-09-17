@@ -313,15 +313,22 @@ def mock_judgment(direct_vm, outcome, reasoning='Because.'):
 def advance(direct_vm, seconds):
     """Move the clock the contract actually reads, forward from where it is now.
 
-    `direct_vm.warp` is the whole of it now: it sets `direct_vm._datetime`,
-    which is both the stdlib clock direct mode patches and the value the
-    wrapped `direct_deploy` answers `gl.vm.get_timestamp()` with — so the
-    contract's deadlines and the test's clock cannot drift apart.
+    That clock is **Arc's**, not the VM's: GenVM exposes no block timestamp of
+    its own, so the contract reads Arc's block over the batched eligibility
+    call and floors it to `CLOCK_BUCKET_SECONDS`. Warping `direct_vm` alone
+    therefore moves nothing the contract can see — the Arc mock has to be
+    re-pinned, and re-pinned it must *replace* the old one, because
+    `_match_web_mock` returns the first pattern that matches rather than the
+    last registered.
 
-    The step is relative to the current message time rather than to wall-clock
-    now, so a test that advances the clock cannot leave it somewhere that
-    changes what a later test means.
+    Clearing takes the SLA and evidence mocks with it, so call this after the
+    claim is open and re-mock anything a later step still needs.
     """
-    current = direct_vm._datetime
-    when = datetime.datetime.fromisoformat(current.replace('Z', '+00:00')) + datetime.timedelta(seconds=seconds)
+    direct_vm._verdikt_arc_now = getattr(direct_vm, '_verdikt_arc_now', NOW) + seconds
+    direct_vm.clear_mocks()
+    mock_arc(direct_vm, now=direct_vm._verdikt_arc_now)
+    # Kept in step for anything reading the stdlib clock; the contract does not.
+    when = datetime.datetime.fromisoformat(direct_vm._datetime.replace('Z', '+00:00')) + datetime.timedelta(
+        seconds=seconds
+    )
     direct_vm.warp(when.isoformat().replace('+00:00', 'Z'))

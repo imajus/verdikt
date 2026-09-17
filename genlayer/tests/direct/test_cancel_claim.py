@@ -37,7 +37,11 @@ def test_claimant_can_cancel_once_the_window_has_lapsed(direct_vm, judge, direct
 def test_cancelling_inside_the_window_refuses(direct_vm, judge, direct_alice):
     """Otherwise cancelling is a free option: read the evidence, then withdraw."""
     _open_claim(direct_vm, judge, direct_alice)
-    advance(direct_vm, WINDOW - 60)
+    # An hour inside the window, not a minute: the contract's clock is Arc's
+    # floored to CLOCK_BUCKET_SECONDS (600), so a 60-second margin rounds onto
+    # the deadline itself and stops testing anything. The coarseness is the
+    # deliberate price of a clock every validator agrees on.
+    advance(direct_vm, WINDOW - 3600)
 
     with direct_vm.expect_revert('Adjudication window has not lapsed'):
         judge.cancel_claim(REQUEST_ID, CLAUSE_ID)

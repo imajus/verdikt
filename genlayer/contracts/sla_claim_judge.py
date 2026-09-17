@@ -301,7 +301,8 @@ class SlaClaimJudge(gl.contract.Contract):
             slug=slug,
             claimant=claimant,
             criteria=criteria,
-            filed_at=gl.u256(self._now_bucketed()),
+            # From the eligibility read above, not a second Arc round trip.
+            filed_at=gl.u256(eligibility['now_bucketed']),
             disclosure_signature=disclosure_signature,
             paid_amount=gl.u256(paid_amount),
             bond=self.bond_amount,
@@ -421,7 +422,12 @@ class SlaClaimJudge(gl.contract.Contract):
         claim = self._require_open(key)
         if gl.message.sender_address != claim.claimant:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the claimant may cancel')
-        if self._now_bucketed() < int(claim.filed_at) + ADJUDICATION_WINDOW_SECONDS:
+        # The same batched Arc read `submit_claim` uses, for the same reason:
+        # GenVM exposes no block timestamp of its own, and this contract's only
+        # trustworthy clock is Arc's, bucketed so validators agree on it. The
+        # verdict comes back too and is ignored — one round trip either way,
+        # and it keeps every Arc read in this contract the same shape.
+        if self._read_eligibility(request_id)['now_bucketed'] < int(claim.filed_at) + ADJUDICATION_WINDOW_SECONDS:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Adjudication window has not lapsed')
 
         claim.outcome = OUTCOME_CANCELLED
@@ -662,6 +668,9 @@ class SlaClaimJudge(gl.contract.Contract):
         window = int(self.filing_window_seconds)
         external, transient = ERROR_EXTERNAL, ERROR_TRANSIENT
         words = VERDICT_WORDS
+        # Captured, not read from module scope: a nondet closure runs in a
+        # sub-VM this module is not importable from.
+        bucket = CLOCK_BUCKET_SECONDS
         selector = gl.Keccak256(b'getVerdict(bytes32)').digest()[:4]
 
         def read() -> str:
@@ -720,11 +729,19 @@ class SlaClaimJudge(gl.contract.Contract):
                 'written_at': int.from_bytes(raw[160:192], 'big'),
                 'failed_clause': '0x' + raw[192:224].hex(),
             }
-            # The clock itself never leaves this function. What validators
-            # compare is the derived boolean, which is stable everywhere except
-            # within seconds of the deadline.
+            # The raw clock never leaves this function. What validators compare
+            # is the derived boolean, which is stable everywhere except within
+            # seconds of the deadline — plus the same reading floored to
+            # `CLOCK_BUCKET_SECONDS`, which they agree on except across a
+            # bucket boundary. `submit_claim` stamps `filed_at` from that
+            # rather than reading the clock again: GenVM exposes no block
+            # timestamp of its own (`gl.vm.get_timestamp()` is in the SDK but
+            # the node answers `inval`), and a second POST here would be a
+            # second Arc round trip that direct mode cannot even tell apart
+            # from this one.
             now = int(str(block['timestamp']), 16)
             verdict['within_filing_window'] = verdict['written_at'] != 0 and now - verdict['written_at'] <= window
+            verdict['now_bucketed'] = now - (now % bucket)
             # Serialized because `strict_eq` compares the returned value, and a
             # canonical string compares unambiguously.
             return json.dumps(verdict, sort_keys=True)
