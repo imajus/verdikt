@@ -27,17 +27,24 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _networks import NETWORKS, resolve_chain  # noqa: E402
+from _networks import NETWORKS, load_deployment, resolve_chain  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--judge', default=os.environ.get('GENLAYER_JUDGE_ADDRESS'))
+    parser.add_argument('--judge', default=None, help='overrides deployments/genlayer-<network>.json')
     parser.add_argument('--network', default='studio_devnet', choices=NETWORKS)
     args = parser.parse_args()
 
-    if not args.judge:
-        print('no judge address — pass --judge or set GENLAYER_JUDGE_ADDRESS', file=sys.stderr)
+    # Same precedence as `claim.py` and as the Arc registry: the checked-in
+    # record is the source of truth, the flag and the env var are overrides for
+    # a fork or a second deployment.
+    judge = args.judge or os.environ.get('GENLAYER_JUDGE_ADDRESS') or load_deployment(args.network).get('slaClaimJudge')
+    if not judge:
+        print(
+            f'no judge address — nothing deployed on {args.network}; pass --judge or deploy first',
+            file=sys.stderr,
+        )
         return 2
 
     import genlayer_py
@@ -49,7 +56,7 @@ def main() -> int:
 
     account = Account.from_key(os.environ.get('GENLAYER_PRIVATE_KEY') or ('0x' + '11' * 32))
     client = genlayer_py.create_client(chain=resolve_chain(genlayer_py, args.network), account=account)
-    claims = client.read_contract(address=args.judge, function_name='list_claims', args=[])
+    claims = client.read_contract(address=judge, function_name='list_claims', args=[])
 
     # Only what the aggregate needs, and the slug it belongs to. The criteria
     # and the reasoning are on chain for anyone who wants them; a published
@@ -59,7 +66,7 @@ def main() -> int:
          'clause_id': claim.get('clause_id'), 'outcome': claim.get('outcome')}
         for claim in (claims if isinstance(claims, list) else [])
     ]
-    print(json.dumps({'judge': args.judge, 'network': args.network, 'claims': rows}, indent=2))
+    print(json.dumps({'judge': judge, 'network': args.network, 'claims': rows}, indent=2))
     print(f'{len(rows)} claims', file=sys.stderr)
     return 0
 

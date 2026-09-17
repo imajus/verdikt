@@ -24,6 +24,11 @@ looks like a different problem:
    default, and a premature give-up reads as a failure rather than as waiting.
 """
 
+import json
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[2]
+
 NETWORKS = ('localnet', 'studionet', 'testnet_asimov', 'testnet_bradbury', 'studio_devnet')
 
 # Consensus on studio_devnet routinely runs past the client's 30s default, and
@@ -36,6 +41,21 @@ DEPLOY_WAIT_RETRIES = 95
 def resolve_chain(genlayer_py, network: str):
     """The chain object a client is built from."""
     return getattr(genlayer_py, network)
+
+
+def load_deployment(network: str) -> dict:
+    """
+    The checked-in record of what is deployed on this network, or `{}`.
+
+    This is the source of truth for the judge and token addresses, the way
+    `deployments/arc-testnet.json` is for the registry: neither address is
+    secret nor varies by environment, so neither belongs in `.env`, where every
+    contributor has to be handed it out of band and nothing can validate it
+    (`packages/sdk/deployments.js`). Flags and env vars override it for a fork
+    or a second deployment — they are not the normal path.
+    """
+    path = REPO / 'deployments' / deployment_filename(network)
+    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def deployment_filename(network: str) -> str:

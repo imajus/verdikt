@@ -45,20 +45,13 @@ from _networks import (  # noqa: E402
     DEPLOY_WAIT_INTERVAL_MS,
     DEPLOY_WAIT_RETRIES,
     NETWORKS,
-    deployment_filename,
+    load_deployment,
     resolve_chain,
 )
-
-REPO = Path(__file__).resolve().parents[2]
 
 # Mirrors `disclosureMessage` in proxy/src/evidence.js. The two must match
 # byte for byte or every disclosure is refused, which reads as a claimant error.
 DISCLOSURE_PREFIX = 'Verdikt evidence disclosure\nrequest: '
-
-
-def deployment(network: str) -> dict:
-    path = REPO / 'deployments' / deployment_filename(network)
-    return json.loads(path.read_text()) if path.exists() else {}
 
 
 def connect(args, key=None):
@@ -81,7 +74,7 @@ def addresses(args):
     path. Same precedence, and same reasoning, as `VERDIKT_REGISTRY_ADDRESS`
     against `deployments/arc-testnet.json` on the Arc side.
     """
-    record = deployment(args.network)
+    record = load_deployment(args.network)
     judge = args.judge or os.environ.get('GENLAYER_JUDGE_ADDRESS') or record.get('slaClaimJudge')
     token = args.token or os.environ.get('GENLAYER_TOKEN_ADDRESS') or record.get('settlementToken')
     if not judge:
