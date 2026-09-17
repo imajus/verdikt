@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Spikes and operational scripts \u2014 throwaway by design, kept for the evidence they produce",
+  "description": "Operational scripts: ENS setup, score publication, and the claimant CLI agents use to file a dispute",
   "scripts": {
     "setup:ens": "node --env-file-if-exists=../.env setup-ens.mjs"
   },
@@ -11,6 +11,7 @@
     "@verdikt/fixtures": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "@verdikt/sla": "workspace:*",
+    "genlayer-js": "2.0.0-rc.1",
     "viem": "^2.56.3"
   }
 }
