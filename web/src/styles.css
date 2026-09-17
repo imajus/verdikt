@@ -842,7 +842,12 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
 .cta-aside { color: var(--muted); font-size: 15px; text-decoration: none; border-bottom: 1px solid var(--rule); }
 .cta-aside:hover { color: var(--ink); border-bottom-color: var(--ink); }
 
-/* The figures row sits inside entry 01, whose own rule closes it. */
+/* Entry 01's walkthrough: a plain 16:9 frame, ruled like every other figure on
+   the sheet rather than floated free of it. */
+.video-embed { position: relative; width: 100%; aspect-ratio: 16 / 9; margin: 24px 0 2px; background: var(--paper-2); border: 1px solid var(--rule); }
+.video-embed iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+
+/* The figures row sits inside entry 02, whose own rule closes it. */
 .entry .figures { margin: 0; border-bottom: 0; }
 
 /* Request-path figure ---------------------------------------------------------

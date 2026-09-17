@@ -7,11 +7,12 @@
 // index — which is the one thing that earns section numbers on a page like
 // this. See web/.impeccable/surfaces/web-src-pages-js.md.
 //
-// Unlike pages.js, this one shows chain data, and all of it lives in entry 01:
+// Unlike pages.js, this one shows chain data, and all of it lives in entry 03:
 // the platform figures moved here from the marketplace listing, and the margin
 // beside them carries the most recent verdict the registry has actually
-// written. Entry 00 has no margin at all — the hero states the terms and the
-// proof of them sits one entry below, where the totals it summarises are.
+// written. Entry 00 has no margin at all — the hero states the terms, and the
+// proof of them sits two entries below, past the video and the try-it chat,
+// where the totals it summarises are.
 // Figures and verdict degrade together to the chain's own identity while the
 // first read is in flight, and the verdict's head flags "seeded" when no RPC is
 // configured — a number on this page that could be mistaken for a real one is
@@ -154,24 +155,37 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       </p>`)}
 
     ${entry('01', html`
+      <h2>Watch it end to end</h2>
+      <p>Three minutes: a real call, paid, judged inside the enclave, refunded on failure — nothing staged, nothing signed off-camera.</p>
+      <div class="video-embed">
+        <iframe
+          src="https://www.youtube-nocookie.com/embed/TuP64zFDv5g"
+          title="Verdikt walkthrough"
+          loading="lazy"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>`, nothing, true)}
+
+    ${entry('02', html`
       <h2>Try it — no wallet needed</h2>
       <p>One real failure, paid and refunded end to end. Every link below is a transaction or contract that actually exists on a public testnet — click Send to walk through it, about 30 seconds, nothing to sign.</p>
       <verdikt-demo-chat .go=${go}></verdikt-demo-chat>`, html`
       <p class="note-head">Nothing new to integrate</p>
       <p class="note-line">An agent already paying x402 services uses Verdikt’s proxy API endpoint instead of the provider’s own — same challenge, same payment.</p>`, false, 'try-it')}
 
-    ${entry('02', html`
+    ${entry('03', html`
       <h2>The record so far</h2>
       ${figuresFor(marketplace, error)}`, verdictNote(marketplace, mode, error))}
 
-    ${entry('03', html`
+    ${entry('04', html`
       <h2>The payment is verifiable. The delivery is not.</h2>
       <p>x402 proves a call was paid for. Nothing proves it was answered. The promise lives in a README, the record of whether it was kept lives nowhere, and an arbitration queue would cost more than the call it was arguing about — so reliability stays whatever the provider says it is.</p>
       <p><strong class="brand-inline"><img src="/favicon.svg" alt="" width="22" height="22" />Verdikt</strong> deletes the claim.</p>`, html`
       <p class="note-head">Why no dispute layer</p>
       <p class="note-line">A refund is money back, never a penalty: it cannot exceed what the call cost, or what is left of the provider’s bond.</p>`)}
 
-    ${entry('04', html`
+    ${entry('05', html`
       <h2>The request path</h2>
       <p>Two chains, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token, so what was paid and what comes back are the same asset in the same place. GenLayer holds the semantic claim, on the rare call where a consumer disputes what the answer meant.</p>
       <p>Doing the judging is a Chainlink CRE Confidential Workflow. The call is replayed inside a TEE, so nobody has to be trusted with the response; it is measured against the SLA that provider published, and the verdict it writes carries a proof of the computation that produced it.</p>`, html`
@@ -179,7 +193,7 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
       <p class="note-line">The observed value stays off the chain. Only the verdict is recorded there — trustlessly, because the TEE proves what computed it.</p>
       <p class="note-line">The whole loop drawn, and the same thing in prose — what happens to a 4xx, why an empty window scores 1000, and what a consumer can still dispute: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`)}
 
-    ${entry('05', html`
+    ${entry('06', html`
       <div class="entry-split">
         <div class="split-col">
           <h2>Tell us what you are building</h2>
