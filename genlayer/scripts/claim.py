@@ -39,8 +39,13 @@ import os
 import sys
 from pathlib import Path
 
+# Not a package import: `test_eligibility.py` loads this file directly via
+# `importlib.util.spec_from_file_location`, which never puts `scripts/` on
+# `sys.path` the way running this file as `__main__` does.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _networks import NETWORKS, deployment_filename, resolve_chain  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
-NETWORKS = ('localnet', 'studionet', 'testnet_asimov', 'testnet_bradbury')
 
 # Mirrors `disclosureMessage` in proxy/src/evidence.js. The two must match
 # byte for byte or every disclosure is refused, which reads as a claimant error.
@@ -48,7 +53,7 @@ DISCLOSURE_PREFIX = 'Verdikt evidence disclosure\nrequest: '
 
 
 def deployment(network: str) -> dict:
-    path = REPO / 'deployments' / f'genlayer-{network.replace("testnet_", "")}.json'
+    path = REPO / 'deployments' / deployment_filename(network)
     return json.loads(path.read_text()) if path.exists() else {}
 
 
@@ -60,7 +65,7 @@ def connect(args, key=None):
     if not key:
         raise SystemExit('GENLAYER_PRIVATE_KEY is unset — that key is the claimant')
     account = Account.from_key(key)
-    client = genlayer_py.create_client(chain=getattr(genlayer_py, args.network), account=account)
+    client = genlayer_py.create_client(chain=resolve_chain(genlayer_py, args.network), account=account)
     return client, account
 
 
@@ -267,7 +272,7 @@ def cmd_withdraw(args):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'testnet_bradbury'), choices=NETWORKS)
+    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_dev'), choices=NETWORKS)
     parser.add_argument('--judge', default=None)
     parser.add_argument('--token', default=None)
     sub = parser.add_subparsers(dest='command', required=True)

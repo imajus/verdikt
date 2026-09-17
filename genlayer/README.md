@@ -22,9 +22,10 @@ pnpm workspace, and `pnpm test` does not run it.
 contracts/sla_claim_judge.py   the Intelligent Contract that judges a claim
 contracts/settlement_token.py  what a claim settles in — a faucet-minted token, escrow included
 scripts/deploy.py              deploys both, then reads them back off chain
+scripts/_networks.py           network resolution shared by the CLI scripts — read this before touching --network
 tests/direct/                  fast in-memory tests, no node required
 tests/integration/             the cross-contract half; needs a node
-gltest.config.yaml             network table; `testnet_bradbury` is GenLayer's public testnet
+gltest.config.yaml             network table for gltest; does not include studio_dev — see _networks.py
 ```
 
 ### Escrow, and why there is no `unescrow`
@@ -91,24 +92,45 @@ paths against it.
 
 ## Deploying
 
+`studio_dev` (chain id 61997, `https://studio-dev.genlayer.com/api`) is the
+target — it's what GenLayer's Agent Tank submission requires, not
+`testnet_bradbury`. It is not one of `genlayer_py`'s four built-in chains;
+`scripts/_networks.py` constructs it the way GenLayer's own TS SDK does
+(`studionet` with `id`/`rpc_urls` overridden — same consensus deployment,
+different RPC front door for pre-release testing).
+
 ```bash
 cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
-.venv/bin/python scripts/deploy.py --network testnet_bradbury --dry-run
-.venv/bin/python scripts/deploy.py --network testnet_bradbury
+.venv/bin/python scripts/deploy.py --dry-run       # defaults to studio_dev
+.venv/bin/python scripts/deploy.py
 ```
 
 The script deploys the token first (the judge takes its address in the
 constructor), then **reads both contracts back off chain** before writing
-`deployments/genlayer-bradbury.json`. That read-back is not a flourish: this
+`deployments/genlayer-studio-dev.json`. That read-back is not a flourish: this
 repo has already shipped a deployment that mined and did nothing, because the
 KeystoneForwarder swallows a receiver revert and reports success. A deployment
 is finished when the contract answers, not when the call returns.
 
-**Funding is a manual step and there is no way around it.** The account needs
-test GEN, the faucet is at <https://testnet-faucet.genlayer.foundation/>, and it
-wants a signed-in wallet holding at least 0.01 ETH on mainnet — 100 GEN per
-claim, once a week. `--dry-run` reports the account and its balance without
-spending anything, which is the check to run before the real one.
+**Funding is one RPC call, not a faucet.** Studio Dev is a hosted simulator:
+`sim_fundAccount` credits an address directly, no signed-in wallet or weekly
+cap. `--dry-run` reports the account and its balance without spending
+anything, which is the check to run before the real one.
+
+**A real deploy currently reverts.** Every write to this network — even a
+plain, non-`nondet` deploy — reverts against the consensus contract with no
+leader receipt. This is a known, open, upstream bug
+([genlayer-cli#421](https://github.com/genlayerlabs/genlayer-cli/issues/421),
+"FeesDistributionMissing", filed the day before this note), not a
+misconfiguration here. `--network testnet_bradbury` is still available and
+known to work (real GEN, weekly faucet) as a fallback for testing while that
+gets fixed, but a Bradbury deployment does not satisfy the submission
+requirement.
+
+`tests/integration` (gltest) cannot target Studio Dev at all: gltest's
+`chain_type` resolves to `genlayer_py`'s unmodified preset chain object, so
+there is no way to hand it chain id 61997 through that config. It stays
+pinned to `studionet`/`testnet_bradbury` in `gltest.config.yaml`.
 
 ## Filing a claim
 

@@ -12,6 +12,12 @@ networks:
   testnet_bradbury:
     url: 'https://rpc-bradbury.genlayer.com'
 
+  # No `studio_dev` entry: gltest's `chain_type` resolves to genlayer_py's
+  # unmodified preset chain object regardless of any `id`/`url` given here, so
+  # there is no way to hand this suite chain id 61997. `scripts/deploy.py` and
+  # `scripts/claim.py` reach Studio Dev directly through `genlayer_py`'s
+  # client instead — see `scripts/_networks.py`.
+
 paths:
   contracts: 'contracts'
 

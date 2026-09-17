@@ -12,8 +12,12 @@ nothing — the KeystoneForwarder swallows a receiver revert and reports success
 call returns, it is finished when the contract answers.
 
     cd genlayer
-    .venv/bin/python scripts/deploy.py --network testnet_bradbury
+    .venv/bin/python scripts/deploy.py --network studio_dev
     .venv/bin/python scripts/deploy.py --network localnet --dry-run
+
+`studio_dev` is the Agent Tank submission target, not `testnet_bradbury` —
+see `_networks.py` for what that network actually is and the open upstream
+bug that currently makes a real deploy to it revert.
 """
 
 import argparse
@@ -22,13 +26,15 @@ import os
 import sys
 from pathlib import Path
 
+# Not a package import: this makes `_networks` resolve whether the file runs
+# as `__main__` or is loaded directly (`test_eligibility.py` does that to
+# `claim.py`, and this keeps the same pattern for consistency).
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _networks import NETWORKS, deployment_filename, resolve_chain  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[2]
 GENLAYER = REPO / 'genlayer'
 CONTRACTS = GENLAYER / 'contracts'
-
-# The name genlayer-py knows each network by; the RPC comes from its own chain
-# registry, so a free-form label here would resolve to nothing.
-NETWORKS = ('localnet', 'studionet', 'testnet_asimov', 'testnet_bradbury')
 
 # Both in the settlement token's own minor units. The token is pegged to
 # nothing, so these are legible round numbers rather than a currency amount:
@@ -66,7 +72,7 @@ def load_env() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--network', default='testnet_bradbury', choices=NETWORKS)
+    parser.add_argument('--network', default='studio_dev', choices=NETWORKS)
     parser.add_argument('--proxy-base-url', default=None, help='defaults to PROXY_BASE_URL, then the workers.dev host')
     parser.add_argument('--bond', type=int, default=DEFAULT_BOND)
     parser.add_argument('--bounty', type=int, default=DEFAULT_BOUNTY)
@@ -89,7 +95,7 @@ def main() -> int:
         print('secp256k1 key, and the account behind it needs testnet GEN to deploy.', file=sys.stderr)
         return 2
 
-    chain = getattr(genlayer_py, args.network)
+    chain = resolve_chain(genlayer_py, args.network)
     account = Account.from_key(private_key)
     client = genlayer_py.create_client(chain=chain, account=account)
 
@@ -99,14 +105,21 @@ def main() -> int:
     print(f'network  {args.network} (chain {chain.id})')
     print(f'account  {account.address}')
     print(f'balance  {balance}')
-    # Only a public testnet actually charges. A local sim reports zero for
-    # every account and deploys happily, so refusing there would block the one
-    # network that needs no faucet.
-    if balance == 0 and args.network.startswith('testnet_'):
+    # Only a public testnet, or Studio Dev's own simulator balance, actually
+    # charges. A local sim reports zero for every account and deploys happily,
+    # so refusing there would block the one network that needs no faucet.
+    if balance == 0 and (args.network.startswith('testnet_') or args.network == 'studio_dev'):
         # Deploying from an empty account fails somewhere further in, with a
         # message about the transaction rather than about the money. Say the
         # useful thing here instead.
-        print('\nThis account has no GEN. Claim some at https://testnet-faucet.genlayer.foundation/', file=sys.stderr)
+        if args.network == 'studio_dev':
+            print(
+                f'\nThis account has no GEN. Fund it with `sim_fundAccount` against {chain.rpc_urls["default"]["http"][0]} '
+                '— Studio Dev is a hosted simulator, not a faucet-gated testnet.',
+                file=sys.stderr,
+            )
+        else:
+            print('\nThis account has no GEN. Claim some at https://testnet-faucet.genlayer.foundation/', file=sys.stderr)
         if not args.dry_run:
             return 3
 
@@ -177,7 +190,7 @@ def main() -> int:
         'filingWindowSeconds': args.filing_window,
         'cooldownSeconds': args.cooldown,
     }
-    out = REPO / 'deployments' / f'genlayer-{args.network.replace("testnet_", "")}.json'
+    out = REPO / 'deployments' / deployment_filename(args.network)
     out.write_text(json.dumps(record, indent=2) + '\n')
     print(f'\nwrote {out.relative_to(REPO)}')
     return 0

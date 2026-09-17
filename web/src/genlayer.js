@@ -15,12 +15,29 @@ import { chains, createClient } from 'genlayer-js';
 /** The four outcomes `SlaClaimJudge` can record, plus the one it starts in. */
 export const SEMANTIC_OUTCOMES = Object.freeze(['OPEN', 'BREACH', 'MET', 'UNDETERMINED', 'CANCELLED']);
 
+/**
+ * Studio Dev — chain id 61997, `https://studio-dev.genlayer.com/api` — is the
+ * Agent Tank submission target. It is not one of the four chains this
+ * `genlayer-js@1.x` bundles (it lands as `studioDevnet` starting from the
+ * `2.0.0-rc.1` line the dashboard does not depend on yet), so it is built the
+ * same way GenLayer's own SDK builds it: `studionet` spread with only `id`
+ * and `rpcUrls` overridden, since it is the same consensus deployment fronted
+ * by a different RPC for pre-release testing.
+ */
+const STUDIO_DEV = Object.freeze({
+  ...chains.studionet,
+  id: 61_997,
+  name: 'GenLayer Studio Devnet',
+  rpcUrls: Object.freeze({ default: Object.freeze({ http: Object.freeze(['https://studio-dev.genlayer.com/api']) }) })
+});
+
 /** Networks genlayer-js knows by name; a free-form label resolves to nothing. */
 const CHAINS = Object.freeze({
   localnet: chains.localnet,
   studionet: chains.studionet,
   testnet_asimov: chains.testnetAsimov,
-  testnet_bradbury: chains.testnetBradbury
+  testnet_bradbury: chains.testnetBradbury,
+  studio_dev: STUDIO_DEV
 });
 
 /**
@@ -98,7 +115,7 @@ export const isBreach = (settlement) => settlement.outcome === 'BREACH';
  */
 export function createGenLayerReader({ network, judgeAddress, rpcUrl } = {}) {
   if (!judgeAddress) return null;
-  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'testnet_bradbury')];
+  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'studio_dev')];
   if (!chain) return null;
 
   const client = createClient(rpcUrl ? { chain, endpoint: rpcUrl } : { chain });

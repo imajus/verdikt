@@ -24,14 +24,16 @@ import argparse
 import json
 import os
 import sys
+from pathlib import Path
 
-NETWORKS = ('localnet', 'studionet', 'testnet_asimov', 'testnet_bradbury')
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _networks import NETWORKS, resolve_chain  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--judge', default=os.environ.get('GENLAYER_JUDGE_ADDRESS'))
-    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'testnet_bradbury'), choices=NETWORKS)
+    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_dev'), choices=NETWORKS)
     args = parser.parse_args()
 
     if not args.judge:
@@ -46,7 +48,7 @@ def main() -> int:
     from eth_account import Account
 
     account = Account.from_key(os.environ.get('GENLAYER_PRIVATE_KEY') or ('0x' + '11' * 32))
-    client = genlayer_py.create_client(chain=getattr(genlayer_py, args.network), account=account)
+    client = genlayer_py.create_client(chain=resolve_chain(genlayer_py, args.network), account=account)
     claims = client.read_contract(address=args.judge, function_name='list_claims', args=[])
 
     # Only what the aggregate needs, and the slug it belongs to. The criteria

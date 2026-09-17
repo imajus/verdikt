@@ -93,12 +93,12 @@ every verdict and score on it was read back off a chain.
        .venv/bin/glsim --port 4000 --no-browser &
        .venv/bin/gltest tests/integration -q             # the judge and the token, wired together
 
-6. Deploy the pair to Bradbury:
+6. Deploy the pair to Studio Dev, the submission's required network:
        cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
-       .venv/bin/python scripts/deploy.py --network testnet_bradbury
-   The key needs testnet GEN to deploy; the script refuses at the balance
-   check otherwise. It deploys the token first, the judge second, and reads
-   both back off chain before it writes deployments/genlayer-bradbury.json.
+       .venv/bin/python scripts/deploy.py
+   Funding is one `sim_fundAccount` RPC call, no faucet. It deploys the token
+   first, the judge second, and reads both back off chain before it writes
+   deployments/genlayer-studio-dev.json.
 ```
 
 ## Private notes for judges (max 500)
@@ -106,10 +106,10 @@ every verdict and score on it was read back off a chain.
 ```
 Honest scope: the deterministic leg (CRE, Arc, ENS) is live on testnets and has been for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: contracts, 72 direct tests, 5 integration tests against a real node, and a deploy script verified end-to-end on glsim.
 
-The Bradbury deployment is blocked on the faucet — it wants a signed-in wallet with 0.01 ETH on mainnet. Everything up to it runs. Please judge the design and the tests, not a testnet address.
+Studio Dev deploy reverts on an open upstream bug (genlayer-cli#421), not a config issue here — a fresh, funded account hits the same revert. Please judge the design and the tests, not a testnet address.
 ```
 
-*487 characters.*
+*498 characters.*
 
 ## Demo video
 
@@ -127,6 +127,7 @@ Worth being straight about, because the submission text above is compressed:
   real providers. `docs/evidence/`.
 - **Built and tested, not yet deployed:** the GenLayer leg. `SlaClaimJudge`,
   `SettlementToken`, the proxy's SLA and evidence endpoints, the deploy script.
-  Blocked on a faucet claim, not on code.
+  Blocked on genlayer-cli#421 (Studio Dev reverting every write), not on code
+  here — see genlayer/scripts/_networks.py for the detail.
 - **Designed, not built:** the dashboard surfacing semantic settlements (#91),
   the `semanticConformance` score (#92), the claimant CLI (#94).
