@@ -27,6 +27,7 @@ const record = (overrides) => ({
   sla: SLA_TEXT.honest,
   conformance: 1000,
   availability: 1000,
+  semanticConformance: null,
   owner: null,
   backend: 'fixture',
   resolvedAt: 0,
@@ -39,8 +40,9 @@ const record = (overrides) => ({
  * @param {VerdictRecord[]} [options.verdicts]
  * @param {RefundRecord[]} [options.refunds]
  * @param {Record<string, ServiceRecord|Error>} [options.records]
+ * @param {GenLayerReader|null} [options.genlayer]
  */
-const deps = ({ services = [], verdicts = [], refunds = [], records = {} } = {}) => ({
+const deps = ({ services = [], verdicts = [], refunds = [], records = {}, genlayer = null } = {}) => ({
   registry: {
     listServices: async () => services,
     listVerdicts: async () => verdicts,
@@ -51,7 +53,24 @@ const deps = ({ services = [], verdicts = [], refunds = [], records = {} } = {})
     if (found instanceof Error) throw found;
     if (!found) throw new Error(`no record for ${slug}`);
     return found;
-  }
+  },
+  genlayer
+});
+
+/** @param {Partial<SemanticSettlement>} overrides @returns {SemanticSettlement} */
+const settlement = (overrides = {}) => ({
+  requestId: `0x${'ab'.repeat(32)}`,
+  clauseId: 'faithful',
+  slug: 'weather',
+  claimant: '0x1111111111111111111111111111111111111111',
+  criteria: 'The forecast must be for the coordinates given in the request.',
+  outcome: 'BREACH',
+  resolved: true,
+  reasoning: 'A station 40km away.',
+  paidAmount: 2500n,
+  compensation: 2500n,
+  bounty: 100n,
+  ...overrides
 });
 
 /**
@@ -200,7 +219,7 @@ describe('loadMarketplace', () => {
       slug: 'weather',
       status: 'ACTIVE',
       endpoint: 'https://provider.example/weather',
-      published: { conformance: 1000, availability: 1000 }
+      published: { conformance: 1000, availability: 1000, semanticConformance: null }
     });
     expect(services[0].sla?.clauses.length).toBeGreaterThan(0);
   });
@@ -345,13 +364,13 @@ describe('byReputation', () => {
     /** @type {Listing} */ ({
       slug: 'a',
       deposit: 0n,
-      published: { conformance: 1000, availability: 1000 },
+      published: { conformance: 1000, availability: 1000, semanticConformance: null },
       ...overrides
     });
 
   it('ranks a service with a real record above one with none', () => {
     const ranked = [
-      listing({ slug: 'unranked', published: { conformance: null, availability: null } }),
+      listing({ slug: 'unranked', published: { conformance: null, availability: null, semanticConformance: null } }),
       listing({ slug: 'proven' })
     ].sort(byReputation);
     expect(ranked.map((entry) => entry.slug)).toEqual(['proven', 'unranked']);
@@ -364,24 +383,24 @@ describe('byReputation', () => {
   // listing alone.
   it('ranks a service that always answers but never conforms below one that mostly does both', () => {
     const ranked = [
-      listing({ slug: 'always-wrong', published: { conformance: 0, availability: 1000 } }),
-      listing({ slug: 'mostly-right', published: { conformance: 1000, availability: 958 } })
+      listing({ slug: 'always-wrong', published: { conformance: 0, availability: 1000, semanticConformance: null } }),
+      listing({ slug: 'mostly-right', published: { conformance: 1000, availability: 958, semanticConformance: null } })
     ].sort(byReputation);
     expect(ranked.map((entry) => entry.slug)).toEqual(['mostly-right', 'always-wrong']);
   });
 
   it('ranks a service that never answers below one that mostly does both', () => {
     const ranked = [
-      listing({ slug: 'always-down', published: { conformance: 1000, availability: 0 } }),
-      listing({ slug: 'mostly-right', published: { conformance: 958, availability: 1000 } })
+      listing({ slug: 'always-down', published: { conformance: 1000, availability: 0, semanticConformance: null } }),
+      listing({ slug: 'mostly-right', published: { conformance: 958, availability: 1000, semanticConformance: null } })
     ].sort(byReputation);
     expect(ranked.map((entry) => entry.slug)).toEqual(['mostly-right', 'always-down']);
   });
 
   it('treats the two ratios symmetrically', () => {
     const ranked = [
-      listing({ slug: 'a', published: { conformance: 1000, availability: 900 } }),
-      listing({ slug: 'b', published: { conformance: 900, availability: 1000 } })
+      listing({ slug: 'a', published: { conformance: 1000, availability: 900, semanticConformance: null } }),
+      listing({ slug: 'b', published: { conformance: 900, availability: 1000, semanticConformance: null } })
     ].sort(byReputation);
     // Equal products, so the tie-break decides — neither metric outranks the other.
     expect(ranked.map((entry) => entry.slug)).toEqual(['a', 'b']);
@@ -409,7 +428,7 @@ describe('matchesFilters', () => {
       contested: false,
       deposit: 0n,
       sla: null,
-      published: { conformance: 1000, availability: 1000 },
+      published: { conformance: 1000, availability: 1000, semanticConformance: null },
       ...overrides
     });
 
@@ -427,8 +446,8 @@ describe('matchesFilters', () => {
 
   it('excludes a listing below the minimum conformance or availability threshold', () => {
     const filters = { ...DEFAULT_MARKETPLACE_FILTERS, minConformance: 960 };
-    expect(matchesFilters(listing({ published: { conformance: 958, availability: 1000 } }), filters)).toBe(false);
-    expect(matchesFilters(listing({ published: { conformance: 960, availability: 1000 } }), filters)).toBe(true);
+    expect(matchesFilters(listing({ published: { conformance: 958, availability: 1000, semanticConformance: null } }), filters)).toBe(false);
+    expect(matchesFilters(listing({ published: { conformance: 960, availability: 1000, semanticConformance: null } }), filters)).toBe(true);
   });
 
   // Absence of a published score means the hourly workflow has not run for
@@ -438,7 +457,7 @@ describe('matchesFilters', () => {
   // last rather than dropping it).
   it('does not exclude an unranked listing on a positive threshold', () => {
     const filters = { ...DEFAULT_MARKETPLACE_FILTERS, minConformance: 960, minAvailability: 960 };
-    expect(matchesFilters(listing({ published: { conformance: null, availability: null } }), filters)).toBe(true);
+    expect(matchesFilters(listing({ published: { conformance: null, availability: null, semanticConformance: null } }), filters)).toBe(true);
   });
 
   it('excludes a listing whose declared price floor is above the price cap', () => {
@@ -467,23 +486,23 @@ describe('sortListings', () => {
     /** @type {Listing} */ ({
       slug: 'a',
       deposit: 0n,
-      published: { conformance: 1000, availability: 1000 },
+      published: { conformance: 1000, availability: 1000, semanticConformance: null },
       ...overrides
     });
 
   it('sorts by reputation by default, matching byReputation', () => {
     const listings = [
-      listing({ slug: 'weak', published: { conformance: 500, availability: 500 } }),
-      listing({ slug: 'strong', published: { conformance: 1000, availability: 1000 } })
+      listing({ slug: 'weak', published: { conformance: 500, availability: 500, semanticConformance: null } }),
+      listing({ slug: 'strong', published: { conformance: 1000, availability: 1000, semanticConformance: null } })
     ];
     expect(sortListings(listings, DEFAULT_MARKETPLACE_SORT).map((l) => l.slug)).toEqual(['strong', 'weak']);
   });
 
   it('sorts by conformance, highest first, unranked last', () => {
     const listings = [
-      listing({ slug: 'unranked', published: { conformance: null, availability: 1000 } }),
-      listing({ slug: 'low', published: { conformance: 500, availability: 1000 } }),
-      listing({ slug: 'high', published: { conformance: 1000, availability: 1000 } })
+      listing({ slug: 'unranked', published: { conformance: null, availability: 1000, semanticConformance: null } }),
+      listing({ slug: 'low', published: { conformance: 500, availability: 1000, semanticConformance: null } }),
+      listing({ slug: 'high', published: { conformance: 1000, availability: 1000, semanticConformance: null } })
     ];
     const ranked = sortListings(listings, { key: 'conformance', direction: 'desc' });
     expect(ranked.map((l) => l.slug)).toEqual(['high', 'low', 'unranked']);
@@ -491,8 +510,8 @@ describe('sortListings', () => {
 
   it('sorts by availability, highest first', () => {
     const listings = [
-      listing({ slug: 'low', published: { conformance: 1000, availability: 500 } }),
-      listing({ slug: 'high', published: { conformance: 1000, availability: 1000 } })
+      listing({ slug: 'low', published: { conformance: 1000, availability: 500, semanticConformance: null } }),
+      listing({ slug: 'high', published: { conformance: 1000, availability: 1000, semanticConformance: null } })
     ];
     const ranked = sortListings(listings, { key: 'availability', direction: 'desc' });
     expect(ranked.map((l) => l.slug)).toEqual(['high', 'low']);
@@ -1277,5 +1296,95 @@ describe('the service page after the layout change', () => {
     expect(html).not.toContain('Service id');
     expect(html).toContain('for="relay-help"');
     expect(html).toContain('for="address-help"');
+  });
+});
+
+// The whole point of the feature: two judgements of different questions, shown
+// side by side and never merged (docs/roadmap/genlayer.md).
+describe('semantic settlements', () => {
+  const REQUEST = `0x${'ab'.repeat(32)}`;
+
+  const withSettlements = (/** @type {SemanticSettlement[]} */ settlements) =>
+    deps({
+      services: [service('weather', HONEST)],
+      verdicts: [verdict(HONEST, 'PASS', REQUEST)],
+      records: { weather: record({}) },
+      genlayer: { judgeAddress: `0x${'ee'.repeat(20)}`, listSettlements: async () => settlements }
+    });
+
+  it('hangs a settlement off the verdict it disputes without changing it', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement()]));
+    const [listing] = services;
+
+    // The CRE verdict is untouched: PASS, no refund. That is the case worth
+    // showing — well-formed, on time, and not what was promised.
+    expect(listing.history[0].outcome).toBe('PASS');
+    expect(listing.history[0].refunded).toBe(0n);
+    expect(listing.history[0].settlements).toHaveLength(1);
+    expect(listing.history[0].settlements[0].outcome).toBe('BREACH');
+  });
+
+  it('carries several clauses disputed on one call', async () => {
+    const { services } = await loadMarketplace(
+      withSettlements([settlement({ clauseId: 'first' }), settlement({ clauseId: 'second' })])
+    );
+    expect(services[0].history[0].settlements).toHaveLength(2);
+  });
+
+  it('keeps a settlement for another service off this listing', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement({ slug: 'elsewhere' })]));
+    expect(services[0].semantic).toEqual([]);
+  });
+
+  // `null` means the dashboard can say nothing; `[]` means it looked and found
+  // nothing. Rendering those the same way would let an unconfigured dashboard
+  // read as a clean record.
+  it('reports null when no judge is configured', async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    expect(services[0].semantic).toBeNull();
+    expect(services[0].history).toEqual([]);
+  });
+
+  it('reports an empty list when the judge is read and nothing is disputed', async () => {
+    const { services } = await loadMarketplace(withSettlements([]));
+    expect(services[0].semantic).toEqual([]);
+  });
+
+  // Arc's verdicts are the record. A dashboard that refused to render them
+  // because GenLayer was unreachable would be reporting the wrong outage.
+  it('still renders the marketplace when GenLayer is unreachable', async () => {
+    const { services } = await loadMarketplace(
+      deps({
+        services: [service('weather', HONEST)],
+        verdicts: [verdict(HONEST, 'PASS', REQUEST)],
+        records: { weather: record({}) },
+        genlayer: {
+          judgeAddress: `0x${'ee'.repeat(20)}`,
+          listSettlements: async () => {
+            throw new Error('rpc down');
+          }
+        }
+      })
+    );
+    expect(services[0].history).toHaveLength(1);
+    expect(services[0].semantic).toBeNull();
+  });
+
+  it('shows the semantic outcome next to the CRE one on the service page', async () => {
+    const { services } = await loadMarketplace(withSettlements([settlement()]));
+    const page = renderDetail(services[0]);
+    expect(page).toContain('semantic BREACH');
+    expect(page).toContain('Contested on meaning');
+    expect(page).toContain('A station 40km away.');
+  });
+
+  it('says nothing at all about meaning when no judge is configured', async () => {
+    const { services } = await loadMarketplace(
+      deps({ services: [service('weather', HONEST)], records: { weather: record({}) } })
+    );
+    const page = renderDetail(services[0]);
+    expect(page).not.toContain('Contested on meaning');
   });
 });

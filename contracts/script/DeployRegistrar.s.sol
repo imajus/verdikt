@@ -19,6 +19,13 @@ import {VerdiktSubnameRegistrar} from "../src/VerdiktSubnameRegistrar.sol";
 ///                                the contract needs no ENS role at all.
 ///        SUBNAME_DURATION_SECONDS — optional. Defaults to 365 days, same as
 ///                                `scripts/onboard-service.mjs`'s onboarding.
+///        SEMANTIC_SCORE_WRITER_ADDRESS — optional. The `semanticConformance`
+///                                signer's address (derive it from
+///                                `ENS_SEMANTIC_SIGNER_PRIVATE_KEY` — this
+///                                script never reads that key itself). Unset
+///                                deploys with the zero address, and `claim`
+///                                then grants nothing for that key, same as
+///                                a registrar deployed before the key existed.
 ///
 ///      The subname registry, resolver, score writer and parent name are NOT
 ///      environment variables: they are Verdikt's own Sepolia deployment, read
@@ -39,6 +46,7 @@ import {VerdiktSubnameRegistrar} from "../src/VerdiktSubnameRegistrar.sol";
 contract DeployRegistrar is Script {
     function run() external returns (VerdiktSubnameRegistrar registrar) {
         uint64 durationSeconds = uint64(vm.envOr("SUBNAME_DURATION_SECONDS", uint256(365 days)));
+        address semanticScoreWriter = vm.envOr("SEMANTIC_SCORE_WRITER_ADDRESS", address(0));
 
         string memory deployment = vm.readFile("../deployments/sepolia.json");
         address subnameRegistry = vm.parseJsonAddress(deployment, ".ens.subnameRegistry");
@@ -47,13 +55,16 @@ contract DeployRegistrar is Script {
         string memory parentName = vm.parseJsonString(deployment, ".ens.parentName");
 
         vm.startBroadcast(vm.envUint("DEPLOYER_PRIVATE_KEY"));
-        registrar = new VerdiktSubnameRegistrar(subnameRegistry, resolver, scoreWriter, parentName, durationSeconds);
+        registrar = new VerdiktSubnameRegistrar(
+            subnameRegistry, resolver, scoreWriter, semanticScoreWriter, parentName, durationSeconds
+        );
         vm.stopBroadcast();
 
         console.log("VerdiktSubnameRegistrar:", address(registrar));
         console.log("subnameRegistry:        ", subnameRegistry);
         console.log("resolver:                ", resolver);
         console.log("scoreWriter:             ", scoreWriter);
+        console.log("semanticScoreWriter:    ", semanticScoreWriter);
         console.log("parent:                  ", parentName);
         console.log("");
         console.log("NOT DONE YET: run `node scripts/grant-registrar-roles.mjs --send` to");

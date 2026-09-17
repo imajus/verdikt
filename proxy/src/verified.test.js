@@ -3,6 +3,7 @@ import { SERVICE_RECORD, SLA_TEXT } from '@verdikt/fixtures';
 import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 import { VERIFICATION_FAILURE, VerificationError, parseWorkflowResult } from './verification.js';
+import { createMemoryEvidenceStore } from './evidence.js';
 
 const config = loadConfig({ PROXY_PUBLIC_HOST: 'verdikt.bond', VERDIKT_REGISTRY_ADDRESS: '0x01' });
 const REQUEST_ID = `0x${'ab'.repeat(32)}`;
@@ -64,7 +65,10 @@ function harness({ result, noWorkflow = false, paymentError, upstream, config: c
       url: 'https://provider.example/weather',
       sla: SLA_TEXT.honest
     }),
-    registry: { getService: async () => ({ provider: '0x03', status: 'ACTIVE', deposit: 10n ** 19n }) },
+    registry: {
+      getService: async () => ({ provider: '0x03', status: 'ACTIVE', deposit: 10n ** 19n }),
+      getVerdict: async () => null
+    },
     decodePayment,
     workflow: noWorkflow ? null : { verify },
     newRequestId: () => REQUEST_ID,
@@ -507,5 +511,50 @@ describe('parseWorkflowResult', () => {
 
   it('refuses a result it cannot read', () => {
     expect(() => parseWorkflowResult('null')).toThrow();
+  });
+});
+
+describe('the verified branch — evidence', () => {
+  it('caches the request and the response together, keyed by request id', async () => {
+    const { deps } = harness();
+    const store = createMemoryEvidenceStore();
+    deps.evidence = store;
+
+    await paidCall(deps);
+
+    const envelope = await store.read(REQUEST_ID, 60_000);
+    expect(envelope).toMatchObject({
+      requestId: REQUEST_ID,
+      slug: SERVICE_RECORD.slug,
+      request: { method: 'GET', url: 'https://provider.example/weather/current?lat=52' },
+      response: { status: 200, body: '{"current":{"temperature_2m":12.5}}' }
+    });
+  });
+
+  // The 402-replay and 4xx carve-outs write no verdict, so there is nothing for
+  // a claim to be bound to and evidence for them could never be disclosed.
+  it('caches nothing for a call that produced no verdict', async () => {
+    const { deps } = harness({ result: verdict({ outcome: null, mode: 'status-only', status: 402 }) });
+    const store = createMemoryEvidenceStore();
+    deps.evidence = store;
+
+    await paidCall(deps);
+
+    expect(await store.read(REQUEST_ID, 60_000)).toBeNull();
+  });
+
+  // The agent has paid. A storage hiccup must not cost it the payload it bought.
+  it('still returns the payload when caching throws', async () => {
+    const { deps } = harness();
+    deps.evidence = {
+      store: vi.fn(async () => {
+        throw new Error('durable object unreachable');
+      }),
+      read: vi.fn(async () => null)
+    };
+
+    const response = await paidCall(deps);
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('{"current":{"temperature_2m":12.5}}');
   });
 });

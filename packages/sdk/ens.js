@@ -72,8 +72,17 @@ export const DEFAULT_PARENT_NAME = SEPOLIA.ens.parentName;
 /** The PermissionedResolver every `<slug>.verdikt.eth` shares. */
 export const PARENT_RESOLVER_ADDRESS = SEPOLIA.ens.resolver;
 
-/** The text records Verdikt stores on a subname. `address` is not a text record. */
-export const TEXT_KEYS = Object.freeze(['url', 'sla', 'conformance', 'availability']);
+/**
+ * The text records Verdikt stores on a subname. `address` is not a text record.
+ *
+ * `semanticConformance` is the GenLayer half (docs/roadmap/genlayer.md) and is
+ * written by a *different* signer than the other two scores: it is aggregated
+ * from a different chain by a different mechanism, so the per-key EAC that
+ * already scopes `sla` to the provider scopes this to its own writer. A
+ * subname minted before this key existed has nobody authorised for it, and
+ * reads back `null` — which is correct, not a gap: nothing has been published.
+ */
+export const TEXT_KEYS = Object.freeze(['url', 'sla', 'conformance', 'availability', 'semanticConformance']);
 
 export const universalResolverAbi = parseAbi([
   'function resolve(bytes name, bytes data) view returns (bytes, address)'
@@ -335,12 +344,13 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     return state.latestOwner === '0x0000000000000000000000000000000000000000' ? null : state.latestOwner;
   };
 
-  const [address, url, sla, conformance, availability, owner] = await Promise.all([
+  const [address, url, sla, conformance, availability, semanticConformance, owner] = await Promise.all([
     readAddr(),
     readText('url'),
     readText('sla'),
     readText('conformance'),
     readText('availability'),
+    readText('semanticConformance'),
     readOwner()
   ]);
 
@@ -353,6 +363,7 @@ async function resolveThroughUniversalResolver(slug, name, serviceId, rpcUrl) {
     sla,
     conformance: conformance === null ? null : parseScore(conformance),
     availability: availability === null ? null : parseScore(availability),
+    semanticConformance: semanticConformance === null ? null : parseScore(semanticConformance),
     owner,
     backend: ENS_BACKEND.V2,
     resolvedAt: Date.now()
@@ -414,6 +425,56 @@ export async function writeServiceScores(slug, scores, options) {
 
   // Sequential, not parallel: two writes from one EOA share a nonce.
   return { conformance: await write('conformance'), availability: await write('availability') };
+}
+
+/**
+ * Write the `semanticConformance` record on a service's subname.
+ *
+ * Its own function rather than a third key on `writeServiceScores`, because it
+ * is written by a different signer on a different schedule from a different
+ * chain (docs/roadmap/genlayer.md). Bundling them would mean one key that can
+ * write all three, which is exactly what the per-key EAC exists to prevent: a
+ * compromised GenLayer aggregator should not be able to move a provider's
+ * `conformance`.
+ *
+ * The signer must be scoped to `semanticConformance` on the subname.
+ * `VerdiktSubnameRegistrar.claim` grants it at mint time, but only where the
+ * registrar was deployed with a `SEMANTIC_SCORE_WRITER` — a subname minted
+ * before that key existed has nobody authorised for it and the first write
+ * reverts with `EACUnauthorizedAccountRoles` until the role is granted by
+ * `node scripts/publish-semantic-scores.mjs --grant --send`.
+ *
+ * @param {string} slug
+ * @param {number} semanticConformance 0–1000 integer
+ * @param {WriteOptions} options
+ * @returns {Promise<string>} transaction hash
+ */
+export async function writeSemanticScore(slug, semanticConformance, options) {
+  if (asScore(semanticConformance) === null) {
+    throw new Error(
+      `writeSemanticScore: semanticConformance must be an integer 0..1000, got ${String(semanticConformance)}`
+    );
+  }
+  const parentName = options.parentName ?? DEFAULT_PARENT_NAME;
+  const rpcUrl = options.rpcUrl ?? env('SEPOLIA_RPC_URL') ?? DEFAULT_SEPOLIA_RPC;
+  const name = serviceName(slug, parentName);
+  const node = namehash(name);
+
+  const account = privateKeyToAccount(/** @type {`0x${string}`} */ (options.privateKey));
+  const client = createPublicClient({ chain: sepolia, transport: http(rpcUrl) });
+  const wallet = createWalletClient({ account, chain: sepolia, transport: http(rpcUrl) });
+
+  const resolver = options.resolverAddress ?? (await resolverAddressFor(client, name));
+  if (!resolver) throw new Error(`writeSemanticScore: no resolver found for ${name}`);
+
+  const hash = await wallet.writeContract({
+    address: /** @type {`0x${string}`} */ (resolver),
+    abi: resolverRecordsAbi,
+    functionName: 'setText',
+    args: [node, 'semanticConformance', String(semanticConformance)]
+  });
+  await client.waitForTransactionReceipt({ hash });
+  return hash;
 }
 
 /**

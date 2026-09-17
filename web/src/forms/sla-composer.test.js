@@ -240,4 +240,23 @@ describe('rendering', () => {
     expect(() => stringify(el.render())).not.toThrow();
     vi.restoreAllMocks();
   });
+
+  it('adds a semantic clause and shows its criteria field', () => {
+    const el = mount('');
+    el.addClause('semantic');
+    expect(el.draft.clauses[0]).toMatchObject({ kind: 'semantic', id: 'meets-criteria', criteria: '' });
+    const out = stringify(el.render());
+    expect(out).toContain('Semantic promise');
+    expect(out).toContain('Judging criteria');
+    expect(out).toContain('Say what the response must mean, in plain language.');
+  });
+
+  it('reads a published semantic clause into the form and round-trips it', () => {
+    const text = JSON.stringify({ version: 1, clauses: [{ id: 'faithful', type: 'semantic', criteria: 'The summary must describe the document supplied.' }] });
+    const el = mount(text);
+    expect(el.view).toBe('form');
+    expect(el.draft.clauses[0]).toMatchObject({ kind: 'semantic', criteria: 'The summary must describe the document supplied.' });
+    expect(() => stringify(el.render())).not.toThrow();
+    expect(el.emitted.length).toBe(0);
+  });
 });

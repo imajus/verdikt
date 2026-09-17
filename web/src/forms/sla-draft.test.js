@@ -236,3 +236,37 @@ describe('citedClauseIds', () => {
     ])).toEqual({ 'price-band': 2, shape: 1 });
   });
 });
+
+// A semantic clause is valid SLA (docs/roadmap/genlayer.md), judged on dispute
+// by GenLayer rather than enforced by CRE. The fall-through used to read
+// anything unrecognised as a schema clause, which would have lost the
+// `criteria` and deleted the provider's promise on the next save.
+describe('semantic clauses', () => {
+  const withSemantic = JSON.stringify({
+    version: 1,
+    clauses: [
+      { id: 'speed', type: 'latency', maxMs: 2000 },
+      { id: 'faithful', type: 'semantic', criteria: 'The summary must describe the document supplied.' }
+    ]
+  });
+
+  it('reads one into a draft with its criteria intact', () => {
+    const draft = draftFromText(withSemantic);
+    expect(draft.clauses.map((c) => c.kind)).toEqual(['latency', 'semantic']);
+    const semantic = /** @type {SlaDraftSemanticClause} */ (draft.clauses[1]);
+    expect(semantic.criteria).toBe('The summary must describe the document supplied.');
+    expect(semantic.originalId).toBe('faithful');
+  });
+
+  it('writes it back as the same document', () => {
+    expect(draftToText(draftFromText(withSemantic))).toBe(withSemantic);
+  });
+
+  it('suggests a readable id and requires non-empty criteria', () => {
+    const clause = /** @type {SlaDraftSemanticClause} */ (newClause('semantic', []));
+    expect(clause.id).toBe('meets-criteria');
+    const draft = emptyDraft();
+    draft.clauses.push(clause);
+    expect(draftProblems(draft)).toEqual([{ clause: 0, field: 'criteria', message: 'Say what the response must mean, in plain language.' }]);
+  });
+});

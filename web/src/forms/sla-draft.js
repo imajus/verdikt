@@ -165,7 +165,9 @@ export function suggestId(clause) {
     if (!Number.isFinite(ms) || clause.maxMs === '') return 'responds-in-time';
     return ms % 1000 === 0 ? `responds-within-${ms / 1000}s` : `responds-within-${ms}ms`;
   }
-  return clause.kind === 'priceRange' ? 'price-band' : 'response-shape';
+  if (clause.kind === 'priceRange') return 'price-band';
+  if (clause.kind === 'semantic') return 'meets-criteria';
+  return 'response-shape';
 }
 
 /**
@@ -193,7 +195,9 @@ export function newClause(kind, siblings) {
     ? { ...base, kind, maxMs: '5000' }
     : kind === 'priceRange'
       ? { ...base, kind, min: '', max: '', asset: 'USDC' }
-      : { ...base, kind, sample: '', schemaText: '', root: null };
+      : kind === 'semantic'
+        ? { ...base, kind, criteria: '' }
+        : { ...base, kind, sample: '', schemaText: '', root: null };
   clause.id = uniqueId(suggestId(clause), siblings.map((sibling) => sibling.id));
   return clause;
 }
@@ -226,6 +230,7 @@ export function draftFromText(text) {
       const base = { id: clause.id, idTouched: true, originalId: clause.id, description: /** @type {{description?: string}} */ (clause).description ?? '' };
       if (clause.type === 'latency') return { ...base, kind: 'latency', maxMs: String(clause.maxMs) };
       if (clause.type === 'priceRange') return { ...base, kind: 'priceRange', min: minorUnitsToUsdc(clause.minMinorUnits), max: minorUnitsToUsdc(clause.maxMinorUnits), asset: clause.asset };
+      if (clause.type === 'semantic') return { ...base, kind: 'semantic', criteria: clause.criteria };
       return { ...base, kind: 'schema', sample: '', schemaText: '', root: schemaToNode(clause.schema) };
     })
   };
@@ -245,6 +250,7 @@ export function draftToDocument(draft) {
       if (clause.kind === 'priceRange') {
         return { ...head, type: 'priceRange', minMinorUnits: usdcToMinorUnits(clause.min) ?? clause.min, maxMinorUnits: usdcToMinorUnits(clause.max) ?? clause.max, asset: clause.asset };
       }
+      if (clause.kind === 'semantic') return { ...head, type: 'semantic', criteria: clause.criteria.trim() };
       return { ...head, type: 'schema', schema: clause.root ? nodeToSchema(clause.root) : {} };
     })
   };
@@ -332,6 +338,11 @@ export function draftProblems(draft) {
     if (clause.kind === 'schema') {
       if (!clause.root) out.push({ clause: index, field: 'shape', message: 'Read the shape from a sample response or a JSON Schema.' });
       else nodeProblems(clause.root, '', out, index);
+    }
+    if (clause.kind === 'semantic') {
+      const criteria = clause.criteria.trim();
+      if (!criteria) out.push({ clause: index, field: 'criteria', message: 'Say what the response must mean, in plain language.' });
+      else if (criteria.length > 2048) out.push({ clause: index, field: 'criteria', message: 'Up to 2048 characters.' });
     }
   });
   return out;

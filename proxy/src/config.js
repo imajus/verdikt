@@ -112,6 +112,19 @@ export function loadConfig(source = process.env) {
      * its result to `callbackUrl` instead.
      */
     workflow: workflowConfig(),
+    /**
+     * The filing window: how long a cached evidence envelope survives before
+     * anyone asks for it, and so how late a semantic claim can be opened at
+     * all (docs/roadmap/genlayer.md).
+     */
+    evidenceFilingWindowMs: Number(env('PROXY_EVIDENCE_FILING_WINDOW_MS') ?? 24 * 60 * 60 * 1000),
+    /**
+     * The adjudication window, which starts at the first authorised read.
+     * Separate from the filing window on purpose: with one clock, a claim
+     * filed on the last day of the filing window had no runway left to be
+     * judged in, and several validators have to re-read the same envelope.
+     */
+    evidenceAdjudicationWindowMs: Number(env('PROXY_EVIDENCE_ADJUDICATION_WINDOW_MS') ?? 24 * 60 * 60 * 1000),
     paymentRpcUrls: paymentRpcUrls(),
     arc: {
       rpcUrl: env('ARC_RPC_URL'),

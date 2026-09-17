@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { SERVICE_RECORD } from '@verdikt/fixtures';
+import { addressOf, signPersonalMessage } from '@verdikt/sdk';
+import { EVIDENCE_AUTH_HEADER, createMemoryEvidenceStore, disclosureMessage } from './evidence.js';
 import { call } from './test-support.js';
 import { loadConfig } from './config.js';
 
@@ -24,17 +26,20 @@ function harness({ serviceRecord = {}, status = 'ACTIVE', provider = '0x03', ups
   const upstreamFetch = vi.fn(async (/** @type {URL|string} */ _url, /** @type {RequestInit} */ _init) =>
     typeof upstream === 'function' ? upstream() : (upstream ?? new Response('ok', { status: 200 }))
   );
-  const deps = {
+  const deps = /** @type {ProxyDeps} */ ({
     config,
     resolveServiceRecord: vi.fn(async () => {
       if (ensError) throw ensError;
       return record(serviceRecord);
     }),
     registry: {
-      getService: vi.fn(async () => ({ provider, status, deposit: 10n ** 19n }))
+      getService: vi.fn(async () => ({ provider, status, deposit: 10n ** 19n })),
+      // Overridden by the evidence tests; null here is the honest default for
+      // a harness whose calls never reach the paid leg.
+      getVerdict: vi.fn(async () => /** @type {StoredVerdict|null} */ (null))
     },
     fetch: /** @type {typeof fetch} */ (/** @type {unknown} */ (upstreamFetch))
-  };
+  });
   return { deps, upstreamFetch };
 }
 
@@ -232,5 +237,175 @@ describe('the paid leg', () => {
     expect(response.statusCode).toBe(503);
     expect(response.json().error).toBe('verification_unavailable');
     expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('the SLA read endpoint', () => {
+  /** @param {ProxyDeps} deps */
+  const readSla = (deps, slug = 'weather') => call(deps, { method: 'GET', url: `/internal/sla/${slug}` });
+
+  it('relays the SLA exactly as ENS holds it, unparsed', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      slug: 'weather',
+      sla: SERVICE_RECORD.sla,
+      url: 'https://provider.example/weather'
+    });
+    // A read, not a relay: the provider's endpoint is never called.
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('404s a service that publishes no sla record', async () => {
+    const { deps } = harness({ serviceRecord: { sla: null } });
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('no_sla');
+  });
+
+  // A judge that read an ENS outage as an absent SLA would refuse claims that
+  // are perfectly valid, so the two answers must stay distinguishable.
+  it('503s when ENS is unreachable, rather than reporting no SLA', async () => {
+    const { deps } = harness({ ensError: new Error('rpc down') });
+    const response = await readSla(deps);
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toBe('naming_layer_unavailable');
+  });
+
+  it('404s a slug that could never be a service, without touching ENS', async () => {
+    const { deps } = harness();
+    const response = await readSla(deps, 'Weather');
+    expect(response.statusCode).toBe(404);
+    expect(deps.resolveServiceRecord).not.toHaveBeenCalled();
+  });
+
+  it('is matched ahead of the service catch-all, so `internal` is never a slug', async () => {
+    const { deps, upstreamFetch } = harness();
+    await readSla(deps);
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  it('answers GET only', async () => {
+    const { deps } = harness();
+    const response = await call(deps, { method: 'POST', url: '/internal/sla/weather', payload: {} });
+    expect(response.statusCode).toBe(404);
+  });
+});
+
+// `/internal/` is reserved as a namespace, not route by route: in the path
+// form the service catch-all would otherwise read `internal` as a slug.
+describe('the internal namespace', () => {
+  it('404s an unknown internal route instead of relaying to a service called `internal`', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await call(deps, { method: 'GET', url: '/internal/no-such-route' });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('unknown_internal_route');
+    expect(upstreamFetch).not.toHaveBeenCalled();
+  });
+
+  // Only the path form has a slug to disambiguate. On a service host every
+  // path is the provider's, so reserving one here would make an upstream path
+  // unreachable behind a proxy 404 the agent cannot tell from the provider's.
+  it('relays `/internal/...` on a service host instead of reserving it', async () => {
+    const { deps, upstreamFetch } = harness();
+    const response = await call(deps, {
+      method: 'GET',
+      url: '/internal/status',
+      headers: { host: 'weather.verdikt.bond' }
+    });
+    expect(response.statusCode).toBe(200);
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/internal/status');
+  });
+
+  it('relays the proxy’s own paths on a service host too', async () => {
+    const { deps, upstreamFetch } = harness();
+    await call(deps, { method: 'GET', url: '/healthz', headers: { host: 'weather.verdikt.bond' } });
+    expect(String(upstreamFetch.mock.lastCall?.[0])).toBe('https://provider.example/weather/healthz');
+  });
+});
+
+describe('the evidence endpoint', () => {
+  const REQUEST_ID = `0x${'ab'.repeat(32)}`;
+  const PAYER_KEY = `0x${'11'.repeat(32)}`;
+  const PAYER = addressOf(PAYER_KEY);
+
+  /** @returns {EvidenceEnvelope} */
+  const envelope = () => ({
+    requestId: REQUEST_ID,
+    slug: 'weather',
+    request: { method: 'GET', url: 'https://provider.example/current', body: null },
+    response: { status: 200, contentType: 'application/json', body: '{"t":12}', bodyEncoding: 'utf8', bodyTruncated: false },
+    cachedAt: 1789000000
+  });
+
+  /** @param {{ cached?: boolean, verdict?: StoredVerdict|null }} [options] */
+  async function evidenceHarness({ cached = true, verdict } = {}) {
+    const { deps } = harness();
+    const store = createMemoryEvidenceStore();
+    if (cached) await store.store(REQUEST_ID, envelope(), 60_000);
+    deps.evidence = store;
+    deps.registry = {
+      getService: async () => ({ provider: '0x03', status: 'ACTIVE', deposit: 10n ** 19n }),
+      getVerdict: vi.fn(async () =>
+        verdict === undefined
+          ? /** @type {StoredVerdict} */ (/** @type {unknown} */ ({ payer: PAYER, writtenAt: 1789000000 }))
+          : verdict
+      )
+    };
+    return deps;
+  }
+
+  const auth = async (requestId = REQUEST_ID, key = PAYER_KEY) => ({
+    host: 'proxy.local',
+    [EVIDENCE_AUTH_HEADER]: await signPersonalMessage(key, disclosureMessage(requestId))
+  });
+
+  it('serves the envelope to the payer', async () => {
+    const deps = await evidenceHarness();
+    const response = await call(deps, { method: 'GET', url: `/internal/evidence/${REQUEST_ID}`, headers: await auth() });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(envelope());
+  });
+
+  // The request id is public in every VerdictWritten event, so the id alone
+  // must never be enough — that was the defect that sank the first design.
+  it('refuses a caller holding only the request id', async () => {
+    const deps = await evidenceHarness();
+    const response = await call(deps, { method: 'GET', url: `/internal/evidence/${REQUEST_ID}` });
+    expect(response.statusCode).toBe(401);
+  });
+
+  it('refuses a signature from anyone but the payer', async () => {
+    const deps = await evidenceHarness();
+    const response = await call(deps, {
+      method: 'GET',
+      url: `/internal/evidence/${REQUEST_ID}`,
+      headers: await auth(REQUEST_ID, `0x${'22'.repeat(32)}`)
+    });
+    expect(response.statusCode).toBe(403);
+  });
+
+  // 404 and 503 are read differently by the judge: one resolves the claim
+  // UNDETERMINED, the other is transient and leaves it open.
+  it('404s a request whose evidence was never cached or has expired', async () => {
+    const deps = await evidenceHarness({ cached: false });
+    const response = await call(deps, { method: 'GET', url: `/internal/evidence/${REQUEST_ID}`, headers: await auth() });
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('no_evidence');
+  });
+
+  it('503s when no evidence store is configured at all', async () => {
+    const { deps } = harness();
+    const response = await call(deps, { method: 'GET', url: `/internal/evidence/${REQUEST_ID}`, headers: await auth() });
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error).toBe('evidence_unavailable');
+  });
+
+  it('rejects a malformed request id before reading anything', async () => {
+    const deps = await evidenceHarness();
+    const response = await call(deps, { method: 'GET', url: '/internal/evidence/nonsense', headers: await auth() });
+    expect(response.statusCode).toBe(400);
+    expect(deps.registry?.getVerdict).not.toHaveBeenCalled();
   });
 });

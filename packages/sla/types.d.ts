@@ -86,7 +86,7 @@ interface SlaStatusOnlyEvaluation {
   clauses: [];
 }
 
-type SlaClauseType = 'schema' | 'latency' | 'priceRange';
+type SlaClauseType = 'schema' | 'latency' | 'priceRange' | 'semantic';
 
 /**
  * The provider-authored SLA, read verbatim from the `sla` ENS text record.
@@ -101,7 +101,7 @@ interface SlaDocument {
   clauses: SlaClause[];
 }
 
-type SlaClause = SlaSchemaClause | SlaLatencyClause | SlaPriceRangeClause;
+type SlaClause = SlaSchemaClause | SlaLatencyClause | SlaPriceRangeClause | SlaSemanticClause;
 
 interface SlaClauseBase {
   id: string;
@@ -125,6 +125,37 @@ interface SlaPriceRangeClause extends SlaClauseBase {
   minMinorUnits: string;
   maxMinorUnits: string;
   asset: string;
+}
+
+/**
+ * A promise about what the response *says*, decided on dispute by GenLayer
+ * rather than per call by CRE (docs/roadmap/genlayer.md).
+ *
+ * `evaluate` recognises it and always passes it. The deterministic engine is
+ * pure by invariant and cannot judge meaning; the alternative — refusing to
+ * parse a document containing one — would fall back to status-only and lose
+ * every deterministic clause the provider declared alongside it.
+ */
+interface SlaSemanticClause extends SlaClauseBase {
+  type: 'semantic';
+  /**
+   * The binding judgment text, in plain language. Deliberately not the
+   * `description` field, which stays decorative on every clause type: a reader
+   * has to be able to tell what was promised from what was merely explained.
+   */
+  criteria: string;
+}
+
+/**
+ * The semantic ratio, kept apart from the other two on purpose
+ * (docs/roadmap/genlayer.md). Different question, different traffic: every paid
+ * call versus only the disputed ones.
+ */
+interface SemanticScore {
+  /** 0–1000. `MET / (MET + BREACH)`, floored. 1000 when nothing was decided. */
+  semanticConformance: number;
+  /** `undecided` is OPEN, UNDETERMINED and CANCELLED — none of them count. */
+  counts: { met: number; breach: number; undecided: number; decided: number };
 }
 
 /** The two marketplace ratios plus the tallies they came from (Specification.md §1). */

@@ -77,6 +77,17 @@ export const formatMinorRange = (low, high, places = 6) =>
   `${formatUnits(low, MINOR_DECIMALS, places)} to ${formatMinorUsdc(high, places)}`;
 
 /**
+ * A `SettlementToken` amount — GenLayer-native, pegged to nothing
+ * (genlayer/contracts/settlement_token.py). `SlaClaimJudge` sizes it to
+ * numerically match the `paidAmount` a claim disputes so the two figures read
+ * side by side, but that shared magnitude is not a shared currency: labelling
+ * this "USDC" would report an asset the compensation was never denominated in.
+ *
+ * @param {bigint} value
+ */
+export const formatSettlementUnits = (value) => `${value.toString()} settlement units`;
+
+/**
  * A 0–1000 score as a percentage.
  *
  * `null` is "not published yet", which is not the same as zero — the hourly

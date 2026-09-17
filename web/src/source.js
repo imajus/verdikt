@@ -7,6 +7,7 @@
 // and is labelled in the header so nobody mistakes it for live data.
 
 import { ARC, ENS_BACKEND, createRegistryReader, resolveServiceRecord, serviceIdOf } from '@verdikt/sdk';
+import { createGenLayerReader } from './genlayer.js';
 import { SLA_TEXT } from '@verdikt/fixtures';
 import { DELIVERY_CLAUSE, NO_CLAUSE, clauseHash } from '@verdikt/sdk/registry';
 
@@ -29,7 +30,10 @@ export function createSource(env) {
       mode: 'live',
       deps: {
         registry,
-        resolve: (slug) => resolveServiceRecord(slug, { rpcUrl: env.VITE_SEPOLIA_RPC_URL, cacheTtlMs: 30_000 })
+        resolve: (slug) => resolveServiceRecord(slug, { rpcUrl: env.VITE_SEPOLIA_RPC_URL, cacheTtlMs: 30_000 }),
+        // Address and network come from deployments/, same as the registry
+        // above; only the RPC is a per-environment setting.
+        genlayer: createGenLayerReader({ rpcUrl: env.VITE_GENLAYER_RPC_URL })
       }
     };
   }
@@ -99,6 +103,54 @@ function demoSource() {
     refunds.push({ serviceId: flaky, requestId, payer, amount: 10n ** 18n, blockNumber: 300n + BigInt(i) });
   }
 
+  // Three semantic settlements over calls the deterministic leg already
+  // passed. That pairing is the point of the whole feature: a response can be
+  // well-formed, on time, correctly priced — and still not be what was
+  // promised. One BREACH, one MET, one UNDETERMINED, because a demo that only
+  // shows the claimant winning is advertising, not a demo.
+  /** @type {SemanticSettlement[]} */
+  const settlements = [
+    {
+      requestId: `0x${(3).toString(16).padStart(64, '0')}`,
+      clauseId: 'forecast-matches-location',
+      slug: 'weather',
+      claimant: payer,
+      criteria: 'The forecast must be for the coordinates given in the request, not a nearby station.',
+      outcome: 'BREACH',
+      resolved: true,
+      reasoning: 'The response reports a station 40km from the requested coordinates.',
+      paidAmount: 2_500_000n,
+      compensation: 2_500_000n,
+      bounty: 100_000n
+    },
+    {
+      requestId: `0x${(7).toString(16).padStart(64, '0')}`,
+      clauseId: 'forecast-matches-location',
+      slug: 'weather',
+      claimant: payer,
+      criteria: 'The forecast must be for the coordinates given in the request, not a nearby station.',
+      outcome: 'MET',
+      resolved: true,
+      reasoning: 'The coordinates in the response match the request to four decimal places.',
+      paidAmount: 2_500_000n,
+      compensation: 0n,
+      bounty: 100_000n
+    },
+    {
+      requestId: `0x${(12).toString(16).padStart(64, '0')}`,
+      clauseId: 'forecast-matches-location',
+      slug: 'weather',
+      claimant: payer,
+      criteria: 'The forecast must be for the coordinates given in the request, not a nearby station.',
+      outcome: 'UNDETERMINED',
+      resolved: true,
+      reasoning: 'No evidence was cached for this request.',
+      paidAmount: 2_500_000n,
+      compensation: 0n,
+      bounty: 0n
+    }
+  ];
+
   /** @type {Record<string, ServiceRecord>} */
   const records = {
     weather: {
@@ -110,6 +162,7 @@ function demoSource() {
       sla: SLA_TEXT.honest,
       conformance: 1000,
       availability: 958,
+      semanticConformance: 666,
       owner: '0xA11ce00000000000000000000000000000000001',
       backend: ENS_BACKEND.FIXTURE,
       resolvedAt: 0
@@ -123,6 +176,7 @@ function demoSource() {
       sla: SLA_TEXT.violating,
       conformance: 0,
       availability: 1000,
+      semanticConformance: null,
       owner: '0xB0b0000000000000000000000000000000000002',
       backend: ENS_BACKEND.FIXTURE,
       resolvedAt: 0
@@ -139,6 +193,10 @@ function demoSource() {
       const record = records[slug];
       if (!record) throw new Error(`no demo record for ${slug}`);
       return record;
+    },
+    genlayer: {
+      judgeAddress: '0xDEMo0000000000000000000000000000000000dEmO',
+      listSettlements: async () => settlements
     }
   };
 }

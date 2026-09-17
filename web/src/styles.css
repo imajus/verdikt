@@ -1330,3 +1330,28 @@ verdikt-demo-chat { display: block; max-width: 70ch; font-size: 18.15px; }
   .demo-log-line { animation: demo-in 220ms ease both; }
 }
 @keyframes demo-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+/* The semantic judgement, next to the deterministic one. Deliberately not
+   styled as an outcome chip: it is a different question decided by a different
+   mechanism, and looking identical would imply one overrides the other. */
+.semantic {
+  display: inline-block;
+  margin-left: 0.5rem;
+  padding: 0.05em 0.45em;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  font-size: 0.78em;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+.semantic.breach { color: var(--poor); }
+.semantic.met { color: var(--muted); }
+.semantic.open { color: var(--down); }
+.semantic.undetermined { color: var(--fair); }
+.ledger .reason {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+  font-size: 0.82em;
+  max-width: 42ch;
+}

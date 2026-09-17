@@ -371,6 +371,70 @@
         "transportError": "ECONNREFUSED"
       },
       "expect": { "outcome": "DOWN", "clauses": [] }
+    },
+    {
+      "name": "a semantic clause is recognised without disabling the deterministic ones",
+      "note": "The case that forced this change. An unrecognised clause type fails the whole document, and `evaluate` falls back to status-only on any validation failure — so adding a semantic clause naively would have silently stopped enforcing every clause the provider already had.",
+      "mode": "evaluate",
+      "sla": {
+        "version": 1,
+        "clauses": [
+          {
+            "id": "shape",
+            "type": "schema",
+            "schema": { "type": "object", "required": ["summary"], "properties": { "summary": { "type": "string" } } }
+          },
+          { "id": "speed", "type": "latency", "maxMs": 2000 },
+          {
+            "id": "faithful",
+            "type": "semantic",
+            "criteria": "The summary must describe the document supplied in the request, in English, in under 200 words."
+          }
+        ]
+      },
+      "observation": {
+        "status": 200,
+        "headers": {},
+        "body": { "summary": "A short summary." },
+        "latencyMs": 100,
+        "paidAmountMinorUnits": "2500"
+      },
+      "expect": {
+        "outcome": "PASS",
+        "clauses": [
+          { "id": "delivery", "pass": true },
+          { "id": "shape", "pass": true },
+          { "id": "speed", "pass": true },
+          { "id": "faithful", "pass": true }
+        ]
+      }
+    },
+    {
+      "name": "a deterministic clause still fails alongside a semantic one",
+      "note": "The other half of the same guarantee: passing the semantic clause must not soften the verdict a deterministic clause earned.",
+      "mode": "evaluate",
+      "sla": {
+        "version": 1,
+        "clauses": [
+          { "id": "speed", "type": "latency", "maxMs": 500 },
+          { "id": "faithful", "type": "semantic", "criteria": "The summary must describe the document supplied in the request." }
+        ]
+      },
+      "observation": {
+        "status": 200,
+        "headers": {},
+        "body": { "summary": "A short summary." },
+        "latencyMs": 4000,
+        "paidAmountMinorUnits": "2500"
+      },
+      "expect": {
+        "outcome": "FAIL",
+        "clauses": [
+          { "id": "delivery", "pass": true },
+          { "id": "speed", "pass": false },
+          { "id": "faithful", "pass": true }
+        ]
+      }
     }
   ]
 }

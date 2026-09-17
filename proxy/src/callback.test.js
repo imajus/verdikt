@@ -36,7 +36,7 @@ function harness({ token = TOKEN } = {}) {
   const pending = createPendingRegistry();
   const deps = /** @type {ProxyDeps} */ ({
     config: { ...config, callbackToken: token ?? undefined },
-    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }) },
+    registry: { getService: async () => ({ provider: '0x0', status: 'ACTIVE', deposit: 0n }), getVerdict: async () => null },
     resolveServiceRecord: async () => {
       throw new Error('unused');
     },

@@ -7,11 +7,13 @@ import { createRegistryReader, decodePayment, resolveServiceRecord } from '@verd
 import { loadConfig } from './config.js';
 import { handleRequest } from './router.js';
 import { createDurableObjectPendingRegistry } from './pending-do.js';
+import { createDurableObjectEvidenceStore } from './evidence-do.js';
 import { createWorkflowClient } from './verification.js';
 
 export { PendingVerification } from './pending-do.js';
+export { EvidenceCache } from './evidence-do.js';
 
-/** @type {{ config: ProxyConfig, registry: ReturnType<typeof createRegistryReader>, workflow: WorkflowClient|null } | null} */
+/** @type {{ config: ProxyConfig, registry: ReturnType<typeof createRegistryReader>, workflow: WorkflowClient|null, evidence: EvidenceStore|null } | null} */
 let cached = null;
 
 /**
@@ -39,7 +41,14 @@ function context(env) {
     // route refuses every one, so every paid call would time out.
     console.warn('[verdikt] CRE_CALLBACK_TOKEN unset — callbacks will be refused and paid calls will time out');
   }
-  cached = { config, registry, workflow };
+  // Absent only if the binding is missing, which would be a deploy that
+  // skipped the migration. The deterministic leg keeps working without it;
+  // what stops is any semantic claim over a call made while it was gone.
+  const evidence = env.EVIDENCE_CACHE ? createDurableObjectEvidenceStore(env.EVIDENCE_CACHE) : null;
+  if (!evidence) {
+    console.warn('[verdikt] EVIDENCE_CACHE binding missing — semantic claims cannot be judged');
+  }
+  cached = { config, registry, workflow, evidence };
   return cached;
 }
 
@@ -49,13 +58,13 @@ export default {
    * @param {WorkerEnv} env
    */
   async fetch(request, env) {
-    const { config, registry, workflow } = context(env);
+    const { config, registry, workflow, evidence } = context(env);
     // `marketplace` is deliberately not wired here. The discovery API needs a
     // service's SLA clauses to filter on price and latency, and the only
     // correct reader of an SLA document is @verdikt/sla — which CLAUDE.md
     // forbids the proxy from depending on, transitively included. Wiring it
     // needs a decision, not a workaround; see docs/Tasks.md 5.3. Until then
     // /services answers 503 and says why.
-    return handleRequest(request, { config, registry, workflow, resolveServiceRecord, decodePayment, fetch });
+    return handleRequest(request, { config, registry, workflow, evidence, resolveServiceRecord, decodePayment, fetch });
   }
 };

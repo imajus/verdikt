@@ -20,7 +20,8 @@ import { describeSlaValidity } from './sla-validity.js';
 const KINDS = {
   schema: { title: 'Response shape', blurb: 'The fields every response must carry, read from a sample response or written as a JSON Schema.' },
   latency: { title: 'Response time', blurb: 'How long a call may take, measured by the verifier from send to last byte.' },
-  priceRange: { title: 'Price band', blurb: 'What a call may cost the agent, so a paywall cannot quietly charge more.' }
+  priceRange: { title: 'Price band', blurb: 'What a call may cost the agent, so a paywall cannot quietly charge more.' },
+  semantic: { title: 'Semantic promise', blurb: 'What the response must mean, judged by GenLayer only when a consumer disputes a call — CRE recognises this clause but never enforces it.' }
 };
 
 const UNIT = /** @type {Record<string, string>} */ ({ string: 'chars', array: 'items' });
@@ -344,6 +345,17 @@ export class VerdiktSlaComposer extends LitElement {
       ${this.problem(problems, index, 'min')}${this.problem(problems, index, 'max')}`;
   }
   /**
+   * @param {SlaDraftSemanticClause} clause
+   * @param {number} index
+   * @param {SlaDraftProblem[]} problems
+   */
+  renderSemantic(clause, index, problems) {
+    return html`
+      <textarea id=${`criteria-${index}`} class=${`sample ${problems.some((p) => p.clause === index && p.field === 'criteria') ? 'invalid' : ''}`} rows="4" maxlength="2048" aria-label="Judging criteria" placeholder="The summary must accurately describe the document supplied in the request." .value=${clause.criteria} @input=${(/** @type {Event} */ e) => this.patchClause(index, { criteria: valueOf(e) })}></textarea>
+      <p class="hint">Not checked per call. A consumer who disputes a call opens a claim on GenLayer, and independent validators judge whether the response met this, in plain language.</p>
+      ${this.problem(problems, index, 'criteria')}`;
+  }
+  /**
    * @param {SlaDraftClause} clause
    * @param {number} index
    * @param {SlaDraftProblem[]} problems
@@ -357,7 +369,10 @@ export class VerdiktSlaComposer extends LitElement {
       <span class="clause-index">${String(index + 1).padStart(2, '0')}</span>
       <div class="clause-body">
         <div class="clause-head"><span class="clause-kind">${kind.title}</span><span class="clause-blurb">${kind.blurb}</span></div>
-        ${clause.kind === 'schema' ? this.renderSchema(clause, index, problems) : clause.kind === 'latency' ? this.renderLatency(clause, index, problems) : this.renderPrice(clause, index, problems)}
+        ${clause.kind === 'schema' ? this.renderSchema(clause, index, problems)
+          : clause.kind === 'latency' ? this.renderLatency(clause, index, problems)
+          : clause.kind === 'priceRange' ? this.renderPrice(clause, index, problems)
+          : this.renderSemantic(clause, index, problems)}
         <div class="clause-meta">
           <div>
             <label class="composer-label" for=${`id-${index}`}>Id</label>
@@ -396,7 +411,7 @@ export class VerdiktSlaComposer extends LitElement {
       ${removedCited.length ? html`<p class="field-guard">${removedCited.map((id, i) => html`${i ? ', ' : ''}<code>${id}</code>`)} ${removedCited.length === 1 ? 'is' : 'are'} cited by verdicts on record. Once published without ${removedCited.length === 1 ? 'it' : 'them'}, those verdicts read as “edited since” on the marketplace, permanently.</p>` : nothing}
       <div class="composer-add">
         <span class="composer-label">Add a clause</span>
-        ${/** @type {SlaDraftClauseKind[]} */ (['schema', 'latency', 'priceRange']).map((kind) => html`<wa-button type="button" size="s" appearance="outlined" id=${`add-${kind}`} ?disabled=${this.draft.clauses.length >= 32} @click=${() => this.addClause(kind)}>${KINDS[kind].title}</wa-button>`)}
+        ${/** @type {SlaDraftClauseKind[]} */ (['schema', 'latency', 'priceRange', 'semantic']).map((kind) => html`<wa-button type="button" size="s" appearance="outlined" id=${`add-${kind}`} ?disabled=${this.draft.clauses.length >= 32} @click=${() => this.addClause(kind)}>${KINDS[kind].title}</wa-button>`)}
       </div>
       <p class=${`check ${problems.length === 0 && validity.ok ? 'ok' : 'bad'}`} id="composer-check"><i class="dot"></i>${summary}</p>`;
   }

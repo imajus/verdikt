@@ -26,13 +26,51 @@ interface ProxyConfig {
    * verified on it, and their payments are refused rather than trusted.
    */
   paymentRpcUrls: Record<number, string>;
+  /**
+   * How long a cached evidence envelope survives before anyone asks for it.
+   * This is the *filing* window: it bounds how late a consumer may open a
+   * semantic claim at all (docs/roadmap/genlayer.md).
+   */
+  evidenceFilingWindowMs: number;
+  /**
+   * How long it survives once disclosure has actually started. A separate
+   * clock on purpose: with one, a claim filed on the last day of the filing
+   * window had no runway left to be adjudicated in.
+   */
+  evidenceAdjudicationWindowMs: number;
+}
+
+/** Request and response together — a body alone cannot be judged against a promise. */
+interface EvidenceEnvelope {
+  requestId: string;
+  slug: string;
+  request: { method: string; url: string; body: string | null };
+  response: {
+    status: number;
+    contentType: string | null;
+    body: string;
+    bodyEncoding: 'utf8';
+    /** Carried through, not hidden: a judge deciding on a clipped body should know it is clipped (#88). */
+    bodyTruncated: boolean;
+  };
+  cachedAt: number;
+}
+
+/**
+ * Backed by a Map outside Workers and by one Durable Object per requestId
+ * inside them (evidence-do.js). `read` extends the entry to the adjudication
+ * window the first time it succeeds — the second of the two clocks.
+ */
+interface EvidenceStore {
+  store(requestId: string, envelope: EvidenceEnvelope, ttlMs: number): Promise<void>;
+  read(requestId: string, adjudicationTtlMs: number): Promise<EvidenceEnvelope | null>;
 }
 
 /** Everything the router reaches outside itself, injectable so tests need no network. */
 interface ProxyDeps {
   config?: ProxyConfig;
   resolveServiceRecord?: (slug: string, options?: ResolveOptions) => Promise<ServiceRecord>;
-  registry?: Pick<RegistryReader, 'getService'>;
+  registry?: Pick<RegistryReader, 'getService' | 'getVerdict'>;
   fetch?: typeof fetch;
   /** Absent means the proxy cannot verify a paid call and says so, rather than relaying one unverified. */
   workflow?: WorkflowClient | null;
@@ -47,6 +85,8 @@ interface ProxyDeps {
   newRequestId?: () => string;
   /** Backs the discovery API. Absent means /services answers 503. */
   marketplace?: (() => Promise<Marketplace>) | null;
+  /** Absent means nothing is cached and the evidence endpoint 503s — no semantic claim can be judged. */
+  evidence?: EvidenceStore | null;
 }
 
 /** A Durable Object stub: the client-side handle `namespace.get(id)` returns. */
@@ -56,6 +96,20 @@ interface DurableObjectStub {
 
 /** Opaque — only ever round-tripped through `idFromName` and `get`. */
 type DurableObjectId = unknown;
+
+/**
+ * The server-side handle a Durable Object constructor receives. Only the
+ * storage surface `EvidenceCache` actually uses is declared — `PendingVerification`
+ * deliberately touches none of it.
+ */
+interface DurableObjectState {
+  storage: {
+    get(key: string): Promise<unknown>;
+    put(entries: Record<string, unknown>): Promise<void>;
+    deleteAll(): Promise<void>;
+    setAlarm(scheduledTime: number): Promise<void>;
+  };
+}
 
 /** The one binding shape this proxy needs; not the full Workers Durable Object API. */
 interface DurableObjectNamespace {
@@ -71,6 +125,7 @@ interface DurableObjectNamespace {
  */
 interface WorkerEnv {
   PENDING_VERIFICATION: DurableObjectNamespace;
+  EVIDENCE_CACHE: DurableObjectNamespace;
   [key: string]: string | DurableObjectNamespace | undefined;
 }
 
@@ -123,7 +178,11 @@ interface VerificationResult {
   status: number | null;
   headers: Record<string, string>;
   body: string;
-  /** The DON consensus observation is capped; a larger response comes back cut, and flagged. */
+  /**
+   * The enclave's reply is size-capped (`ExecutionResponseLimit`, 100kb); a
+   * larger response comes back cut, and flagged. Not the consensus observation
+   * limit this comment used to cite — the body never becomes one (#88).
+   */
   bodyTruncated?: boolean;
 }
 

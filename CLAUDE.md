@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to AI coding agents working with code in this repository. `AGENTS.md` is a symlink to it, so the instructions are the same whichever tool loads them.
 
 ## What Verdikt is
 
@@ -13,6 +13,11 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/Tasks.md` — the phased build plan, ordered by risk
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
+- `docs/roadmap/genlayer.md` — the live design for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). `feat/genlayer` only; `main` is frozen and untouched by it. Read it before changing anything under `genlayer/` — it is newer than the issues
+
+## Working branch
+
+Work happens on `feat/genlayer`, never on `main`. Branch from it, commit to it, and open every new PR with `feat/genlayer` as the **base** — not `main`. `main` is only ever fast-forwarded from the remote. Drop this section once `feat/genlayer` merges.
 
 ## Current state
 
@@ -49,6 +54,16 @@ forge build
 forge test
 forge test --match-test testRefund     # single test
 forge test --match-contract Registry   # single contract
+```
+
+```bash
+cd genlayer                                               # Python, not the pnpm workspace
+.venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
+.venv/bin/python -m pytest tests/direct -q                # no node needed
+.venv/bin/glsim --port 4000 --no-browser &                # a local node, for the rest
+.venv/bin/gltest tests/integration -q                     # the cross-contract half direct mode cannot reach
+.venv/bin/python scripts/deploy.py --network testnet_bradbury --dry-run
+.venv/bin/python scripts/claim.py --help                  # the claimant's CLI: sign, bond, open, resolve
 ```
 
 ```bash
@@ -128,12 +143,14 @@ A verdict is final with no dispute layer, so these are correctness, not style:
 Both shipped green for days. Neither raised an error anywhere; both were caught only by a number that looked wrong.
 
 - **The aggregate keeps its own copy of the registry's event signatures**, because a workflow bundles to WASM and cannot reach the SDK's ABI. That copy is the log filter's *topic*, not a decode hint: add a field to `VerdictWritten` and a stale copy matches nothing, the window comes back empty, and an empty window scores **1000**. So the symptom is every service reporting a perfect record. `cre/lib/workflow-abi.test.js` pins the copies together — keep them in step or that test fails, which is the point.
+- **A GenLayer nondet closure cannot call a module-level function.** `strict_eq` and `run_nondet_unsafe` run in a sub-VM the contract module is not importable from, so a closure calling a helper by name fails there with `name '…' is not defined` — while passing every direct-mode test, because direct mode is in-process. A local alias does not help (still pickled by reference); values captured as locals do travel. Inline the work inside the closure. This would have broken `submit_claim`, `resolve_claim` and `request_withdrawal` on a real node with the whole suite green.
 - **The KeystoneForwarder swallows a receiver revert and mines anyway.** `txStatus === SUCCESS` means the forwarder ran, never that the receiver wrote. A receiver deployment is therefore not finished when the deploy script returns: read the value back (`text(node, "conformance")`, `getVerdict`). Simulation forwarders are also **per-chain** — `0x6E9EE680…` on Arc, `0x15fC6ae9…` on Sepolia, unrelated contracts — and pinning the wrong one produces exactly this silence (CRE-8, CRE-10).
 
 ## Package boundaries
 
 These are load-bearing, not organizational:
 
+- **`web/src/genlayer.js` is the only file that knows GenLayer exists**, and it lives in `web/` rather than the SDK because the SDK is imported by the proxy and the CRE workflow, neither of which has any business reading GenLayer. `null` (no judge configured, or unreadable) and `[]` (read fine, nothing disputed) are different answers and must render differently.
 - **`packages/sdk/ens.js` is the only file that knows ENS exists.** Every read and write goes through it, returning one `ServiceRecord`. This exists so the unresolved ENSv2→v1 question touches one file instead of rippling through the CRE workflow, proxy, and dashboard. Do not import an ENS library anywhere else, and do not make two calls where one returns everything — `resolveServiceRecord` batches the four text keys and the address record into a single round trip.
 - **`resolveServiceRecord` returns `sla` raw and unparsed.** Parsing belongs to `packages/sla`, so the ENS layer carries no SLA-schema knowledge.
 - **`packages/sla` has no dependencies and must keep none** — it bundles into the CRE workflow. Hand-roll the JSON Schema subset rather than pulling ajv.

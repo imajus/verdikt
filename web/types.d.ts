@@ -4,6 +4,45 @@
 interface MarketplaceDeps {
   registry: Pick<RegistryReader, 'listServices' | 'listVerdicts' | 'listRefunds'>;
   resolve: (slug: string) => Promise<ServiceRecord>;
+  /**
+   * The semantic half, off GenLayer. `null` until a judge is deployed, and
+   * that has to stay distinguishable from "deployed, nothing disputed": the
+   * first means the dashboard cannot say anything, the second means there is
+   * nothing to say.
+   */
+  genlayer?: GenLayerReader | null;
+}
+
+/** `UNKNOWN` is a contract newer than this bundle, shown rather than guessed at. */
+type SemanticOutcome = 'OPEN' | 'BREACH' | 'MET' | 'UNDETERMINED' | 'CANCELLED' | 'UNKNOWN';
+
+/**
+ * One semantic claim, as GenLayer recorded it.
+ *
+ * Kept separate from `ListingVerdict` on purpose. A call can be CRE PASS and
+ * semantically BREACH — two judgements of different questions, on different
+ * chains, in different currencies — and merging them would destroy the only
+ * fact worth showing (docs/roadmap/genlayer.md).
+ */
+interface SemanticSettlement {
+  requestId: string;
+  clauseId: string;
+  slug: string;
+  claimant: string;
+  /** The clause text, frozen when the claim was filed. */
+  criteria: string;
+  outcome: SemanticOutcome;
+  resolved: boolean;
+  reasoning: string;
+  /** All three in the settlement token's own units, which are pegged to nothing. */
+  paidAmount: bigint;
+  compensation: bigint;
+  bounty: bigint;
+}
+
+interface GenLayerReader {
+  judgeAddress: string;
+  listSettlements(): Promise<SemanticSettlement[]>;
 }
 
 /** One verdict as the dashboard shows it: the event, plus what it actually paid out. */
@@ -16,6 +55,12 @@ interface ListingVerdict extends VerdictRecord {
    * edited since and no longer declares it.
    */
   failedClauseId: string | null;
+  /**
+   * Semantic claims filed against this same call. Alongside the verdict, never
+   * folded into it: a call can be CRE PASS and semantically BREACH, and that
+   * pairing is the point.
+   */
+  settlements: SemanticSettlement[];
 }
 
 interface Listing {
@@ -39,10 +84,22 @@ interface Listing {
   contested: boolean;
   sla: SlaDocument | null;
   slaRaw: string | null;
-  /** As published on ENS by the hourly workflow. `null` before its first run. */
-  published: { conformance: number | null; availability: number | null };
+  /**
+   * As published on ENS. `conformance` and `availability` come from the hourly
+   * CRE workflow; `semanticConformance` from a separate aggregation over
+   * GenLayer, written by its own signer. All `null` before a first run — and
+   * `semanticConformance` stays null on any subname minted before that key
+   * existed.
+   */
+  published: { conformance: number | null; availability: number | null; semanticConformance: number | null };
   /** The same shared computation, shown only where nothing is published yet. */
   unpublished: ReputationScores;
+  /**
+   * `null` means no judge is configured or GenLayer could not be read — the
+   * dashboard can say nothing. `[]` means it read fine and nothing was
+   * disputed. Different claims; the UI must not render them alike.
+   */
+  semantic: SemanticSettlement[] | null;
   /** Newest first. */
   history: ListingVerdict[];
 }
@@ -92,7 +149,7 @@ interface MarketplaceFilters {
 }
 
 /** The SLA composer's model (forms/sla-draft.js). */
-type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange';
+type SlaDraftClauseKind = 'schema' | 'latency' | 'priceRange' | 'semantic';
 
 /** `any` is a schema node with no single named `type`; its constraints ride in `extra`. */
 type SlaDraftNodeType = 'object' | 'array' | 'string' | 'number' | 'integer' | 'boolean' | 'null' | 'any';
@@ -143,7 +200,13 @@ interface SlaDraftPriceClause extends SlaDraftClauseBase {
   asset: string;
 }
 
-type SlaDraftClause = SlaDraftSchemaClause | SlaDraftLatencyClause | SlaDraftPriceClause;
+interface SlaDraftSemanticClause extends SlaDraftClauseBase {
+  kind: 'semantic';
+  /** The binding judgment text, in plain language — judged on dispute by GenLayer, never enforced by CRE. */
+  criteria: string;
+}
+
+type SlaDraftClause = SlaDraftSchemaClause | SlaDraftLatencyClause | SlaDraftPriceClause | SlaDraftSemanticClause;
 
 interface SlaDraft {
   clauses: SlaDraftClause[];
@@ -154,7 +217,7 @@ interface SlaDraft {
 interface SlaDraftProblem {
   /** Index into `SlaDraft.clauses`. */
   clause: number;
-  /** `id`, `maxMs`, `min`, `max`, `shape`, or a `/path.min` style pointer into a schema tree. */
+  /** `id`, `maxMs`, `min`, `max`, `shape`, `criteria`, or a `/path.min` style pointer into a schema tree. */
   field: string;
   message: string;
 }

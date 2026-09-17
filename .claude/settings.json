@@ -5,6 +5,8 @@
   ],
   "enabledPlugins": {
     "superpowers@claude-plugins-official": true,
-    "cloudflare@cloudflare": true
+    "cloudflare@cloudflare": true,
+    "genlayer-docs@genlayerlabs": true,
+    "genlayer-dev@genlayerlabs": true
   }
 }
