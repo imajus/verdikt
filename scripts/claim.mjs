@@ -13,6 +13,7 @@
 // side.
 
 import { chains, createAccount, createClient } from 'genlayer-js';
+import { createRegistryReader, serviceIdOf } from '@verdikt/sdk';
 import deployment from '../deployments/genlayer-studio-devnet.json' with { type: 'json' };
 import { describeFailure, MESSAGE_BUDGET, settlementAllocations } from './genlayer-fees.mjs';
 
@@ -186,6 +187,59 @@ async function cmdStatus({ requestId, clause, ...rest }) {
   await printClaim(client, contracts.judge, requestId, clause);
 }
 
+/**
+ * The request ids a claim can be opened against, newest first.
+ *
+ * Every other command here takes `--request-id`, and an agent that paid for a
+ * call usually does not have one: the proxy mints it as 32 random bytes per
+ * request (`proxy/src/router.js`) and returns it only as the
+ * `x-verdikt-request-id` response header, which `circle services pay` does not
+ * surface and has no flag to. So the id has to be read back off Arc — where it
+ * is public, as a `VerdictWritten` topic — and doing that by hand is an
+ * `eth_getLogs` scan every disputing agent would otherwise re-derive.
+ *
+ * This lists calls that were *judged*, not calls that are disputable: a
+ * semantic claim needs the SLA to declare a `semantic` clause, which lives on
+ * ENS and is not read here.
+ */
+async function cmdRecent({ blocks, slug, limit }) {
+  const rpcUrl = process.env.ARC_RPC_URL;
+  // Arc's public RPC refuses the SDK's 10k chunk mid-scan with `-32005 rate
+  // limit exceeded`; a credentialed endpoint takes it happily. Same narrowing,
+  // and same reasoning, as the paid-call sweep's scripts.
+  const registry = createRegistryReader(rpcUrl ? {} : { maxBlockRange: 500n, scanConcurrency: 2 });
+  const head = await registry.client.getBlockNumber();
+  const fromBlock = head > blocks ? head - blocks : 0n;
+  const serviceId = slug ? serviceIdOf(slug) : undefined;
+  if (!rpcUrl && !serviceId) {
+    console.error(
+      '[recent] ARC_RPC_URL unset and no --slug — mapping every serviceId back to a slug\n' +
+        '         means scanning ServiceRegistered from the deploy block in 500-block chunks,\n' +
+        '         which takes minutes. Set ARC_RPC_URL, or pass --slug to skip that scan.'
+    );
+  }
+  const [verdicts, services] = await Promise.all([
+    registry.listVerdicts({ fromBlock, serviceId }),
+    // `--slug` already names the only service that can come back, so the
+    // slug map — a full-history scan, deliberately unwindowed — is skipped.
+    serviceId ? [] : registry.listServices()
+  ]);
+  const slugOf = new Map(services.map((service) => [service.serviceId, service.slug]));
+  const rows = verdicts.slice().reverse().slice(0, limit);
+  console.log(`Verdicts in blocks ${fromBlock}..${head}, newest first:\n`);
+  for (const verdict of rows) {
+    // paidAmount is 6-decimal minor units — the x402 view, not Arc's native 18.
+    const paid = `$${(Number(verdict.paidAmount) / 1e6).toFixed(4)}`;
+    const name = slug ?? slugOf.get(verdict.serviceId) ?? verdict.serviceId;
+    console.log(`${String(verdict.blockNumber).padEnd(10)} ${name.padEnd(14)} ${paid.padStart(8)}  ${verdict.requestId}`);
+  }
+  if (rows.length === 0) {
+    console.log('(none — widen with --blocks, or drop --slug)');
+  } else {
+    console.log(`\n${rows.length} of ${verdicts.length} · next: claim.mjs sign --request-id <id>`);
+  }
+}
+
 async function printClaim(client, judge, requestId, clause) {
   const claim = await client.readContract({
     address: judge,
@@ -199,6 +253,7 @@ async function printClaim(client, judge, requestId, clause) {
 
 const USAGE = `usage: claim.mjs <command> [options]
 
+  recent  [--blocks N] [--slug S] [--limit N]   request ids Arc has judged, newest first
   sign    --request-id 0x…                      the payer's consent to disclose its own response
   mint    [--amount 5000000]                    faucet-mint settlement tokens
   bond    [--amount N]                          escrow the claim bond to the judge
@@ -208,7 +263,8 @@ const USAGE = `usage: claim.mjs <command> [options]
 
   --judge 0x…   --token 0x…                     override deployments/genlayer-studio-devnet.json
 
-GENLAYER_PRIVATE_KEY is the claimant, and must be the payer Arc booked.`;
+GENLAYER_PRIVATE_KEY is the claimant, and must be the payer Arc booked.
+recent reads Arc instead, so it needs no key — ARC_RPC_URL if you have one.`;
 
 /** Long flags only, `--flag value` or `--flag=value`. */
 function parseArgs(argv) {
@@ -226,6 +282,7 @@ function parseArgs(argv) {
 }
 
 const COMMANDS = {
+  recent: cmdRecent,
   sign: cmdSign,
   mint: cmdMint,
   bond: cmdBond,
@@ -242,6 +299,12 @@ async function main() {
     process.exit(command ? 1 : 0);
   }
   const options = parseArgs(rest);
+  if (command === 'recent') {
+    // ~3 hours at Arc's two blocks a second: enough to cover a sweep just run,
+    // short enough that the scan is a handful of requests rather than hundreds.
+    options.blocks = BigInt(options.blocks ?? 20000);
+    options.limit = Number(options.limit ?? 20);
+  }
   if (command === 'mint') options.amount = options.amount ? BigInt(options.amount) : 5000000n;
   if (command === 'bond' && options.amount) options.amount = BigInt(options.amount);
   if (command === 'open' && !options.signature) options.signature = process.env.VERDIKT_DISCLOSURE_SIGNATURE;

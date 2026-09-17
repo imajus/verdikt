@@ -136,6 +136,23 @@ with no Python toolchain. Same flags, same output. It resolves nothing:
 `runner/bin/resolve-claims.mjs` does that from a distinct account, which is what
 keeps a `MET` outcome costing the claimant its bounty.
 
+It has one command the Python CLI does not, `recent`, which answers the
+question every claimant hits first — *what is my request id?* The proxy mints
+it as 32 random bytes and returns it only as the `x-verdikt-request-id`
+response header, which `circle services pay` does not surface and has no flag
+to expose, so it has to be read back off Arc:
+
+```bash
+node scripts/claim.mjs recent --slug aisa            # judged calls, newest first
+# 62562568   aisa   $0.0030  0x65088ed8bcc3…
+```
+
+No key needed — it reads public `VerdictWritten` logs — but set `ARC_RPC_URL`
+if you have a credentialed endpoint. `--slug` also skips the full-history
+`ServiceRegistered` scan that maps a `serviceId` back to a name. What it lists
+is calls that were *judged*, not calls that are disputable: a semantic claim
+needs the SLA to declare a `semantic` clause, which lives on ENS.
+
 The judge and token addresses come from `deployments/genlayer-studio-devnet.json`,
 so there is nothing to export but the key. `--judge`/`--token`, or
 `GENLAYER_JUDGE_ADDRESS`/`GENLAYER_TOKEN_ADDRESS`, override them for a fork or
