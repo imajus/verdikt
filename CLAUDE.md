@@ -14,6 +14,7 @@ A marketplace of x402-gated API services whose delivery is verified per call. A 
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
 - `docs/roadmap/genlayer.md` — the live design for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). Read it before changing anything under `genlayer/` — it is newer than the issues
+- `docs/roadmap/arc-mainnet.md` — **active design**, on the `feat/arc-mainnet` branch: drops the ENS/Sepolia integration entirely and moves SLA storage and reputation scores into `VerdiktRegistry`, to deploy single-chain on Arc mainnet. Read it before touching `packages/sdk/ens.js` or anything ENS-related — that code is being deleted
 
 ## Current state
 
