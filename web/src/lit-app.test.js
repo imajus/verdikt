@@ -79,6 +79,48 @@ describe('a service with verdicts', () => {
   });
 });
 
+// The promise line is the clause itself, so each type has to say its own
+// sentence. A semantic clause's `criteria` is the binding text — deliberately
+// not its decorative `description` — and printing the schema sentence for it
+// both duplicates a heading and hides what was actually promised.
+describe('the promise line of a published clause', () => {
+  /** @param {SlaClause[]} clauses */
+  const promises = (clauses) => stringify(detailTemplate(listing({ sla: { version: 1, clauses } })));
+
+  it('prints a semantic clause as its criteria, verbatim', () => {
+    const criteria = 'The assistant message must respond to the instruction carried in the final entry of `messages`.';
+    const html = promises([{ id: 'meets-criteria', type: 'semantic', criteria }]);
+    expect(html).toContain(criteria);
+    expect(html).not.toContain('Matches the response schema published with this SLA');
+  });
+
+  it('keeps the schema sentence for a schema clause', () => {
+    const html = promises([{ id: 'response-shape', type: 'schema', schema: { type: 'object' } }]);
+    expect(html).toContain('Matches the response schema published with this SLA');
+  });
+
+  it('gives a schema and a semantic clause different lines', () => {
+    const criteria = 'The summary must describe the document supplied in the request.';
+    const html = promises([
+      { id: 'response-shape', type: 'schema', schema: { type: 'object' } },
+      { id: 'meets-criteria', type: 'semantic', criteria }
+    ]);
+    expect(html).toContain('Matches the response schema published with this SLA');
+    expect(html).toContain(criteria);
+    expect(html.match(/Matches the response schema published with this SLA/g)).toHaveLength(1);
+  });
+
+  // A fifth clause type added to `packages/sla` should render an empty promise
+  // rather than silently claim to be a schema check — the reader sees nothing
+  // instead of a lie, and `pnpm typecheck` names the arm that is missing.
+  it('says nothing rather than the wrong thing for a type it does not know', () => {
+    const html = promises([
+      /** @type {SlaClause} */ (/** @type {unknown} */ ({ id: 'future', type: 'whatever' }))
+    ]);
+    expect(html).not.toContain('Matches the response schema published with this SLA');
+  });
+});
+
 const noop = () => {};
 
 describe('the nav withdraw link', () => {

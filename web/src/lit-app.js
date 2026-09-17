@@ -185,14 +185,38 @@ const duration = (ms) => (ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`);
  * clause has no bound worth printing; its provider-written note carries the
  * shape, and pulling the JSON Schema apart here would put schema knowledge
  * back outside `packages/sla`.
+ *
+ * A semantic clause is the exception that prints its own field: `criteria` is
+ * the binding judgment text GenLayer decides against, kept apart from the
+ * decorative `description` precisely so a reader can tell a promise from an
+ * explanation. Summarising it here would show the reader something other than
+ * what a claim is judged on.
+ *
+ * Switch rather than a ternary chain so the unhandled arm is `never`: a fifth
+ * clause type added to `packages/sla` fails `pnpm typecheck` here, and renders
+ * an empty promise rather than silently claiming to be a schema check.
+ *
  * @param {SlaClause} clause
+ * @returns {string}
  */
-const clausePromise = (clause) =>
-  clause.type === 'latency'
-    ? `Answers within ${duration(clause.maxMs)}`
-    : clause.type === 'priceRange'
-      ? `Priced from ${formatMinorRange(BigInt(clause.minMinorUnits), BigInt(clause.maxMinorUnits))} a call`
-      : 'Matches the response schema published with this SLA';
+const clausePromise = (clause) => {
+  switch (clause.type) {
+    case 'latency':
+      return `Answers within ${duration(clause.maxMs)}`;
+    case 'priceRange':
+      return `Priced from ${formatMinorRange(BigInt(clause.minMinorUnits), BigInt(clause.maxMinorUnits))} a call`;
+    case 'schema':
+      return 'Matches the response schema published with this SLA';
+    case 'semantic':
+      return clause.criteria;
+    default: {
+      /** @type {never} */
+      const unhandled = clause;
+      void unhandled;
+      return '';
+    }
+  }
+};
 
 /**
  * Anchors keyed by clause id, so a verdict can point at the clause it says
