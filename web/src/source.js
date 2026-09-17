@@ -31,14 +31,9 @@ export function createSource(env) {
       deps: {
         registry,
         resolve: (slug) => resolveServiceRecord(slug, { rpcUrl: env.VITE_SEPOLIA_RPC_URL, cacheTtlMs: 30_000 }),
-        // Null until a judge is deployed. Live Arc data with no GenLayer
-        // reader is a real and normal state — the deterministic leg has been
-        // running for weeks longer than the semantic one.
-        genlayer: createGenLayerReader({
-          network: env.VITE_GENLAYER_NETWORK,
-          judgeAddress: env.VITE_GENLAYER_JUDGE_ADDRESS,
-          rpcUrl: env.VITE_GENLAYER_RPC_URL
-        })
+        // Address and network come from deployments/, same as the registry
+        // above; only the RPC is a per-environment setting.
+        genlayer: createGenLayerReader({ rpcUrl: env.VITE_GENLAYER_RPC_URL })
       }
     };
   }

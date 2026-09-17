@@ -131,10 +131,14 @@ Consensus takes **minutes**, not the 30 seconds the client waits by default;
 `scripts/pay-x402.mjs` and `pnpm onboard` on the deterministic side, because the
 audience is an operator who already has a key and a request id.
 
+The judge and token addresses come from `deployments/genlayer-studio-devnet.json`,
+so there is nothing to export but the key. `--judge`/`--token`, or
+`GENLAYER_JUDGE_ADDRESS`/`GENLAYER_TOKEN_ADDRESS`, override them for a fork or
+a second deployment — the same override the Arc side gives
+`VERDIKT_REGISTRY_ADDRESS`.
+
 ```bash
 export GENLAYER_PRIVATE_KEY=0x…      # the claimant; must be the payer Arc booked
-export GENLAYER_JUDGE_ADDRESS=0x…
-export GENLAYER_TOKEN_ADDRESS=0x…
 
 .venv/bin/python scripts/claim.py sign --request-id 0x…   # payer consent — do not skip
 .venv/bin/python scripts/claim.py mint --amount 5000000

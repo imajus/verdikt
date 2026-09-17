@@ -16,8 +16,6 @@ the transaction itself looks fine from the outside.
 
     cd genlayer
     export GENLAYER_PRIVATE_KEY=0x…          # the claimant; must be the payer Arc booked
-    export GENLAYER_JUDGE_ADDRESS=0x…
-    export GENLAYER_TOKEN_ADDRESS=0x…
 
     .venv/bin/python scripts/claim.py sign --request-id 0x…      # payer consent
     .venv/bin/python scripts/claim.py mint --amount 5000000      # faucet
@@ -76,6 +74,13 @@ def connect(args, key=None):
 
 
 def addresses(args):
+    """The judge and token to act on.
+
+    `deployments/genlayer-<network>.json` is the source of truth; the flag and
+    the env var are overrides for a fork or a second deployment, not the normal
+    path. Same precedence, and same reasoning, as `VERDIKT_REGISTRY_ADDRESS`
+    against `deployments/arc-testnet.json` on the Arc side.
+    """
     record = deployment(args.network)
     judge = args.judge or os.environ.get('GENLAYER_JUDGE_ADDRESS') or record.get('slaClaimJudge')
     token = args.token or os.environ.get('GENLAYER_TOKEN_ADDRESS') or record.get('settlementToken')
@@ -290,7 +295,7 @@ def cmd_withdraw(args):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_devnet'), choices=NETWORKS)
+    parser.add_argument('--network', default='studio_devnet', choices=NETWORKS)
     parser.add_argument('--judge', default=None)
     parser.add_argument('--token', default=None)
     sub = parser.add_subparsers(dest='command', required=True)

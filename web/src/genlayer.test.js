@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { byRequest, createGenLayerReader, isBreach, toSettlement } from './genlayer.js';
+import deployment from '../../deployments/genlayer-studio-devnet.json' with { type: 'json' };
 
 const REQUEST_ID = `0x${'ab'.repeat(32)}`;
 
@@ -90,33 +91,25 @@ describe('isBreach', () => {
 });
 
 describe('createGenLayerReader', () => {
-  // Absent has to stay distinguishable from "deployed, nothing disputed": the
-  // first means the dashboard can say nothing, the second means there is
-  // nothing to say.
-  it('is null with no judge address', () => {
-    expect(createGenLayerReader({ network: 'testnet_bradbury' })).toBeNull();
-    expect(createGenLayerReader({})).toBeNull();
+  // The address is not a per-environment setting: it comes from
+  // deployments/genlayer-studio-devnet.json, the same way the Arc registry
+  // comes from deployments/arc-testnet.json. Nothing has to be handed to a
+  // contributor out of band for the dashboard to read the judge.
+  it('reads the deployed judge with nothing configured', () => {
+    const reader = createGenLayerReader();
+    expect(reader?.judgeAddress).toBe(deployment.slaClaimJudge);
   });
 
-  it('is null for a network genlayer-js does not know', () => {
-    expect(createGenLayerReader({ network: 'mainnet', judgeAddress: `0x${'ab'.repeat(20)}` })).toBeNull();
-  });
-
-  it('builds a reader for a configured judge', () => {
-    const reader = createGenLayerReader({ network: 'testnet_bradbury', judgeAddress: `0x${'ab'.repeat(20)}` });
-    expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
-  });
-
-  // studio_devnet is the Agent Tank submission target, not testnet_bradbury —
-  // and it is not one of genlayer-js@1.x's four built-in chains, so it has to
-  // resolve through the hand-built chain object rather than a lookup miss.
-  it('defaults to studio_devnet when no network is given', () => {
+  it('takes an explicit address as an override, for a fork or a second deployment', () => {
     const reader = createGenLayerReader({ judgeAddress: `0x${'ab'.repeat(20)}` });
     expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
   });
 
-  it('builds a reader for studio_devnet explicitly', () => {
-    const reader = createGenLayerReader({ network: 'studio_devnet', judgeAddress: `0x${'ab'.repeat(20)}` });
-    expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
+  // The record names chain 61997, which genlayer-js@1.x has no built-in entry
+  // for — so this resolving at all is what says the hand-built chain object is
+  // still wired up.
+  it('resolves the network the deployment record names', () => {
+    expect(deployment.network).toBe('studio_devnet');
+    expect(createGenLayerReader()).not.toBeNull();
   });
 });

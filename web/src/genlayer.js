@@ -11,6 +11,11 @@
 // Only the dashboard needs both judgements side by side.
 
 import { chains, createClient } from 'genlayer-js';
+// Imported here rather than through `@verdikt/sdk/deployments`, which is where
+// the Arc and Sepolia records live. The SDK is imported by the proxy and the
+// CRE workflow, and neither has any business knowing GenLayer exists — so this
+// file stays the only one that does (CLAUDE.md, "Package boundaries").
+import deployment from '../../deployments/genlayer-studio-devnet.json' with { type: 'json' };
 
 /** The four outcomes `SlaClaimJudge` can record, plus the one it starts in. */
 export const SEMANTIC_OUTCOMES = Object.freeze(['OPEN', 'BREACH', 'MET', 'UNDETERMINED', 'CANCELLED']);
@@ -103,29 +108,40 @@ export function byRequest(settlements) {
 export const isBreach = (settlement) => settlement.outcome === 'BREACH';
 
 /**
- * A reader over one deployed `SlaClaimJudge`, or `null` when none is
- * configured.
+ * A reader over the deployed `SlaClaimJudge`, or `null` when there is none to
+ * read.
  *
- * Absent is the normal state until the judge is deployed, and it has to stay
- * distinguishable from "deployed, no claims": the first means the dashboard
- * cannot say anything about semantic outcomes, the second means there are none.
+ * The address and the network come from `deployments/genlayer-studio-devnet.json`,
+ * the same way the Arc registry comes from `deployments/arc-testnet.json`:
+ * neither is secret nor environment-varying, so neither belongs in `.env`,
+ * where every contributor has to be handed it out of band and nothing can
+ * validate it. `judgeAddress` is an override for a fork or a second
+ * deployment, not the normal path — mirroring `VERDIKT_REGISTRY_ADDRESS` on
+ * the Arc side. What stays per-environment is the RPC, and only that.
  *
- * @param {{ network?: string, judgeAddress?: string, rpcUrl?: string }} options
+ * `null` still has to stay distinguishable from "deployed, no claims": the
+ * first means the dashboard cannot say anything about semantic outcomes, the
+ * second means there are none.
+ *
+ * @param {{ judgeAddress?: string, rpcUrl?: string }} options
  * @returns {GenLayerReader | null}
  */
-export function createGenLayerReader({ network, judgeAddress, rpcUrl } = {}) {
-  if (!judgeAddress) return null;
-  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'studio_devnet')];
+export function createGenLayerReader({ judgeAddress, rpcUrl } = {}) {
+  const address = judgeAddress ?? deployment.slaClaimJudge;
+  if (!address) return null;
+  // The record names its own network; pairing a recorded address with some
+  // other chain would read a different contract, or nothing at all.
+  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (deployment.network)];
   if (!chain) return null;
 
   const client = createClient(rpcUrl ? { chain, endpoint: rpcUrl } : { chain });
 
   return {
-    judgeAddress,
+    judgeAddress: address,
 
     async listSettlements() {
       const claims = await client.readContract({
-        address: /** @type {`0x${string}`} */ (judgeAddress),
+        address: /** @type {`0x${string}`} */ (address),
         functionName: 'list_claims',
         args: []
       });
