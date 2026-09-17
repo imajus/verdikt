@@ -13,7 +13,7 @@ for a faucet. It is pegged to nothing, and `SlaClaimJudge` sizes compensation to
 numerically match the original `paidAmount` only so the settlement is legible
 next to the payment that provoked it.
 
-See docs/roadmap/genlayer.md, "Settlement is GenLayer-native".
+See docs/GenLayer.md, "Settlement is GenLayer-native".
 """
 
 import genlayer as gl

@@ -4,7 +4,7 @@ The semantic half of a Verdikt verdict: a GenLayer Intelligent Contract that
 judges whether a paid API response actually satisfied what the provider
 promised, on dispute, under Optimistic Democracy consensus.
 
-`docs/roadmap/genlayer.md` is the design and takes precedence over inference
+`docs/GenLayer.md` is the design and takes precedence over inference
 from this code. The short version: Verdikt's CRE leg judges the deterministic
 clauses of an SLA and is pure by invariant — no I/O, no clock, no network. That
 purity is what makes a verdict reproducible inside a DON and exactly what stops

@@ -607,7 +607,7 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
  * `SlaClaimJudge` runs inside GenVM and has no way to reach `packages/sdk` or
  * an ENS library, so this exposes the one `resolveServiceRecord` call it needs
  * to freeze the disputed clause's `criteria` at claim-open time
- * (docs/roadmap/genlayer.md).
+ * (docs/GenLayer.md).
  *
  * Deliberately unauthenticated. The `sla` and `url` text records are public on
  * Sepolia and readable by anyone with an RPC endpoint; a token here would
@@ -651,7 +651,7 @@ async function handleSlaRead(slug, { config, resolve }) {
 /**
  * The evidence envelope for one paid call, disclosed to the payer that bought
  * it and to whoever that payer authorises — in practice, GenLayer's validators
- * (docs/roadmap/genlayer.md, #82).
+ * (docs/GenLayer.md, #82).
  *
  * Three answers are deliberately distinct, because the judge treats them
  * differently. 404 means there is nothing to judge and resolves the claim

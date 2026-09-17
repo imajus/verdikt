@@ -66,7 +66,7 @@ contract VerdiktSubnameRegistrar {
     ///      predates a deployed writer contract for it. Zero is a valid value:
     ///      a registrar deployed before that signer existed grants nothing for
     ///      the key and `claim` skips it, the same "reads back null, not a gap"
-    ///      state `docs/roadmap/genlayer.md` already documents for subnames
+    ///      state `docs/GenLayer.md` already documents for subnames
     ///      minted before the key existed.
     address public immutable SEMANTIC_SCORE_WRITER;
     bytes32 public immutable PARENT_NODE;

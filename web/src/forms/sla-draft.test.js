@@ -237,7 +237,7 @@ describe('citedClauseIds', () => {
   });
 });
 
-// A semantic clause is valid SLA (docs/roadmap/genlayer.md), judged on dispute
+// A semantic clause is valid SLA (docs/GenLayer.md), judged on dispute
 // by GenLayer rather than enforced by CRE. The fall-through used to read
 // anything unrecognised as a schema clause, which would have lost the
 // `criteria` and deleted the provider's promise on the next save.

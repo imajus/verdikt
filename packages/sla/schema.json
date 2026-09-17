@@ -60,7 +60,7 @@
           },
           {
             "title": "semantic clause",
-            "description": "A promise about what the response *says*, judged on dispute by a GenLayer Intelligent Contract rather than per call by CRE (docs/roadmap/genlayer.md). `evaluate` recognises it and always passes it: the deterministic engine is pure by invariant and cannot judge meaning, and refusing to parse the document would be worse — it would fall back to status-only and lose every deterministic clause the provider declared alongside it.",
+            "description": "A promise about what the response *says*, judged on dispute by a GenLayer Intelligent Contract rather than per call by CRE (docs/GenLayer.md). `evaluate` recognises it and always passes it: the deterministic engine is pure by invariant and cannot judge meaning, and refusing to parse the document would be worse — it would fall back to status-only and lose every deterministic clause the provider declared alongside it.",
             "type": "object",
             "additionalProperties": false,
             "required": ["id", "type", "criteria"],

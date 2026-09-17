@@ -10,7 +10,7 @@ the response parsed; it does not know the response was *right*.
 
 This contract judges the part that purity excludes, on dispute rather than per
 call, under Optimistic Democracy. It is a second, independent judgment — never
-an appeal of the CRE verdict. See docs/roadmap/genlayer.md.
+an appeal of the CRE verdict. See docs/GenLayer.md.
 """
 
 import base64
@@ -111,7 +111,7 @@ class SlaClaimJudge(gl.contract.Contract):
     arc_rpc_url: str
     # How long after `writtenAt` a claim may still be opened. Bounds the
     # provider's exposure; the adjudication runway is the proxy's separate
-    # clock (docs/roadmap/genlayer.md, "Two clocks, not one").
+    # clock (docs/GenLayer.md, "Two clocks, not one").
     filing_window_seconds: gl.u256
     # How long a requested withdrawal waits. Must cover the filing window plus
     # an adjudication runway, or the cooldown does not actually outlast the
@@ -349,7 +349,7 @@ class SlaClaimJudge(gl.contract.Contract):
         deposit becomes withdrawable. Closing that requires the marketplace or
         proxy to stop routing paid calls to a slug once its withdrawal is
         pending — out of reach for this contract alone; see
-        docs/roadmap/genlayer.md, "What is unresolved".
+        docs/GenLayer.md, "What is unresolved".
 
         The deposit stays escrowed and fully liable throughout. This records
         an intention, not a release.

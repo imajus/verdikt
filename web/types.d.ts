@@ -22,7 +22,7 @@ type SemanticOutcome = 'OPEN' | 'BREACH' | 'MET' | 'UNDETERMINED' | 'CANCELLED' 
  * Kept separate from `ListingVerdict` on purpose. A call can be CRE PASS and
  * semantically BREACH — two judgements of different questions, on different
  * chains, in different currencies — and merging them would destroy the only
- * fact worth showing (docs/roadmap/genlayer.md).
+ * fact worth showing (docs/GenLayer.md).
  */
 interface SemanticSettlement {
   requestId: string;

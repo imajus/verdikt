@@ -247,7 +247,7 @@ describe('determinism', () => {
 });
 
 // A promise about what the response *says*, decided on dispute by GenLayer
-// (docs/roadmap/genlayer.md). The engine is pure by invariant and cannot judge
+// (docs/GenLayer.md). The engine is pure by invariant and cannot judge
 // meaning, so its whole job here is to recognise the clause and get out of the
 // way — while still enforcing everything it *can* judge.
 describe('evaluate — semantic clauses', () => {

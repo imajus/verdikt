@@ -36,7 +36,7 @@ interface ProxyConfig {
   /**
    * How long a cached evidence envelope survives before anyone asks for it.
    * This is the *filing* window: it bounds how late a consumer may open a
-   * semantic claim at all (docs/roadmap/genlayer.md).
+   * semantic claim at all (docs/GenLayer.md).
    */
   evidenceFilingWindowMs: number;
   /**

@@ -85,7 +85,7 @@ describe('aggregateWindow', () => {
 });
 
 // A third score, deliberately not folded into `conformance`
-// (docs/roadmap/genlayer.md): different question, different traffic.
+// (docs/GenLayer.md): different question, different traffic.
 describe('aggregateSemantic', () => {
   it('is the share of decided disputes the provider won', () => {
     expect(aggregateSemantic(['MET', 'MET', 'MET', 'BREACH']).semanticConformance).toBe(750);

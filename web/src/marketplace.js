@@ -85,7 +85,7 @@ export async function loadMarketplace({ registry, resolve, genlayer = null }) {
          * Published separately, by a different signer, from a different chain
          * — and shown separately. Never averaged into the other two: they
          * measure different questions of different traffic, and one merged
-         * figure would answer neither (docs/roadmap/genlayer.md).
+         * figure would answer neither (docs/GenLayer.md).
          */
         semanticConformance: record?.semanticConformance ?? null
       },

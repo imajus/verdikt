@@ -166,7 +166,7 @@ export function loadConfig(source = process.env) {
     /**
      * The filing window: how long a cached evidence envelope survives before
      * anyone asks for it, and so how late a semantic claim can be opened at
-     * all (docs/roadmap/genlayer.md).
+     * all (docs/GenLayer.md).
      */
     evidenceFilingWindowMs: Number(env('PROXY_EVIDENCE_FILING_WINDOW_MS') ?? 24 * 60 * 60 * 1000),
     /**

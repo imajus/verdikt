@@ -58,7 +58,7 @@ export class EvidenceCache {
       return Response.json({ envelope: null }, { status: 404 });
     }
 
-    // The two clocks (docs/roadmap/genlayer.md). The entry lives on the filing
+    // The two clocks (docs/GenLayer.md). The entry lives on the filing
     // window until it is first disclosed; disclosure is what starts the
     // adjudication runway, so several validators re-reading it keep working
     // even for a claim filed at the very end of the filing window.

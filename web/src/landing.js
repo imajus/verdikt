@@ -21,7 +21,6 @@ import { html, nothing } from 'lit';
 import { formatMinorUsdc, formatNativeUsdc } from './format.js';
 import { HOW_PATH, MARKETPLACE_PATH, PRIVACY_PATH, REGISTER_PATH, navigateOnClick } from './router.js';
 import { TAGLINE } from './pages.js';
-import './diagram.js';
 import './demo-chat.js';
 
 const GITHUB_URL = 'https://github.com/imajus/verdikt';
@@ -174,12 +173,11 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
 
     ${entry('04', html`
       <h2>The request path</h2>
-      <p>Two chains, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token. Ethereum Sepolia holds the public record on ENS: the SLA a provider publishes and the scores anything else can integrate against.</p>
-      <p>Between them, a Chainlink CRE Confidential Workflow does the judging. The call is replayed inside a TEE, so nobody has to be trusted with the response, and the verdict it writes carries a proof of the computation that produced it.</p>
-      <verdikt-diagram class="diagram"></verdikt-diagram>`, html`
+      <p>Two chains carry a paid call, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token. Ethereum Sepolia holds the public record on ENS: the SLA a provider publishes and the scores anything else can integrate against.</p>
+      <p>Between them, a Chainlink CRE Confidential Workflow does the judging. The call is replayed inside a TEE, so nobody has to be trusted with the response, and the verdict it writes carries a proof of the computation that produced it.</p>`, html`
       <p class="note-head">What never leaves</p>
       <p class="note-line">The observed value stays off the chain. Only the verdict is recorded there — trustlessly, because the TEE proves what computed it.</p>
-      <p class="note-line">The same loop in prose, including what happens to a 4xx and why an empty window scores 1000: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`, true)}
+      <p class="note-line">The whole loop drawn, and the same thing in prose — what happens to a 4xx, why an empty window scores 1000, and what a consumer can still dispute: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`)}
 
     ${entry('05', html`
       <div class="entry-split">

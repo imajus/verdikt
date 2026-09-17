@@ -81,7 +81,7 @@ export function aggregateWindow(verdicts) {
  * provider.
  *
  * A third score, deliberately not folded into `conformance`
- * (docs/roadmap/genlayer.md). The two measure different questions of different
+ * (docs/GenLayer.md). The two measure different questions of different
  * traffic — every paid call versus only the disputed ones — and averaging them
  * would produce a number that answers neither. A provider with a spotless
  * `conformance` and a poor `semanticConformance` is exactly the case the whole

@@ -99,7 +99,7 @@ export function evaluateClause(clause, observation) {
       // Recognised, never enforced. `evaluate` is pure by invariant — no I/O,
       // no clock, no network — so it cannot judge whether a response *meant*
       // what was promised; that is what the GenLayer leg is for
-      // (docs/roadmap/genlayer.md).
+      // (docs/GenLayer.md).
       //
       // Passing is the only safe answer. Failing would let any provider who
       // adds a semantic clause be refunded against on every call by a judge

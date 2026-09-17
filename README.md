@@ -1,7 +1,7 @@
 # Verdikt
 
 > A marketplace of x402 API services whose delivery is verified per call, with
-> refunds enforced on-chain and no dispute layer.
+> refunds enforced on-chain and a verdict that is final.
 
 x402 has no verification layer. The facilitator settles payment; the directory
 is self-reported. Neither checks that a paid-for call delivered what the
@@ -11,9 +11,19 @@ Verdikt puts a proxy between a paying agent and an x402 provider. The proxy
 hands the call to a Chainlink CRE Confidential Workflow, which replays the
 payment from inside a TEE, evaluates the response against the provider's own
 declared SLA, writes a `PASS`/`FAIL`/`DOWN` verdict to Arc, and auto-refunds the
-agent from the provider's bonded deposit when the SLA is not met. There is no
-challenge process and no arbiter: the verdict is a deterministic function of
-(SLA, observed response), and the code computing it is attested and published.
+agent from the provider's bonded deposit when the SLA is not met. That verdict
+is final: no challenge process, no arbiter, a deterministic function of (SLA,
+observed response), computed by code that is attested and published.
+
+Determinism is also what bounds it. A pure function can know the JSON parsed,
+arrived in time and was priced as advertised; it cannot know the summary
+summarised the wrong document. So a provider may also declare a `semantic`
+clause — plain English, binding — and a consumer who disagrees files a bonded
+claim on GenLayer, where validators judge the content independently under
+Optimistic Democracy. That is a **second judgment, not an appeal**: it answers
+a different question, settles in its own currency, and is scored apart. A call
+can legitimately be CRE `PASS` and semantically `BREACH` — the response was
+well-formed *and* wrong, which is the fact worth showing.
 
 ## Table of Contents
 
@@ -48,9 +58,19 @@ hourly, separately ────► CRE cron workflow (no TEE)
                            trailing-window conformance and availability ratios
                            (7 days in the spec, cut to 1 day for the demo),
                            publishes them to ENS
+
+on dispute, separately ─► GenLayer Intelligent Contract (SlaClaimJudge)
+                           the consumer bonds and files against one `semantic`
+                           clause. The judge binds the claim to the Arc verdict,
+                           fetches the request/response envelope the proxy
+                           cached, and validators judge the content
+                           independently under Optimistic Democracy:
+                           MET / BREACH / UNDETERMINED / CANCELLED.
+                           BREACH pays the consumer from the provider's
+                           GenLayer deposit. Never merged into the verdict.
 ```
 
-Two chains, each for one reason:
+Three chains, each for one reason:
 
 - **Arc** holds the registry, escrow, verdicts, refunds — and the x402 payment.
   USDC is Arc's native gas token, so payment, bond and refund are the same asset
@@ -58,7 +78,16 @@ Two chains, each for one reason:
 - **Ethereum Sepolia** holds ENS. The SLA lives *only* as the `sla` text record
   on `<slug>.verdikt.eth`. ENSv2's Permissioned Resolver is used for its per-key
   access control: the provider is scoped to `sla` and `url`, the CRE side to
-  `conformance` and `availability`, and cross-writes revert.
+  `conformance` and `availability`, the GenLayer side to `semanticConformance`,
+  and cross-writes revert.
+- **GenLayer** holds the semantic claim, and settles it in its own token rather
+  than relaying a judgment back to Arc. An earlier design did relay it, and
+  that bought a cross-chain trust model, a relay to run, and finality coupling
+  between two chains with unrelated appeal semantics — for a requirement that
+  turned out not to be real. A claimant needs the judgment to have a
+  consequence the provider feels, not one denominated in the asset the call was
+  paid in. GenLayer still *reads* Arc to bind a claim to a verdict; a read is
+  not a bridge.
 
 One slug is three identifiers: the Arc `serviceId` (`keccak256`), the
 `<slug>.verdikt.bond` route, and the `<slug>.verdikt.eth` subname.
@@ -78,14 +107,26 @@ cp .env.example .env      # then fill in what you have
 ## Usage
 
 ```bash
-pnpm test            # 776 tests: engine, SDK, proxy, workflow logic, dashboard
+pnpm test            # 899 tests: engine, SDK, proxy, workflow logic, dashboard
 pnpm lint
 pnpm typecheck       # tsc against JSDoc — the repo is JS, not TypeScript
 pnpm demo            # the whole loop end to end, on a local chain
 
-cd contracts && forge test    # 89 tests: registry, score writer, subname registrar
+cd contracts && forge test    # 91 tests: registry, score writer, subname registrar
 cd web && pnpm dev            # the marketplace dashboard
 cd proxy && pnpm dev          # the x402 relay
+```
+
+`genlayer/` is Python and deliberately outside the pnpm workspace, so `pnpm
+test` covers none of it. It has its own toolchain and its own README:
+
+```bash
+cd genlayer
+.venv/bin/genvm-lint check contracts/sla_claim_judge.py   # lint + semantic validation
+.venv/bin/python -m pytest tests/direct -q                # no node needed
+.venv/bin/glsim --port 4000 --no-browser &                # a local node, for the rest
+.venv/bin/gltest tests/integration -q                     # the cross-contract half
+.venv/bin/python scripts/claim.py --help                  # sign, bond, open, resolve
 ```
 
 `pnpm demo` deploys the registry to a throwaway `anvil`, registers an honest
@@ -171,6 +212,7 @@ allow the page's origin by CORS and any key in it must be origin-restricted.
 | `cre/lib` | Everything the workflows decide, as plain JS under vitest. |
 | `cre/workflows` | The two CRE workflows — capability plumbing around `cre/lib`. |
 | `proxy` | The x402 relay. Holds no wallet and never evaluates. |
+| `genlayer` | The semantic half: `SlaClaimJudge` and its settlement token, in Python. Its own toolchain — not in the pnpm workspace. |
 | `runner` | The simulate-mode CRE gateway: hosts `cre workflow simulate verify --listen` for the proxy and publishes the hourly scores. |
 | `web` | The marketplace dashboard, provider console and registration wizard. See [Deploy](#deploy) for `wrangler.jsonc` and `Dockerfile`. |
 | `scripts` | Operator scripts: ENS namespace setup, service onboarding, the local demo, signing a real x402 payment. |
@@ -186,6 +228,7 @@ allow the page's origin by CORS and any key in it must be origin-restricted.
 [Spike A: ENSv2](docs/spikes/A-ens-sepolia.md) ·
 [Spike B: CRE](docs/spikes/cre.md) ·
 [Spike C: the payment header](docs/spikes/C-x402-payment.md) ·
+[GenLayer: semantic claim judging](docs/GenLayer.md) ·
 [Roadmap: ERC-8004 interop](docs/roadmap/erc-8004.md) ·
 [Roadmap: pre-flight input validation](docs/roadmap/input-validation.md)
 
@@ -238,6 +281,13 @@ verification would be self-refuting.
 - The hourly aggregate, run as a scheduled job in the runner container,
   publishing `conformance` / `availability` for every live listing to ENS,
   where they read straight back off `<slug>.verdikt.eth`.
+- `SlaClaimJudge` and `SettlementToken` on **GenLayer Studio Devnet** (chain
+  61997), addresses in `deployments/genlayer-studio-devnet.json`. **Two claims
+  have actually resolved there** against `aisa`'s `meets-criteria` clause — one
+  `BREACH`, one `MET` — judged by validators under Optimistic Democracy and
+  read back with `genlayer/scripts/export-claims.py`. A demo that only showed
+  the claimant winning would be advertising, which is why the `MET` matters as
+  much as the `BREACH`.
 
 The transcripts in [`docs/evidence/`](docs/evidence) record the original demo
 pair, `weather` and `weather-lite`, against a Proceeds paywall: three verdicts
@@ -261,14 +311,47 @@ before the paid leg ran end to end, and the pair has since been deregistered.
   the live registry pins its forwarder immutably and predates it, so closing
   this is a redeploy (Tasks.md 2.4). Until then those credits are visible in
   `getOwed` and stranded.
+- **Two payer gates on the semantic leg are switched off for the demo**, and
+  the more serious one is the proxy's: deployed, `/internal/evidence/<id>`
+  serves any paid response body to anyone holding a request id, and request ids
+  are public in every `VerdictWritten` event. The other drops the judge's
+  requirement that a claimant be the payer. Both are greppable as `TEMPORARY
+  (hackathon demo)`, both go back on together, and the seven tests covering
+  them are skipped rather than deleted. They came off because the same Gateway
+  fact above makes them unsatisfiable here: the only registered service with a
+  `semantic` clause is payable only through `GatewayWalletBatched`, so its
+  verdicts book a backing EOA that Circle will not sign as and that cannot
+  transact on GenLayer — there was no disputable call any key we hold could
+  have paid for. The alternative was faking the demo.
+- **`semanticConformance` is computed but published nowhere.** The pipeline
+  works end to end under test, but every live subname was minted before the
+  text key existed, so nobody is authorised to write it and the first write
+  reverts until a one-time `--grant` runs with the operator key. The dashboard
+  renders that as "nothing has been published", which is what it is — and
+  distinct from "read fine, nothing disputed".
+- **Studio Devnet is a release-candidate hosted simulator.** GenLayer does not
+  guarantee its state or availability across deployments, so the addresses
+  above are current rather than permanent.
 
 ## Design decisions worth knowing
 
-- **No dispute layer, by choice.** x402 responses are pay-gated, so there is no
-  free public source of truth a challenger could re-derive a claim against. The
-  bond substitutes for re-derivation, which is what makes the refund cap
-  load-bearing: a refund larger than the payment would make inducing failures
-  profitable, with nothing to appeal to.
+- **The verdict has no dispute layer, by choice.** x402 responses are
+  pay-gated, so there is no free public source of truth a challenger could
+  re-derive a claim against. The bond substitutes for re-derivation, which is
+  what makes the refund cap load-bearing: a refund larger than the payment
+  would make inducing failures profitable, with nothing to appeal to.
+- **The semantic claim is a second judgment, not the appeal that isn't there.**
+  It answers a different question (did the content satisfy the `criteria`?),
+  runs on a different trigger (a bonded claim, not every call), settles in a
+  different currency, and is scored separately. Merging the two into one status
+  would destroy the only fact worth showing — that a response was well-formed
+  *and* wrong. It runs on dispute rather than per call for a plain economic
+  reason: a deterministic check is cheap, LLM consensus across validators is
+  not.
+- **A claim can end in `UNDETERMINED`, and that charges nobody.** Forcing a
+  binary outcome out of incomplete evidence would make missing evidence
+  adjudicable, and therefore worth manufacturing. Every path that cannot
+  honestly reach a conclusion lands there instead.
 - **A verdict books a credit; it never sends value.** Pushing value would let a
   payer address that rejects transfers revert the call and erase its own `FAIL` —
   a provider farming its own service through a reverting contract could hold a

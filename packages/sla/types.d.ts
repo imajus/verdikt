@@ -129,7 +129,7 @@ interface SlaPriceRangeClause extends SlaClauseBase {
 
 /**
  * A promise about what the response *says*, decided on dispute by GenLayer
- * rather than per call by CRE (docs/roadmap/genlayer.md).
+ * rather than per call by CRE (docs/GenLayer.md).
  *
  * `evaluate` recognises it and always passes it. The deterministic engine is
  * pure by invariant and cannot judge meaning; the alternative — refusing to
@@ -148,7 +148,7 @@ interface SlaSemanticClause extends SlaClauseBase {
 
 /**
  * The semantic ratio, kept apart from the other two on purpose
- * (docs/roadmap/genlayer.md). Different question, different traffic: every paid
+ * (docs/GenLayer.md). Different question, different traffic: every paid
  * call versus only the disputed ones.
  */
 interface SemanticScore {

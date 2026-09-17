@@ -14,13 +14,7 @@ Every character count below was measured, not estimated.
 
 ## Repository
 
-<https://github.com/imajus/verdikt/tree/feat/genlayer>
-
-**Check before submitting:** the portal may want a default branch rather than a
-branch URL. `main` is frozen for the ETHOnline submission and carries none of
-this work, so if a branch link is rejected the options are a tag on
-`feat/genlayer` or a fork whose default branch is this one. Do not merge to
-`main` to satisfy the form.
+<https://github.com/imajus/verdikt>
 
 ## Logo
 
@@ -82,7 +76,7 @@ every verdict and score on it was read back off a chain.
    number there was read back off a chain, including a live x402 payment and
    the confidential workflow's own simulate log.
 
-4. The GenLayer half lives in genlayer/. Read docs/roadmap/genlayer.md first —
+4. The GenLayer half lives in genlayer/. Read docs/GenLayer.md first —
    it is the design, and it is newer than the issues.
 
 5. Run it:
@@ -109,12 +103,19 @@ every verdict and score on it was read back off a chain.
 ## Private notes for judges (max 500)
 
 ```
-Honest scope: the deterministic leg (CRE, Arc, ENS) has been live on testnets for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: 108 direct tests plus an integration suite against a real node.
+Honest scope: the deterministic leg (CRE, Arc, ENS) has been live on testnets for weeks — docs/evidence/ has the transcripts. The GenLayer leg merged to main in #110: 110 direct tests plus an integration suite against a real node, and two claims have resolved on Studio Devnet (61997) — one BREACH, one MET.
 
-Both contracts are live on Studio Devnet (61997), addresses in the how-to. Reaching it needs the v0.19 client, an explicit fee distribution (genlayer-cli#421) and the v0.6 runner — a different SDK surface, so the contracts were migrated to it.
+Two payer gates are off for the demo, greppable as TEMPORARY (hackathon demo): the only service publishing a semantic clause is Gateway-paid, so its payer is an EOA we cannot sign as.
 ```
 
-*476 characters.*
+*492 characters.*
+
+The tooling note this replaced — reaching Studio Devnet needs the v0.19 client,
+an explicit fee distribution (genlayer-cli#421) and the v0.6 runner, a
+different SDK surface the contracts were migrated to — is in
+`genlayer/README.md` under "Deploying", which is where a judge who follows the
+how-to will hit it anyway. The disabled gates displaced it because a scope note
+that omits them is not an honest one.
 
 ## Demo video
 

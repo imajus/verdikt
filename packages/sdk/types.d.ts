@@ -42,7 +42,7 @@ interface ServiceRecord {
   /** 0–1000, written hourly by the aggregate workflow. `null` before the first run. */
   availability: number | null;
   /**
-   * 0–1000, the GenLayer half (docs/roadmap/genlayer.md). `null` means nothing
+   * 0–1000, the GenLayer half (docs/GenLayer.md). `null` means nothing
    * has been published — which includes every subname minted before this key
    * existed, since nobody is authorised to write it there.
    *

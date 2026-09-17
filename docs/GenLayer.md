@@ -1,12 +1,30 @@
-# Roadmap — GenLayer, non-deterministic claim judging
+# GenLayer — non-deterministic claim judging
 
-**Status: live design, `feat/genlayer` only.** `main` is frozen for the
-ETHOnline submission and nothing here touches it. Tracked as
-[#80](https://github.com/imajus/verdikt/issues/80); this document is the design,
-the issue is the feature. Where the two disagree, this document is newer.
+**Status: shipped.** Merged to `main` in
+[#110](https://github.com/imajus/verdikt/pull/110) on Sep 17 2026, with the
+follow-ups through [#115](https://github.com/imajus/verdikt/pull/115). The
+contracts are deployed to Studio Devnet and two claims have resolved there —
+one `BREACH`, one `MET`. Tracked as
+[#80](https://github.com/imajus/verdikt/issues/80); this document is the
+design, the issue is the feature. Where the two disagree, this document is
+newer.
 
-Built for GenLayer's Agent Tank hackathon (deadline Sep 17 2026, track *Agentic
-Commerce Infrastructure*).
+This file moved out of `docs/roadmap/` when the work landed. What is left in
+that directory is genuinely unbuilt research; this is the design of record for
+a leg that runs, and what it is mostly worth reading for is the arguments —
+the alternatives that were tried and discarded, and why the shape that shipped
+is the shape it is. Read it before changing anything under `genlayer/`.
+
+**Two things are deliberately off for the demo**, both greppable as
+`TEMPORARY (hackathon demo)` and both to be restored together: the judge no
+longer requires a claimant to be the payer, and the proxy no longer requires a
+payer signature to disclose evidence. The reason is at each site and repeated
+under "Eligibility" below. The second is the one that matters — deployed, the
+evidence endpoint will serve any paid response body to anyone holding a
+request id.
+
+Built for GenLayer's Agent Tank hackathon (deadline Sep 17 2026, track
+*Agentic Commerce Infrastructure*).
 
 ## The gap
 
@@ -331,8 +349,8 @@ Practical effect for evidence: bodies up to ~90kb now survive whole instead of
 being clipped at 20k, and anything genuinely larger is still flagged rather than
 silently cut. [#88](https://github.com/imajus/verdikt/issues/88).
 
-Until it is, the flag is *told to the judge* rather than acted on in code. Both
-alternatives are worse. Refusing every truncated body outright hands any
+A body that is still too large at 90kb gets flagged, and the flag is *told to
+the judge* rather than acted on in code. Both alternatives are worse. Refusing every truncated body outright hands any
 provider a way to become unjudgeable — pad past the cap and no semantic clause
 can be enforced again — which makes missing evidence worth manufacturing, the
 same failure `UNDETERMINED` exists to avoid. Judging one unflagged lets a `MET`
@@ -356,7 +374,11 @@ else's call. Checked via `getVerdict()` on Arc
   `writtenAt != 0`, and it is also what rejects the replay-402 and fallback-4xx
   cases: both write no verdict at all, so both fail this test before any
   judgment logic runs.
-- **Payer** — `verdict.payer` must be the claimant.
+- **Payer** — `verdict.payer` must be the claimant. **Commented out for the
+  demo** (`TEMPORARY (hackathon demo)`), for the reason in the next paragraph.
+  It is load-bearing, not tidy-up: `request_id` is public in every
+  `VerdictWritten` event, so without it anyone can file against anyone else's
+  call and be paid out of that provider's deposit.
 - **Service correlation** — `verdict.serviceId == keccak256(slug)`.
 - **Bond posted** — a same-chain check against the settlement token.
 - **Filing deadline** — rejected once the filing window has lapsed since
@@ -402,9 +424,19 @@ is testable exhaustively without a chain.
 booked payer is the agent wallet's *backing EOA*, and the relationship between
 that EOA and the smart account resolves through Circle's wallet API rather than
 on-chain data. GenVM has no documented way to hold those credentials safely, so
-for now only plain-EOA payers can file. This is the same fact the deterministic
+only plain-EOA payers can file. This is the same fact the deterministic
 side already lives with (CLAUDE.md, "the payer a verdict books is the account
 actually debited") arriving in a new place.
+
+**And it is what forced the demo bypass.** `aisa` is the only registered
+service publishing a `semantic` clause, and every payment option it offers is
+`GatewayWalletBatched` — so its verdicts book the agent wallet's backing EOA,
+which Circle will not sign as (`circle wallet sign --address 0xe1107cc4…`
+answers `Wallet not found`) and which cannot transact on GenLayer at all.
+There was no disputable call that any key we hold could have paid for, so both
+payer gates came off together rather than the demo being faked. Six JS tests
+and one Python one are skipped rather than deleted, and
+`grep -rn 'TEMPORARY (hackathon demo)'` is the revert list.
 
 ## The `semantic` clause
 
@@ -700,12 +732,18 @@ out of band" holds for the contract and not yet for the node.
 
 ## What is unresolved
 
-- **Circle Gateway payers cannot file.** Above.
-- **CRE's 20,000-char truncation** is unexplained, and the evidence cache
-  inherits it. [#88](https://github.com/imajus/verdikt/issues/88).
-- **Who writes `semanticConformance`** — needs an ENS resolver-role decision,
-  same per-key EAC pattern the resolver already uses.
-  [#92](https://github.com/imajus/verdikt/issues/92).
+- **Both payer gates are off**, and nothing else stands where they did. The
+  header says it; the body says it twice. It is first on this list because it
+  is the only entry that is a live exposure rather than a missing feature.
+- **Circle Gateway payers cannot file.** Above. This is the thing the gates
+  were taken off to work around, so the two come back together or not at all.
+- **`semanticConformance` is computed but never published.** The pipeline is
+  built and tested end to end — `export-claims.py` → `publish-semantic-scores.mjs`
+  → the key-scoped resolver — but no live subname has the score. Every one of
+  them was minted before the key existed, so nobody is authorised for it and
+  the first write reverts `EACUnauthorizedAccountRoles` until
+  `--grant` runs with the operator key. Reading `aisa` back today gives
+  `null`, which is the "nothing has been published" state, correctly.
 - **Appeal semantics against a finalized payout.** `on='finalized'` is the
   mitigation, not a proof; a payout that finalizes and is then successfully
   appealed has no modelled recovery.

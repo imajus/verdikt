@@ -50,7 +50,7 @@ DEFAULT_BOUNTY = 100_000
 
 # How long after a verdict is written a claim may still be opened. Bounds the
 # provider's exposure; the proxy's evidence cache carries the separate
-# adjudication clock (docs/roadmap/genlayer.md, "Two clocks, not one").
+# adjudication clock (docs/GenLayer.md, "Two clocks, not one").
 DEFAULT_FILING_WINDOW_SECONDS = 24 * 60 * 60
 
 # How long a requested withdrawal waits before a deposit may leave. Must be at

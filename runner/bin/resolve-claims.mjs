@@ -3,7 +3,7 @@
 // WHY THIS EXISTS
 //
 // `SlaClaimJudge.resolve_claim` is permissionless by design: whoever sends it
-// earns the bounty (docs/roadmap/genlayer.md). That is a market, not a
+// earns the bounty (docs/GenLayer.md). That is a market, not a
 // scheduler — GenLayer validators judge the content *inside* the call, but
 // nothing triggers the call itself. Until someone does, a filed claim sits
 // OPEN forever. This is the bounty hunter that keeps the demo moving.

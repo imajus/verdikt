@@ -171,7 +171,7 @@ Arc, prints a plausible summary and writes nothing.
 ## Semantic claim resolution
 
 `SlaClaimJudge.resolve_claim` is permissionless by design — whoever sends it
-earns the bounty (`docs/roadmap/genlayer.md`). That is a market, not a
+earns the bounty (`docs/GenLayer.md`). That is a market, not a
 scheduler. GenLayer's validators judge the content *inside* that call, each one
 independently re-fetching the evidence, but nothing triggers the call itself,
 so a filed claim sits `OPEN` until somebody sends one.

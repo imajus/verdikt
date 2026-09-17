@@ -77,7 +77,7 @@ export const PARENT_RESOLVER_ADDRESS = SEPOLIA.ens.resolver;
 /**
  * The text records Verdikt stores on a subname. `address` is not a text record.
  *
- * `semanticConformance` is the GenLayer half (docs/roadmap/genlayer.md) and is
+ * `semanticConformance` is the GenLayer half (docs/GenLayer.md) and is
  * written by a *different* signer than the other two scores: it is aggregated
  * from a different chain by a different mechanism, so the per-key EAC that
  * already scopes `sla` to the provider scopes this to its own writer. A
@@ -434,7 +434,7 @@ export async function writeServiceScores(slug, scores, options) {
  *
  * Its own function rather than a third key on `writeServiceScores`, because it
  * is written by a different signer on a different schedule from a different
- * chain (docs/roadmap/genlayer.md). Bundling them would mean one key that can
+ * chain (docs/GenLayer.md). Bundling them would mean one key that can
  * write all three, which is exactly what the per-key EAC exists to prevent: a
  * compromised GenLayer aggregator should not be able to move a provider's
  * `conformance`.

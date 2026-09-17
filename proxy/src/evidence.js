@@ -1,4 +1,4 @@
-// The evidence side of a semantic claim (docs/roadmap/genlayer.md, #82).
+// The evidence side of a semantic claim (docs/GenLayer.md, #82).
 //
 // A GenLayer validator judging whether a response satisfied a promise needs
 // more than the response: it needs to see what was asked for. So what is kept

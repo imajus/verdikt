@@ -60,7 +60,7 @@ const serialize = (requestId, result, body, bodyTruncated) =>
  *
  * Truncation is flagged, never silent. The agent paid for that body and has to
  * be able to tell it was cut — and a semantic claim judged on a clipped body
- * (docs/roadmap/genlayer.md) would be judged on evidence nobody said was
+ * (docs/GenLayer.md) would be judged on evidence nobody said was
  * incomplete.
  *
  * @param {string} requestId

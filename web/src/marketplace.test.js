@@ -858,7 +858,7 @@ describe('what a page shows while the chain is still answering', () => {
   // behind the marketplace only bought it a skeleton of a page it is not.
   it('does not make /how wait for a chain it never reads', () => {
     const html = loading('how');
-    expect(html).toContain('Two chains, each for one reason');
+    expect(html).toContain('Three chains, each for one reason');
     expect(html).not.toContain('class="bar"');
   });
 
@@ -1300,7 +1300,7 @@ describe('the service page after the layout change', () => {
 });
 
 // The whole point of the feature: two judgements of different questions, shown
-// side by side and never merged (docs/roadmap/genlayer.md).
+// side by side and never merged (docs/GenLayer.md).
 describe('semantic settlements', () => {
   const REQUEST = `0x${'ab'.repeat(32)}`;
 

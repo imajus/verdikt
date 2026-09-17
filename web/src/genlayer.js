@@ -49,7 +49,7 @@ const CHAINS = Object.freeze({
  * A claim as the dashboard shows it. Deliberately *not* merged into
  * `ListingVerdict`: a call can be CRE PASS and semantically BREACH, and
  * flattening the two would destroy the only fact worth showing — that the
- * response was well-formed and wrong (docs/roadmap/genlayer.md).
+ * response was well-formed and wrong (docs/GenLayer.md).
  *
  * @param {Record<string, unknown>} raw one entry from `list_claims`
  * @returns {SemanticSettlement}
