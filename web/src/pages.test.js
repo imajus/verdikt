@@ -44,10 +44,10 @@ describe('withdrawPrompt', () => {
   });
 });
 describe('the footer', () => {
-  it('names the five systems the loop runs on, each linked and labelled', () => {
+  it('names the six systems the loop runs on, each linked and labelled', () => {
     const html = stringify(legalFooter());
-    expect(html.match(/class="thanks-logo"/g)?.length).toBe(5);
-    for (const name of ['Chainlink CRE', 'Arc', 'ENS', 'ETHGlobal', 'ns.com']) expect(html).toContain(`aria-label="${name}"`);
+    expect(html.match(/class="thanks-logo"/g)?.length).toBe(6);
+    for (const name of ['Chainlink CRE', 'Arc', 'ENS', 'GenLayer', 'ETHGlobal', 'ns.com']) expect(html).toContain(`aria-label="${name}"`);
     expect(html).not.toContain('majus');
     expect(html).toContain('/thanks/ens.svg');
   });

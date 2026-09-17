@@ -112,14 +112,15 @@ export const privacy = () => html`
 // artwork, fetched from the owner's site and shipped from web/public/thanks
 // as a CSS mask so all six take the footer's one muted colour and go ink on
 // hover — identification, not a row of badges. `ratio` is the mark's own
-// width over height; `height` is set per mark, because five wordmarks drawn
-// with five different amounts of air in their boxes do not land at one optical
+// width over height; `height` is set per mark, because six wordmarks drawn
+// with six different amounts of air in their boxes do not land at one optical
 // size from one shared height.
 /** @type {{href: string, name: string, file: string, ratio: number, height: number}[]} */
 const THANKS = [
   { href: 'https://cre.chain.link', name: 'Chainlink CRE', file: 'chainlink', ratio: 143 / 36, height: 19 },
   { href: 'https://arc.io', name: 'Arc', file: 'arc', ratio: 146 / 50, height: 21 },
   { href: 'https://ens.domains', name: 'ENS', file: 'ens', ratio: 300 / 94, height: 19 },
+  { href: 'https://genlayer.com', name: 'GenLayer', file: 'genlayer', ratio: 385.32 / 91.93, height: 19 },
   { href: 'https://ethglobal.com', name: 'ETHGlobal', file: 'ethglobal', ratio: 800 / 241, height: 27 },
   { href: 'https://ns.com', name: 'ns.com', file: 'ns', ratio: 129 / 20, height: 15 }
 ];
