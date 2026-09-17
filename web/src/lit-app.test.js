@@ -79,18 +79,25 @@ describe('a service with verdicts', () => {
   });
 });
 
-// The promise line is the clause itself, so each type has to say its own
-// sentence. A semantic clause's `criteria` is the binding text — deliberately
-// not its decorative `description` — and printing the schema sentence for it
-// both duplicates a heading and hides what was actually promised.
+// The promise line is one sentence naming what kind of promise the clause is,
+// so each type has to say its own. The provider's `description` is the body
+// underneath it — on a semantic clause too, where `criteria` is a paragraph of
+// judgment text that would read as a heading only by accident.
 describe('the promise line of a published clause', () => {
   /** @param {SlaClause[]} clauses */
   const promises = (clauses) => stringify(detailTemplate(listing({ sla: { version: 1, clauses } })));
 
-  it('prints a semantic clause as its criteria, verbatim', () => {
+  it('gives a semantic clause its own sentence, not its criteria', () => {
     const criteria = 'The assistant message must respond to the instruction carried in the final entry of `messages`.';
-    const html = promises([{ id: 'meets-criteria', type: 'semantic', criteria }]);
-    expect(html).toContain(criteria);
+    const description = 'Judged on dispute by GenLayer, never per call.';
+    // `description` is decorative on every clause type and so is not on
+    // `SlaSemanticClause`; the renderer reads it off the parsed document.
+    const html = promises([
+      /** @type {SlaClause} */ ({ id: 'meets-criteria', type: 'semantic', criteria, description })
+    ]);
+    expect(html).toContain('Meets the criteria published with this SLA');
+    expect(html).toContain(description);
+    expect(html).not.toContain(criteria);
     expect(html).not.toContain('Matches the response schema published with this SLA');
   });
 
@@ -106,7 +113,7 @@ describe('the promise line of a published clause', () => {
       { id: 'meets-criteria', type: 'semantic', criteria }
     ]);
     expect(html).toContain('Matches the response schema published with this SLA');
-    expect(html).toContain(criteria);
+    expect(html).toContain('Meets the criteria published with this SLA');
     expect(html.match(/Matches the response schema published with this SLA/g)).toHaveLength(1);
   });
 
