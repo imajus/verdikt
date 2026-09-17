@@ -75,6 +75,34 @@ export function loadConfig(source = process.env) {
     return urls;
   };
 
+  /**
+   * The GenLayer claim judge's address and chain id (issue #114) — relayed
+   * verbatim to a disputing agent as response headers so it can call
+   * `getContractSchema`/`get_config()` on the judge directly and learn
+   * everything else about filing a claim, with no ABI, no SDK and no prior
+   * configuration on its side.
+   *
+   * This is a plain configured constant, not a GenLayer dependency: the proxy
+   * never talks to GenLayer, imports no GenLayer library, and does not know
+   * what a claim or a clause is. It is exactly as GenLayer-agnostic as
+   * relaying an opaque bearer token would be. CLAUDE.md's package-boundary
+   * rule — `web/src/genlayer.js` is the only file that knows GenLayer exists —
+   * is about *protocol* knowledge (how to read a claim, judge a dispute); an
+   * address and a chain id copied out of `deployments/genlayer-*.json` carry
+   * none of that.
+   *
+   * Both or neither: a half-configured value would point a disputing agent at
+   * a judge it cannot actually reach.
+   *
+   * @returns {ProxyConfig['genlayer']}
+   */
+  const genlayerConfig = () => {
+    const chainId = env('GENLAYER_JUDGE_CHAIN_ID');
+    const judgeAddress = env('GENLAYER_JUDGE_ADDRESS');
+    if (!chainId || !judgeAddress) return null;
+    return { chainId: Number(chainId), judgeAddress };
+  };
+
   return {
     /**
      * Agents call `<slug>.verdikt.bond/<path>`, so the slug arrives in the Host
@@ -126,6 +154,7 @@ export function loadConfig(source = process.env) {
      */
     evidenceAdjudicationWindowMs: Number(env('PROXY_EVIDENCE_ADJUDICATION_WINDOW_MS') ?? 24 * 60 * 60 * 1000),
     paymentRpcUrls: paymentRpcUrls(),
+    genlayer: genlayerConfig(),
     arc: {
       rpcUrl: env('ARC_RPC_URL'),
       address: env('VERDIKT_REGISTRY_ADDRESS'),

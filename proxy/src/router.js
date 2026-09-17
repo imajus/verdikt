@@ -568,6 +568,18 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     'x-verdikt-verdict': result.outcome ?? 'NONE',
     'x-verdikt-mode': result.mode,
     'x-verdikt-request-id': requestId,
+    // Where to dispute this call (issue #114): the GenLayer claim judge's
+    // address and chain id, so an agent that holds this response, its
+    // requestId and the SLA it read never needs to read this repo to find the
+    // contract. `getContractSchema`/`get_config()` on the judge itself answer
+    // everything else. Omitted when `config.genlayer` is unset rather than
+    // sent stale or empty.
+    ...(config.genlayer
+      ? {
+          'x-verdikt-judge-chain-id': String(config.genlayer.chainId),
+          'x-verdikt-judge-address': config.genlayer.judgeAddress
+        }
+      : {}),
     ...failureDetailHeaders(result.clauses),
     ...(result.tx ? { 'x-verdikt-tx': result.tx } : {}),
     // The Arc write missed but the enclave still has the response. Relaying it

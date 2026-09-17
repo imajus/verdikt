@@ -437,6 +437,29 @@ describe('the verified branch — outcomes that are not PASS', () => {
     const { deps } = harness({ result: verdict({ bodyTruncated: true }) });
     expect((await paidCall(deps)).headers['x-verdikt-body-truncated']).toBe('true');
   });
+
+  // Issue #114: an agent that wants to dispute a call needs the GenLayer
+  // judge's address and chain id, and should find them on the response it
+  // already has rather than reading this repo.
+  it('names the GenLayer judge on the response, so a disputing agent needs nothing out of band', async () => {
+    const withJudge = loadConfig({
+      PROXY_PUBLIC_HOST: 'verdikt.bond',
+      VERDIKT_REGISTRY_ADDRESS: '0x01',
+      GENLAYER_JUDGE_CHAIN_ID: '61997',
+      GENLAYER_JUDGE_ADDRESS: '0xC9A5c162696C7305c10EBE44791b602d139ea471'
+    });
+    const { deps } = harness({ config: withJudge });
+    const response = await paidCall(deps);
+    expect(response.headers['x-verdikt-judge-chain-id']).toBe('61997');
+    expect(response.headers['x-verdikt-judge-address']).toBe('0xC9A5c162696C7305c10EBE44791b602d139ea471');
+  });
+
+  it('says nothing about a judge when none is configured, rather than a stale or empty header', async () => {
+    const { deps } = harness();
+    const response = await paidCall(deps);
+    expect(response.headers['x-verdikt-judge-chain-id']).toBeUndefined();
+    expect(response.headers['x-verdikt-judge-address']).toBeUndefined();
+  });
 });
 
 describe('the verified branch — failure modes (Tasks.md 4.4)', () => {

@@ -30,6 +30,27 @@ describe('payment-chain RPCs', () => {
   it('ignores a name that is not a chain it knows', () => {
     expect(loadConfig({ PAYMENT_DOGECOIN_RPC_URL: 'https://nope.example' }).paymentRpcUrls).toEqual({});
   });
+});
+
+describe('the GenLayer judge (issue #114)', () => {
+  it('is null when unset, rather than a half-filled object', () => {
+    expect(loadConfig({}).genlayer).toBeNull();
+  });
+
+  it('reads the chain id and address together', () => {
+    const config = loadConfig({
+      GENLAYER_JUDGE_CHAIN_ID: '61997',
+      GENLAYER_JUDGE_ADDRESS: '0xC9A5c162696C7305c10EBE44791b602d139ea471'
+    });
+    expect(config.genlayer).toEqual({ chainId: 61997, judgeAddress: '0xC9A5c162696C7305c10EBE44791b602d139ea471' });
+  });
+
+  it('refuses a half-configured pair rather than pointing an agent at an unreachable judge', () => {
+    expect(loadConfig({ GENLAYER_JUDGE_CHAIN_ID: '61997' }).genlayer).toBeNull();
+    expect(
+      loadConfig({ GENLAYER_JUDGE_ADDRESS: '0xC9A5c162696C7305c10EBE44791b602d139ea471' }).genlayer
+    ).toBeNull();
+  });
 
   // Pinned because these are the two the registered services actually price in,
   // and X Layer is the one most easily got wrong: its Alchemy host is

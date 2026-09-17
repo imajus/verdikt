@@ -56,7 +56,14 @@
     "PAYMENT_BASE_RPC_URL": "https://base-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
     "PAYMENT_ARBITRUM_RPC_URL": "https://arb-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
     "PAYMENT_LINEA_RPC_URL": "https://linea-mainnet.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
-    "PAYMENT_BASE_SEPOLIA_RPC_URL": "https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d"
+    "PAYMENT_BASE_SEPOLIA_RPC_URL": "https://base-sepolia.g.alchemy.com/v2/alch_Ycps6R4vs7fy-PQA7Tz9d",
+    // The GenLayer claim judge a disputing agent is pointed at (issue #114) —
+    // relayed as `x-verdikt-judge-*` response headers, see genlayerConfig in
+    // proxy/src/config.js for why this is a configured constant rather than a
+    // GenLayer dependency. Copied from `deployments/genlayer-studio-devnet.json`;
+    // keep this pair in step with that file across a judge redeploy.
+    "GENLAYER_JUDGE_CHAIN_ID": "61997",
+    "GENLAYER_JUDGE_ADDRESS": "0xC9A5c162696C7305c10EBE44791b602d139ea471"
   },
   "migrations": [
     // SQLite-backed: this class uses no `state.storage` at all — every
