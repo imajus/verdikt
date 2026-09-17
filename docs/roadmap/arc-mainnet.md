@@ -44,12 +44,12 @@ enabling the mainnet deploy; it's a real simplification on its own terms.
   removes a whole contract and a whole chain dependency, not just a config
   edit.
 
-**Open design question, unresolved:** SLA text stored fully on-chain (simple,
-but real per-byte gas on mainnet for every provider edit) vs. a hash on-chain
-with content hosted off-chain (cheap writes, but reopens a "which URL do you
-trust" question ENS was partly solving, and needs its own answer for how a
-CRE workflow or GenLayer's claim judge fetches the content behind the hash).
-Needs a decision before the contract's SLA-related functions are written.
+**SLA storage: full text on-chain.** Decided — simple, and Arc's stable/
+predictable gas pricing makes the per-edit cost acceptable for a start. No
+off-chain hosting, no "which URL do you trust" question, no separate fetch
+path for the CRE workflow or GenLayer's claim judge to get wrong. Revisit only
+if a provider's real-world edit frequency makes the gas cost a problem, not
+before.
 
 ### Downstream
 
@@ -78,7 +78,7 @@ change.
 ## What's built vs. not
 
 - [x] Scoped: what's deleted, what moves where, what's downstream
-- [ ] SLA storage design decision (on-chain text vs. hash + off-chain content)
+- [x] SLA storage design decision — full on-chain text
 - [ ] `VerdiktRegistry` changes: `setSla`, score fields, score-writing via
       `ReportReceiver`
 - [ ] Old ENS-specific contracts and `packages/sdk/ens.js` removed
