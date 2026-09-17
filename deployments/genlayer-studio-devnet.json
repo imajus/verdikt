@@ -1,0 +1,13 @@
+{
+  "$comment": "Verdikt's GenLayer deployment. Checked in for the same reason the Arc and Sepolia ones are: the addresses are public and every reader needs them.",
+  "network": "studio_devnet",
+  "chainId": 61997,
+  "settlementToken": "0xDb079bb8071a34A30C7aB9F86bD563151EAffCb4",
+  "slaClaimJudge": "0x1d75FFdFF568f929f515fa17cB0E64D38d1a5cf2",
+  "proxyBaseUrl": "https://verdikt-proxy.denis-perov.workers.dev",
+  "bondAmount": 1000000,
+  "bountyAmount": 100000,
+  "registryAddress": "0xe182626142e63ef440421cb0c5e4debeef76e4af",
+  "filingWindowSeconds": 86400,
+  "cooldownSeconds": 259200
+}

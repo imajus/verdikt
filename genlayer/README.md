@@ -25,7 +25,7 @@ scripts/deploy.py              deploys both, then reads them back off chain
 scripts/_networks.py           network resolution shared by the CLI scripts — read this before touching --network
 tests/direct/                  fast in-memory tests, no node required
 tests/integration/             the cross-contract half; needs a node
-gltest.config.yaml             network table for gltest; does not include studio_dev — see _networks.py
+gltest.config.yaml             network table for gltest; `studio_devnet` is the submission target
 ```
 
 ### Escrow, and why there is no `unescrow`
@@ -92,45 +92,38 @@ paths against it.
 
 ## Deploying
 
-`studio_dev` (chain id 61997, `https://studio-dev.genlayer.com/api`) is the
-target — it's what GenLayer's Agent Tank submission requires, not
-`testnet_bradbury`. It is not one of `genlayer_py`'s four built-in chains;
-`scripts/_networks.py` constructs it the way GenLayer's own TS SDK does
-(`studionet` with `id`/`rpc_urls` overridden — same consensus deployment,
-different RPC front door for pre-release testing).
+`studio_devnet` (chain 61997, `https://studio-dev.genlayer.com/api`) is the
+target and the default — it's what GenLayer's Agent Tank submission requires,
+not `testnet_bradbury`.
 
 ```bash
 cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
-.venv/bin/python scripts/deploy.py --dry-run       # defaults to studio_dev
+.venv/bin/python scripts/deploy.py --dry-run       # defaults to studio_devnet
 .venv/bin/python scripts/deploy.py
 ```
 
 The script deploys the token first (the judge takes its address in the
 constructor), then **reads both contracts back off chain** before writing
-`deployments/genlayer-studio-dev.json`. That read-back is not a flourish: this
-repo has already shipped a deployment that mined and did nothing, because the
-KeystoneForwarder swallows a receiver revert and reports success. A deployment
-is finished when the contract answers, not when the call returns.
+`deployments/genlayer-studio-devnet.json`. That read-back is not a flourish,
+and it has already earned its keep twice here: once catching a judge whose
+`proxy_base_url` had a path glued on (it would have 404'd every SLA read and
+resolved every claim `UNDETERMINED`), and once catching a deploy that reached
+consensus, was *accepted*, and had still executed nothing.
 
-**Funding is one RPC call, not a faucet.** Studio Dev is a hosted simulator:
-`sim_fundAccount` credits an address directly, no signed-in wallet or weekly
-cap. `--dry-run` reports the account and its balance without spending
-anything, which is the check to run before the real one.
+**Funding is one RPC call, not a faucet.** studio_devnet is a hosted
+simulator: `sim_fundAccount` credits an address directly, no signed-in wallet
+or weekly cap. `--dry-run` reports the account and its balance without
+spending anything, which is the check to run before the real one.
 
-**A real deploy currently reverts.** Every write to this network — even a
-plain, non-`nondet` deploy — reverts against the consensus contract with no
-leader receipt. This is a known, open, upstream bug
-([genlayer-cli#421](https://github.com/genlayerlabs/genlayer-cli/issues/421),
-"FeesDistributionMissing", filed the day before this note), not a
-misconfiguration here. `--network testnet_bradbury` is still available and
-known to work (real GEN, weekly faucet) as a fallback for testing while that
-gets fixed, but a Bradbury deployment does not satisfy the submission
-requirement.
+**It is a release-candidate environment**, and GenLayer documents its state
+and availability as not guaranteed across deployments. Expect to redeploy.
+Reaching it at all takes four things that fail in unrelated-looking ways when
+missing — the client version, an explicit fee distribution, the runner pin,
+and patience. `scripts/_networks.py` is the record of which is which.
 
-`tests/integration` (gltest) cannot target Studio Dev at all: gltest's
-`chain_type` resolves to `genlayer_py`'s unmodified preset chain object, so
-there is no way to hand it chain id 61997 through that config. It stays
-pinned to `studionet`/`testnet_bradbury` in `gltest.config.yaml`.
+Consensus takes **minutes**, not the 30 seconds the client waits by default;
+`deploy.py` and `claim.py` both wait longer. A transaction still sitting at
+`processing` is not a failed one.
 
 ## Filing a claim
 
@@ -222,15 +215,27 @@ nondet calls them.
 The first line of the contract pins the GenVM Python runner by hash:
 
 ```python
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 ```
 
 This is not decoration. Every GenLayer network rejects `py-genlayer:test`,
 `py-genlayer:latest` and unversioned aliases — they are local-development
 aliases for runtime developers, and a contract carrying one deploys nowhere.
-The linter will mention that a newer runner exists; upgrading is a deliberate
-change, because the runner's API is not stable across versions (`gl.Contract`
-and `allow_storage` move between them).
+
+**The pin also chooses the SDK surface**, which is why changing it is a
+migration and not a version bump. GenVM v0.6.0-rc5 ships two runners, and
+each depends on a different `py-lib-genlayer-std`:
+
+| runner | SDK style |
+|---|---|
+| `1jb45aa8…` | `from genlayer import *`, `gl.Contract`, bare `u256`/`Address`/`TreeMap` |
+| `5jycge4q…` (pinned) | `import genlayer as gl`, `gl.contract.Contract`, `gl.u256`, `gl.storage.TreeMap` |
+
+studio_devnet accepts only the second and refuses the first outright as
+`invalid_contract runner malformed`, so moving to that network meant moving
+the contracts. Deploy the old style against the new runner and GenVM raises
+`NameError: name 'gl' is not defined` — consensus will *agree* on that, mint a
+contract address, and every later call answers "not found".
 
 ## What direct mode does and does not prove
 

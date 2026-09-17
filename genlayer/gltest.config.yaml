@@ -6,9 +6,16 @@ networks:
 
   studionet: {}
 
+  # The Agent Tank submission target: chain 61997, the release-candidate
+  # environment for the next Studio and consensus stack. A preconfigured
+  # network in the genlayer-py/gltest this repo pins — on the older 0.18 line
+  # it did not exist and could not be reached from here at all.
+  studio_devnet: {}
+
   # GenLayer's public testnet. The key has to be one genlayer-py knows
-  # (`localnet`, `studionet`, `testnet_asimov`, `testnet_bradbury`) — it is how
-  # the chain is resolved, not a free-form label.
+  # (`localnet`, `studionet`, `studio_devnet`, `testnet_asimov`,
+  # `testnet_bradbury`) — it is how the chain is resolved, not a free-form
+  # label.
   testnet_bradbury:
     url: 'https://rpc-bradbury.genlayer.com'
 

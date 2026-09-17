@@ -43,7 +43,13 @@ from pathlib import Path
 # `importlib.util.spec_from_file_location`, which never puts `scripts/` on
 # `sys.path` the way running this file as `__main__` does.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _networks import NETWORKS, deployment_filename, resolve_chain  # noqa: E402
+from _networks import (  # noqa: E402
+    DEPLOY_WAIT_INTERVAL_MS,
+    DEPLOY_WAIT_RETRIES,
+    NETWORKS,
+    deployment_filename,
+    resolve_chain,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 
@@ -85,8 +91,20 @@ def write(client, address, function_name, fn_args):
     carries its own `execution_result`, and an ERROR there means the call
     reverted inside the VM while the transaction around it is perfectly fine.
     """
-    tx = client.write_contract(address=address, function_name=function_name, args=fn_args)
-    receipt = client.wait_for_transaction_receipt(transaction_hash=tx)
+    tx = client.write_contract(
+        address=address,
+        function_name=function_name,
+        args=fn_args,
+        # Same reason the deploy passes one: without an explicit distribution
+        # the client encodes an all-zero one and consensus rejects the write as
+        # `FeesDistributionMissing`, reported as a bare revert (_networks.py).
+        fees={'distribution': client.estimate_fees_distribution()},
+    )
+    receipt = client.wait_for_transaction_receipt(
+        transaction_hash=tx,
+        interval=DEPLOY_WAIT_INTERVAL_MS,
+        retries=DEPLOY_WAIT_RETRIES,
+    )
     leader = (receipt.get('consensus_data') or {}).get('leader_receipt') or [{}]
     result = leader[0].get('execution_result')
     if result != 'SUCCESS':
@@ -272,7 +290,7 @@ def cmd_withdraw(args):
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_dev'), choices=NETWORKS)
+    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_devnet'), choices=NETWORKS)
     parser.add_argument('--judge', default=None)
     parser.add_argument('--token', default=None)
     sub = parser.add_subparsers(dest='command', required=True)

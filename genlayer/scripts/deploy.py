@@ -12,25 +12,32 @@ nothing — the KeystoneForwarder swallows a receiver revert and reports success
 call returns, it is finished when the contract answers.
 
     cd genlayer
-    .venv/bin/python scripts/deploy.py --network studio_dev
+    .venv/bin/python scripts/deploy.py
     .venv/bin/python scripts/deploy.py --network localnet --dry-run
 
-`studio_dev` is the Agent Tank submission target, not `testnet_bradbury` —
-see `_networks.py` for what that network actually is and the open upstream
-bug that currently makes a real deploy to it revert.
+`studio_devnet` is the default and the Agent Tank submission target, not
+`testnet_bradbury` — see `_networks.py` for what that network is and the four
+things reaching it requires.
 """
 
 import argparse
 import json
 import os
 import sys
+import urllib.parse
 from pathlib import Path
 
 # Not a package import: this makes `_networks` resolve whether the file runs
 # as `__main__` or is loaded directly (`test_eligibility.py` does that to
 # `claim.py`, and this keeps the same pattern for consistency).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _networks import NETWORKS, deployment_filename, resolve_chain  # noqa: E402
+from _networks import (  # noqa: E402
+    DEPLOY_WAIT_INTERVAL_MS,
+    DEPLOY_WAIT_RETRIES,
+    NETWORKS,
+    deployment_filename,
+    resolve_chain,
+)
 
 REPO = Path(__file__).resolve().parents[2]
 GENLAYER = REPO / 'genlayer'
@@ -72,7 +79,7 @@ def load_env() -> dict:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--network', default='studio_dev', choices=NETWORKS)
+    parser.add_argument('--network', default='studio_devnet', choices=NETWORKS)
     parser.add_argument('--proxy-base-url', default=None, help='defaults to PROXY_BASE_URL, then the workers.dev host')
     parser.add_argument('--bond', type=int, default=DEFAULT_BOND)
     parser.add_argument('--bounty', type=int, default=DEFAULT_BOUNTY)
@@ -108,11 +115,11 @@ def main() -> int:
     # Only a public testnet, or Studio Dev's own simulator balance, actually
     # charges. A local sim reports zero for every account and deploys happily,
     # so refusing there would block the one network that needs no faucet.
-    if balance == 0 and (args.network.startswith('testnet_') or args.network == 'studio_dev'):
+    if balance == 0 and (args.network.startswith('testnet_') or args.network == 'studio_devnet'):
         # Deploying from an empty account fails somewhere further in, with a
         # message about the transaction rather than about the money. Say the
         # useful thing here instead.
-        if args.network == 'studio_dev':
+        if args.network == 'studio_devnet':
             print(
                 f'\nThis account has no GEN. Fund it with `sim_fundAccount` against {chain.rpc_urls["default"]["http"][0]} '
                 '— Studio Dev is a hosted simulator, not a faucet-gated testnet.',
@@ -126,6 +133,19 @@ def main() -> int:
     proxy_base_url = (
         args.proxy_base_url or env.get('PROXY_BASE_URL') or 'https://verdikt-proxy.denis-perov.workers.dev'
     )
+    # The judge appends `/internal/sla/<slug>` and `/internal/evidence/<id>`,
+    # so this has to be the apex host and nothing more. The root `.env`'s
+    # `PROXY_BASE_URL` is in fact the CRE *callback* URL and carries a path;
+    # taking it verbatim deploys a judge that fetches
+    # `…/internal/verification-callback/internal/sla/<slug>`, 404s on every
+    # read, and resolves every claim UNDETERMINED — a judge that looks
+    # deployed and decides nothing. Caught by reading the config back after a
+    # real deploy, which is the only reason this check exists.
+    parsed = urllib.parse.urlsplit(proxy_base_url)
+    if parsed.path.strip('/'):
+        trimmed = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))
+        print(f'note: trimming path off proxy base url: {proxy_base_url} -> {trimmed}', file=sys.stderr)
+        proxy_base_url = trimmed
     arc = json.loads((REPO / 'deployments' / 'arc-testnet.json').read_text())
     registry = args.registry or env.get('VERDIKT_REGISTRY_ADDRESS') or arc['registry']
     arc_rpc_url = args.arc_rpc_url or env.get('ARC_RPC_URL')
@@ -144,9 +164,19 @@ def main() -> int:
         )
         return 0
 
+    # The fee distribution has to be passed explicitly. Left to itself the
+    # client encodes an all-zero one and consensus rejects the transaction as
+    # `FeesDistributionMissing` — which surfaces as a bare "reverted" with no
+    # reason, and looks for all the world like a broken contract rather than a
+    # missing argument (genlayer-cli#421). Asking the chain for its own numbers
+    # is also the only way to get ones it will accept.
+    fees = {'distribution': client.estimate_fees_distribution()}
+
     token_code = (CONTRACTS / 'settlement_token.py').read_text()
     print('\ndeploying SettlementToken…')
-    token_address = client.deploy_contract(code=token_code, args=[args.token_name, args.token_symbol])
+    token_address = client.deploy_contract(
+        code=token_code, args=[args.token_name, args.token_symbol], fees=fees
+    )
     token_address = _address_of(client, token_address)
     print(f'  {token_address}')
 
@@ -158,6 +188,7 @@ def main() -> int:
             proxy_base_url, token_address, args.bond, args.bounty,
             registry, arc_rpc_url, args.filing_window, args.cooldown,
         ],
+        fees=fees,
     )
     judge_address = _address_of(client, judge_address)
     print(f'  {judge_address}')
@@ -197,10 +228,32 @@ def main() -> int:
 
 
 def _address_of(client, deployed) -> str:
-    """`deploy_contract` returns a transaction hash on some paths and an address on others."""
+    """
+    `deploy_contract` returns a transaction hash on some paths and an address
+    on others. Resolve it, and refuse anything that only *looks* deployed.
+
+    Two distinct non-deployments both hand back an address here, which is the
+    whole reason this checks rather than returns:
+
+    - Consensus decides `accepted` while the leader's `execution_result` is
+      `ERROR`. The validators agreed — that the execution failed. An address
+      is minted regardless and every later call answers "not found".
+    - Consensus has not decided yet. studio_devnet routinely takes minutes and
+      the client's default is 30 seconds, so the honest answer there is to
+      wait longer, not to treat a pending transaction as a failed one.
+    """
     if isinstance(deployed, str) and len(deployed) == 42:
         return deployed
-    receipt = client.wait_for_transaction_receipt(transaction_hash=deployed)
+    receipt = client.wait_for_transaction_receipt(
+        transaction_hash=deployed,
+        interval=DEPLOY_WAIT_INTERVAL_MS,
+        retries=DEPLOY_WAIT_RETRIES,
+    )
+    leader = (receipt.get('consensus_data') or {}).get('leader_receipt') or [{}]
+    result = leader[0].get('execution_result')
+    if result != 'SUCCESS':
+        detail = (leader[0].get('genvm_result') or {}).get('stderr', '') or result
+        raise SystemExit(f'deployment did not execute: {detail}')
     address = receipt.get('data', {}).get('contract_address') or receipt.get('contract_address')
     if not address:
         raise SystemExit(f'no contract address in receipt: {receipt}')

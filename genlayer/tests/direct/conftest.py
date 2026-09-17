@@ -41,6 +41,42 @@ WRITTEN_AT = NOW - 3600
 
 
 @pytest.fixture
+def direct_deploy(direct_deploy, direct_vm):  # noqa: F811 — deliberately wraps gltest's own fixture
+    """
+    gltest's `direct_deploy`, plus `gl.vm.get_timestamp()`, which direct mode
+    does not implement.
+
+    The contract reads the transaction's timestamp through the VM, which is
+    what makes the leader and every validator judge a deadline against the
+    same instant. Direct mode runs the contract in-process and answers that
+    call with `None`, so without this every deadline test dies on
+    `'NoneType' object has no attribute 'timestamp'` — a limitation of the
+    simulator, not a fact about the contract.
+
+    It has to wrap the deploy rather than be a plain autouse fixture, because
+    the GenVM SDK is not importable — there is no `genlayer.vm` to patch —
+    until something has been deployed.
+
+    Patched here rather than worked around in the contract: a fallback in
+    `_now()` would be production code shaped by the test harness, and it would
+    go on quietly returning wall-clock time on a real node the day the VM call
+    started failing for some other reason.
+    """
+    import sys
+
+    def deploy(*args, **kwargs):
+        deployed = direct_deploy(*args, **kwargs)
+        genlayer_vm = sys.modules.get('genlayer.vm')
+        if genlayer_vm is not None:
+            genlayer_vm.get_timestamp = lambda: datetime.datetime.fromisoformat(
+                direct_vm._datetime.replace('Z', '+00:00')
+            )
+        return deployed
+
+    return deploy
+
+
+@pytest.fixture
 def judge(direct_deploy):
     """
     A deployed SlaClaimJudge with no settlement token.
@@ -78,15 +114,31 @@ def load_judge_module():
     import sys
     from pathlib import Path
 
-    # The SDK allows exactly one `gl.Contract` subclass per process and the
-    # deploy above already registered one, so a second import of the same file
-    # raises. Park the registration, import, put it back — glsim does the same
-    # thing for the same reason.
-    registry = sys.modules.get('genlayer.gl.genvm_contracts')
-    attr = next((name for name in ('__known_contact__', '__known_contract__') if hasattr(registry, name)), None)
-    parked = getattr(registry, attr) if attr else None
-    if attr:
-        setattr(registry, attr, None)
+    # The SDK allows exactly one contract subclass per process and the deploy
+    # above already registered one, so a second import of the same file raises.
+    # Park the registration, import, put it back — glsim does the same thing
+    # for the same reason.
+    #
+    # Where that registration lives moved with the SDK: it was
+    # `genlayer.gl.genvm_contracts.__known_contact__` (sic) under the old
+    # `from genlayer import *` runner, and is
+    # `genlayer.contract.__known_contract__` under the one this repo now pins.
+    # Both are checked, and a miss raises rather than silently parking
+    # nothing — which would not fail here, it would fail in every test that
+    # imports the module.
+    registry = next(
+        (
+            module
+            for module in (sys.modules.get('genlayer.contract'), sys.modules.get('genlayer.gl.genvm_contracts'))
+            if module is not None
+        ),
+        None,
+    )
+    attr = next((name for name in ('__known_contract__', '__known_contact__') if hasattr(registry, name)), None)
+    if attr is None:
+        raise RuntimeError('cannot find the SDK’s one-contract registration to park; the SDK layout moved again')
+    parked = getattr(registry, attr)
+    setattr(registry, attr, None)
     try:
         path = Path(__file__).resolve().parents[2] / 'contracts' / 'sla_claim_judge.py'
         spec = importlib.util.spec_from_file_location('sla_claim_judge_under_test', path)
@@ -94,8 +146,7 @@ def load_judge_module():
         spec.loader.exec_module(module)
         return module
     finally:
-        if attr:
-            setattr(registry, attr, parked)
+        setattr(registry, attr, parked)
 
 
 def to_hex(addr_bytes):
@@ -236,25 +287,41 @@ def mock_arc(direct_vm, *, verdict_hex=None, payer=None, now=NOW, status=200, rp
     )
 
 
+def mock_llm_json(direct_vm, pattern, payload):
+    """
+    Mock an LLM call the contract makes with `response_format='json'`.
+
+    The double `json.dumps` is not a typo, and this helper exists to hold it
+    in one place. gltest's direct mock auto-parses a mocked response that
+    looks like JSON and hands the SDK the parsed object, because the older
+    SDK's `exec_prompt(response_format='json')` wanted a dict. The SDK this
+    repo now pins wants *text* it parses itself, and rejects anything else
+    with `invalid nondeterministic response: JSON result is not text`.
+
+    So the payload is encoded twice: gltest's parse unwraps the outer layer
+    and passes the inner JSON along as a string, which is what the SDK
+    expects. Drop this the day gltest stops auto-parsing — the symptom will be
+    every judgment test failing on invalid JSON, not a silent wrong answer.
+    """
+    direct_vm.mock_llm(pattern, json.dumps(json.dumps(payload)))
+
+
 def mock_judgment(direct_vm, outcome, reasoning='Because.'):
-    direct_vm.mock_llm(r'.*adjudicating whether an API response.*', json.dumps({'outcome': outcome, 'reasoning': reasoning}))
+    mock_llm_json(direct_vm, r'.*adjudicating whether an API response.*', {'outcome': outcome, 'reasoning': reasoning})
 
 
 def advance(direct_vm, seconds):
     """Move the clock the contract actually reads, forward from where it is now.
 
-    `direct_vm.warp` moves the stdlib clock but not `gl.message_raw['datetime']`,
-    which is where the VM puts the transaction timestamp and therefore what the
-    contract measures its deadlines against. Both are set, and the step is
-    relative to the current message time rather than to wall-clock now, so a
-    test that advances the clock cannot leave it somewhere that changes what a
-    later test means.
+    `direct_vm.warp` is the whole of it now: it sets `direct_vm._datetime`,
+    which is both the stdlib clock direct mode patches and the value the
+    wrapped `direct_deploy` answers `gl.vm.get_timestamp()` with — so the
+    contract's deadlines and the test's clock cannot drift apart.
+
+    The step is relative to the current message time rather than to wall-clock
+    now, so a test that advances the clock cannot leave it somewhere that
+    changes what a later test means.
     """
-    gl = sys.modules.get('genlayer.gl')
-    raw = getattr(gl, 'message_raw', None) if gl is not None else None
-    current = (raw or {}).get('datetime') or datetime.datetime.now(datetime.timezone.utc).isoformat()
+    current = direct_vm._datetime
     when = datetime.datetime.fromisoformat(current.replace('Z', '+00:00')) + datetime.timedelta(seconds=seconds)
-    stamp = when.isoformat().replace('+00:00', 'Z')
-    direct_vm.warp(stamp)
-    if raw is not None:
-        raw['datetime'] = stamp
+    direct_vm.warp(when.isoformat().replace('+00:00', 'Z'))

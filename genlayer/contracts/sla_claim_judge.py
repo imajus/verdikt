@@ -1,4 +1,4 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 """
 SlaClaimJudge — the semantic half of a Verdikt verdict.
 
@@ -18,7 +18,8 @@ import datetime
 import json
 from dataclasses import dataclass
 
-from genlayer import *
+import genlayer as gl
+from genlayer.storage import allow as allow_storage
 
 # Error prefixes. Validators compare errors, not just successes, so the class of
 # a failure has to survive into the message: `[EXPECTED]`/`[EXTERNAL]` must match
@@ -70,14 +71,14 @@ class Claim:
     request_id: str
     clause_id: str
     slug: str
-    claimant: Address
+    claimant: gl.Address
     # Frozen at submit time and deliberately never re-read. A provider editing
     # its SLA mid-dispute must not be able to change what is being judged — the
     # same protection `failedClause` hashing gives the deterministic side.
     criteria: str
     # Transaction time of `submit_claim`, in epoch seconds. Start of the
     # adjudication window — the claim's own clock, not the paid call's.
-    filed_at: u256
+    filed_at: gl.u256
     # The payer's EIP-191 signature over `Verdikt evidence disclosure\nrequest:
     # <id>`. It is what unlocks the response body from the proxy: evidence is
     # the agent's own purchased response, and this is the agent saying the
@@ -88,19 +89,19 @@ class Claim:
     # `VerdiktRegistry.getVerdict(requestId).paidAmount` on Arc, never supplied
     # by the claimant. Compensation is sized to match this number — not
     # converted to it; the settlement token is pegged to nothing.
-    paid_amount: u256
-    bond: u256
+    paid_amount: gl.u256
+    bond: gl.u256
     resolved: bool
     outcome: str
     reasoning: str
     # Written at resolution, so a reader can see what a judgment actually cost
     # rather than inferring it from balances.
-    compensation: u256
-    bounty: u256
+    compensation: gl.u256
+    bounty: gl.u256
 
 
-class SlaClaimJudge(gl.Contract):
-    owner: Address
+class SlaClaimJudge(gl.contract.Contract):
+    owner: gl.Address
     # The proxy's apex host, e.g. `https://verdikt-proxy.workers.dev`. Per-slug
     # hosts serve the paid leg; the internal read endpoints live on the apex.
     proxy_base_url: str
@@ -112,47 +113,47 @@ class SlaClaimJudge(gl.Contract):
     # How long after `writtenAt` a claim may still be opened. Bounds the
     # provider's exposure; the adjudication runway is the proxy's separate
     # clock (docs/roadmap/genlayer.md, "Two clocks, not one").
-    filing_window_seconds: u256
+    filing_window_seconds: gl.u256
     # How long a requested withdrawal waits. Must cover the filing window plus
     # an adjudication runway, or the cooldown does not actually outlast the
     # exposure it exists to outlast — the constructor refuses otherwise.
-    cooldown_seconds: u256
+    cooldown_seconds: gl.u256
     # The settlement token. Empty means this judge decides claims and settles
     # nothing — useful for a smoke test, useless for a demo.
     token_address: str
-    bond_amount: u256
+    bond_amount: gl.u256
     # A fixed constant, not metered against actual gas. Whoever calls
     # `submit_claim`/`resolve_claim` pays their own GEN directly; there is no
     # relay to front or reimburse anything, so this is a bounty for doing the
     # work rather than a reimbursement of a measured cost.
-    bounty_amount: u256
-    claims: TreeMap[str, Claim]
-    claim_keys: DynArray[str]
+    bounty_amount: gl.u256
+    claims: gl.storage.TreeMap[str, Claim]
+    claim_keys: gl.storage.DynArray[str]
     # slug -> the GenLayer account whose escrow backs it. Binding is permanent
     # while the slug carries a live deposit: a deposit that could change hands
     # mid-dispute would let a provider hand its liability to an empty account.
     # It is *not* permanent once that owner has withdrawn back to zero with no
     # claim open — the slug is vacant then, and a different account may bind
     # it. See `fund_deposit` for the identity gap this still leaves open.
-    deposit_owner: TreeMap[str, Address]
+    deposit_owner: gl.storage.TreeMap[str, gl.Address]
     # What that owner committed to this slug, as this contract last read it.
     # The real ceiling is the escrow itself, re-read at credit time — this is
     # the advertised figure, and settlement never trusts it alone.
-    deposit_amount: TreeMap[str, u256]
+    deposit_amount: gl.storage.TreeMap[str, gl.u256]
     # Per owner, the sum of `deposit_amount` across every slug they back. The
     # escrow a `SettlementToken` reports is a single bucket per (owner,
     # custodian) pair, shared across every slug the same owner funds — without
     # this running total, `fund_deposit` would count the same escrowed tokens
     # as collateral for each slug independently.
-    deposit_committed: TreeMap[Address, u256]
-    open_claims: TreeMap[str, u256]
+    deposit_committed: gl.storage.TreeMap[gl.Address, gl.u256]
+    open_claims: gl.storage.TreeMap[str, gl.u256]
     # When a withdrawal was requested, or 0 for none pending. The deposit stays
     # escrowed and fully liable for the whole cooldown — this records an
     # intention, not a release.
-    withdrawal_requested_at: TreeMap[str, u256]
+    withdrawal_requested_at: gl.storage.TreeMap[str, gl.u256]
     # Per claimant, the bond total across their still-open claims. Without it
     # one escrow would back an unlimited number of simultaneous claims.
-    bonded: TreeMap[Address, u256]
+    bonded: gl.storage.TreeMap[gl.Address, gl.u256]
 
     def __init__(
         self,
@@ -168,11 +169,11 @@ class SlaClaimJudge(gl.Contract):
         self.owner = gl.message.sender_address
         self.proxy_base_url = proxy_base_url.rstrip('/')
         self.token_address = token_address
-        self.bond_amount = u256(bond_amount)
-        self.bounty_amount = u256(bounty_amount)
+        self.bond_amount = gl.u256(bond_amount)
+        self.bounty_amount = gl.u256(bounty_amount)
         self.registry_address = registry_address
         self.arc_rpc_url = arc_rpc_url
-        self.filing_window_seconds = u256(filing_window_seconds)
+        self.filing_window_seconds = gl.u256(filing_window_seconds)
         # Checked here rather than left to the operator, because a cooldown
         # shorter than the exposure is not a shorter cooldown — it is no
         # cooldown at all, and it would look configured. The factor of two is
@@ -183,7 +184,7 @@ class SlaClaimJudge(gl.Contract):
             raise gl.vm.UserError(
                 f'{ERROR_EXPECTED} cooldown_seconds must be at least twice filing_window_seconds'
             )
-        self.cooldown_seconds = u256(cooldown_seconds)
+        self.cooldown_seconds = gl.u256(cooldown_seconds)
 
     # ------------------------------------------------------------------ writes
 
@@ -244,9 +245,9 @@ class SlaClaimJudge(gl.Contract):
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Escrow settlement tokens to this contract first')
 
         self.deposit_owner[slug] = sender
-        self.deposit_amount[slug] = u256(allocatable)
-        self.deposit_committed[sender] = u256(committed_elsewhere + allocatable)
-        self.withdrawal_requested_at[slug] = u256(0)
+        self.deposit_amount[slug] = gl.u256(allocatable)
+        self.deposit_committed[sender] = gl.u256(committed_elsewhere + allocatable)
+        self.withdrawal_requested_at[slug] = gl.u256(0)
 
     @gl.public.write
     def submit_claim(self, request_id: str, clause_id: str, slug: str, disclosure_signature: str) -> None:
@@ -301,19 +302,19 @@ class SlaClaimJudge(gl.Contract):
             slug=slug,
             claimant=claimant,
             criteria=criteria,
-            filed_at=u256(_now()),
+            filed_at=gl.u256(_now()),
             disclosure_signature=disclosure_signature,
-            paid_amount=u256(paid_amount),
+            paid_amount=gl.u256(paid_amount),
             bond=self.bond_amount,
             resolved=False,
             outcome=OUTCOME_OPEN,
             reasoning='',
-            compensation=u256(0),
-            bounty=u256(0),
+            compensation=gl.u256(0),
+            bounty=gl.u256(0),
         )
         self.claim_keys.append(key)
-        self.bonded[claimant] = u256(committed + self.bond_amount)
-        self.open_claims[slug] = u256(self.open_claims.get(slug, 0) + 1)
+        self.bonded[claimant] = gl.u256(committed + self.bond_amount)
+        self.open_claims[slug] = gl.u256(self.open_claims.get(slug, 0) + 1)
 
     @gl.public.write
     def resolve_claim(self, request_id: str, clause_id: str) -> None:
@@ -364,7 +365,7 @@ class SlaClaimJudge(gl.Contract):
             raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit to withdraw')
         # `get_deposit` is where a provider reads when this becomes
         # withdrawable; one place to ask beats a return value and a view.
-        self.withdrawal_requested_at[slug] = u256(self._now_bucketed())
+        self.withdrawal_requested_at[slug] = gl.u256(self._now_bucketed())
 
     @gl.public.write
     def cancel_withdrawal(self, slug: str) -> None:
@@ -372,7 +373,7 @@ class SlaClaimJudge(gl.Contract):
         self._require_depositor(slug)
         if self.withdrawal_requested_at.get(slug, 0) == 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} No withdrawal is pending for {slug}')
-        self.withdrawal_requested_at[slug] = u256(0)
+        self.withdrawal_requested_at[slug] = gl.u256(0)
 
     @gl.public.write
     def withdraw_deposit(self, slug: str) -> None:
@@ -399,9 +400,9 @@ class SlaClaimJudge(gl.Contract):
         # Only this slug's own allocated share, never the owner's whole escrow
         # bucket — a bucket the owner may also be backing other slugs from.
         amount = self.deposit_amount.get(slug, 0)
-        self.deposit_amount[slug] = u256(0)
-        self.deposit_committed[owner] = u256(max(0, self.deposit_committed.get(owner, 0) - amount))
-        self.withdrawal_requested_at[slug] = u256(0)
+        self.deposit_amount[slug] = gl.u256(0)
+        self.deposit_committed[owner] = gl.u256(max(0, self.deposit_committed.get(owner, 0) - amount))
+        self.withdrawal_requested_at[slug] = gl.u256(0)
         if amount > 0:
             self._release(owner, owner, amount)
 
@@ -475,11 +476,11 @@ class SlaClaimJudge(gl.Contract):
 
     @gl.public.view
     def get_bonded(self, account: str) -> int:
-        return self.bonded.get(Address(account), 0)
+        return self.bonded.get(gl.Address(account), 0)
 
     # ---------------------------------------------------------------- internals
 
-    def _settle(self, claim: Claim, resolver: Address) -> None:
+    def _settle(self, claim: Claim, resolver: gl.Address) -> None:
         """
         Move money, once, according to the outcome already written.
 
@@ -490,8 +491,8 @@ class SlaClaimJudge(gl.Contract):
         cannot be taken back, which for a payout means paying a claimant more
         than once for a judgment that was later overturned.
         """
-        self.bonded[claim.claimant] = u256(max(0, self.bonded.get(claim.claimant, 0) - claim.bond))
-        self.open_claims[claim.slug] = u256(max(0, self.open_claims.get(claim.slug, 0) - 1))
+        self.bonded[claim.claimant] = gl.u256(max(0, self.bonded.get(claim.claimant, 0) - claim.bond))
+        self.open_claims[claim.slug] = gl.u256(max(0, self.open_claims.get(claim.slug, 0) - 1))
 
         if not self.token_address:
             return
@@ -524,16 +525,16 @@ class SlaClaimJudge(gl.Contract):
             bond=bond_available,
             bounty=self.bounty_amount,
         )
-        claim.compensation = u256(plan['compensation'])
-        claim.bounty = u256(plan['bounty'])
+        claim.compensation = gl.u256(plan['compensation'])
+        claim.bounty = gl.u256(plan['bounty'])
 
         if plan['from_provider'] > 0 and provider is not None:
             if plan['compensation'] > 0:
                 self._release(provider, claim.claimant, plan['compensation'])
             if plan['bounty'] > 0:
                 self._release(provider, resolver, plan['bounty'])
-            self.deposit_amount[claim.slug] = u256(max(0, available - plan['from_provider']))
-            self.deposit_committed[provider] = u256(
+            self.deposit_amount[claim.slug] = gl.u256(max(0, available - plan['from_provider']))
+            self.deposit_committed[provider] = gl.u256(
                 max(0, self.deposit_committed.get(provider, 0) - plan['from_provider'])
             )
         elif plan['from_consumer'] > 0:
@@ -550,18 +551,18 @@ class SlaClaimJudge(gl.Contract):
             self._release(claim.claimant, claim.claimant, surplus)
 
     def _token(self):
-        return gl.get_contract_at(Address(self.token_address))
+        return gl.contract.get_at(gl.Address(self.token_address))
 
-    def _escrow_of(self, owner: Address) -> int:
+    def _escrow_of(self, owner: gl.Address) -> int:
         """How much of `owner`'s balance this contract may currently move."""
         if not self.token_address:
             return 0
         return int(self._token().view().escrow_of(owner.as_hex, gl.message.contract_address.as_hex))
 
-    def _release(self, owner: Address, to: Address, amount: int) -> None:
+    def _release(self, owner: gl.Address, to: gl.Address, amount: int) -> None:
         self._token().emit(on='finalized').release(owner.as_hex, to.as_hex, amount)
 
-    def _require_depositor(self, slug: str) -> Address:
+    def _require_depositor(self, slug: str) -> gl.Address:
         owner = self.deposit_owner.get(slug)
         if owner is None:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} {slug} has no deposit')
@@ -662,7 +663,7 @@ class SlaClaimJudge(gl.Contract):
         window = int(self.filing_window_seconds)
         external, transient = ERROR_EXTERNAL, ERROR_TRANSIENT
         words = VERDICT_WORDS
-        selector = Keccak256(b'getVerdict(bytes32)').digest()[:4]
+        selector = gl.Keccak256(b'getVerdict(bytes32)').digest()[:4]
 
         def read() -> str:
             # Inlined rather than calling a module-level helper. A nondet block
@@ -894,12 +895,12 @@ class SlaClaimJudge(gl.Contract):
             mine = leader_fn()
             return mine['outcome'] == leaders_res.calldata['outcome']
 
-        return gl.vm.run_nondet_unsafe(leader_fn, validator_fn)
+        return gl.vm.run_nondet(leader_fn, validator_fn)
 
 
 # --------------------------------------------------------------- module helpers
 #
-# Free functions rather than methods: `run_nondet_unsafe` cloudpickles the
+# Free functions rather than methods: `run_nondet` cloudpickles the
 # closures it is handed, and capturing `self` would drag contract storage
 # through that boundary.
 
@@ -923,16 +924,16 @@ def _now() -> int:
     """
     The transaction's timestamp, in epoch seconds.
 
-    Read off the VM message rather than a clock, so the leader and every
-    validator judging a deadline see the same instant. Two runner details this
-    has to route around, both verified against the pinned runner above:
-    `gl.message` does not expose `datetime` (only `gl.message_raw` does), and
-    `gl.vm.get_timestamp()` landed in a later runner than the one pinned here.
+    Read off the VM rather than a clock, so the leader and every validator
+    judging a deadline see the same instant: in deterministic mode
+    `get_timestamp` is the transaction's own timestamp, not wall time.
+
+    This used to dig the value out of `gl.message_raw['datetime']` and parse
+    it, because the runner pinned at the time exposed it nowhere else. The
+    runner this contract now pins has `gl.vm.get_timestamp()`, so the
+    workaround is gone.
     """
-    stamp = gl.message_raw.get('datetime')
-    if not isinstance(stamp, str) or not stamp:
-        raise gl.vm.UserError(f'{ERROR_EXPECTED} Transaction carries no timestamp')
-    return int(datetime.datetime.fromisoformat(stamp.replace('Z', '+00:00')).timestamp())
+    return int(gl.vm.get_timestamp().timestamp())
 
 
 def withdrawal_refusal(*, open_claims: int, requested_at: int, cooldown_elapsed: bool) -> str | None:
@@ -966,11 +967,11 @@ def _is_request_id(value: str) -> bool:
 
 def service_id_of(slug: str) -> str:
     """`keccak256(bytes(slug))` — the same id Arc's registry uses."""
-    return '0x' + Keccak256(slug.encode('utf-8')).digest().hex()
+    return '0x' + gl.Keccak256(slug.encode('utf-8')).digest().hex()
 
 
 def _encode_get_verdict(request_id: str) -> str:
-    selector = Keccak256(b'getVerdict(bytes32)').digest()[:4]
+    selector = gl.Keccak256(b'getVerdict(bytes32)').digest()[:4]
     return '0x' + (selector + bytes.fromhex(request_id[2:])).hex()
 
 

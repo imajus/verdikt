@@ -33,7 +33,7 @@ from _networks import NETWORKS, resolve_chain  # noqa: E402
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--judge', default=os.environ.get('GENLAYER_JUDGE_ADDRESS'))
-    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_dev'), choices=NETWORKS)
+    parser.add_argument('--network', default=os.environ.get('GENLAYER_NETWORK', 'studio_devnet'), choices=NETWORKS)
     args = parser.parse_args()
 
     if not args.judge:

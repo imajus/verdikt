@@ -1,4 +1,4 @@
-# { "Depends": "py-genlayer:1jb45aa8ynh2a9c9xn3b7qqh8sm5q93hwfp7jqmwsfhh8jpz09h6" }
+# { "Depends": "py-genlayer:5jycge4q8k23462jtb0b9fyey1s9qz928sz2nbrd9mg4sxqg2qng" }
 """
 The currency a semantic claim settles in.
 
@@ -16,7 +16,7 @@ next to the payment that provoked it.
 See docs/roadmap/genlayer.md, "Settlement is GenLayer-native".
 """
 
-from genlayer import *
+import genlayer as gl
 
 ERROR_EXPECTED = '[EXPECTED]'
 
@@ -25,21 +25,21 @@ ERROR_EXPECTED = '[EXPECTED]'
 MINT_LIMIT = 1_000_000_000_000
 
 
-class SettlementToken(gl.Contract):
+class SettlementToken(gl.contract.Contract):
     name: str
     symbol: str
-    total_supply: u256
-    balances: TreeMap[Address, u256]
+    total_supply: gl.u256
+    balances: gl.storage.TreeMap[gl.Address, gl.u256]
     # owner -> custodian -> amount. Escrow is a one-way handoff of *authority*,
     # not of ownership: the balance still belongs to the owner and is still
     # counted as theirs, but only the custodian contract can move it. There is
     # deliberately no `unescrow` — see `release`.
-    escrows: TreeMap[Address, TreeMap[Address, u256]]
+    escrows: gl.storage.TreeMap[gl.Address, gl.storage.TreeMap[gl.Address, gl.u256]]
 
     def __init__(self, name: str, symbol: str):
         self.name = name
         self.symbol = symbol
-        self.total_supply = u256(0)
+        self.total_supply = gl.u256(0)
 
     # ------------------------------------------------------------------ writes
 
@@ -51,15 +51,15 @@ class SettlementToken(gl.Contract):
         if amount > MINT_LIMIT:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Mint amount exceeds {MINT_LIMIT}')
         sender = gl.message.sender_address
-        self.balances[sender] = u256(self.balances.get(sender, 0) + amount)
-        self.total_supply = u256(self.total_supply + amount)
+        self.balances[sender] = gl.u256(self.balances.get(sender, 0) + amount)
+        self.total_supply = gl.u256(self.total_supply + amount)
 
     @gl.public.write
     def transfer(self, to: str, amount: int) -> None:
         sender = gl.message.sender_address
         self._debit_free(sender, amount)
-        recipient = Address(to)
-        self.balances[recipient] = u256(self.balances.get(recipient, 0) + amount)
+        recipient = gl.Address(to)
+        self.balances[recipient] = gl.u256(self.balances.get(recipient, 0) + amount)
 
     @gl.public.write
     def escrow(self, custodian: str, amount: int) -> None:
@@ -77,8 +77,8 @@ class SettlementToken(gl.Contract):
         if self.balances.get(sender, 0) < self._escrowed_total(sender) + amount:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Insufficient unescrowed balance')
         held = self.escrows.get_or_insert_default(sender)
-        custodian_address = Address(custodian)
-        held[custodian_address] = u256(held.get(custodian_address, 0) + amount)
+        custodian_address = gl.Address(custodian)
+        held[custodian_address] = gl.u256(held.get(custodian_address, 0) + amount)
 
     @gl.public.write
     def release(self, owner: str, to: str, amount: int) -> None:
@@ -96,30 +96,30 @@ class SettlementToken(gl.Contract):
         if amount <= 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Release amount must be positive')
         custodian = gl.message.sender_address
-        owner_address = Address(owner)
+        owner_address = gl.Address(owner)
         held = self.escrows.get_or_insert_default(owner_address)
         available = held.get(custodian, 0)
         if available < amount:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Escrow holds only {available}')
-        held[custodian] = u256(available - amount)
-        self.balances[owner_address] = u256(self.balances.get(owner_address, 0) - amount)
-        recipient = Address(to)
-        self.balances[recipient] = u256(self.balances.get(recipient, 0) + amount)
+        held[custodian] = gl.u256(available - amount)
+        self.balances[owner_address] = gl.u256(self.balances.get(owner_address, 0) - amount)
+        recipient = gl.Address(to)
+        self.balances[recipient] = gl.u256(self.balances.get(recipient, 0) + amount)
 
     # ------------------------------------------------------------------- views
 
     @gl.public.view
     def balance_of(self, account: str) -> int:
-        return self.balances.get(Address(account), 0)
+        return self.balances.get(gl.Address(account), 0)
 
     @gl.public.view
     def escrow_of(self, owner: str, custodian: str) -> int:
-        return self.escrows.get_or_insert_default(Address(owner)).get(Address(custodian), 0)
+        return self.escrows.get_or_insert_default(gl.Address(owner)).get(gl.Address(custodian), 0)
 
     @gl.public.view
     def available_of(self, account: str) -> int:
         """Balance minus everything already answerable to some custodian."""
-        address = Address(account)
+        address = gl.Address(account)
         return self.balances.get(address, 0) - self._escrowed_total(address)
 
     @gl.public.view
@@ -128,13 +128,13 @@ class SettlementToken(gl.Contract):
 
     # ---------------------------------------------------------------- internals
 
-    def _escrowed_total(self, owner: Address) -> int:
+    def _escrowed_total(self, owner: gl.Address) -> int:
         return sum(amount for _, amount in self.escrows.get_or_insert_default(owner).items())
 
-    def _debit_free(self, sender: Address, amount: int) -> None:
+    def _debit_free(self, sender: gl.Address, amount: int) -> None:
         if amount <= 0:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Transfer amount must be positive')
         free = self.balances.get(sender, 0) - self._escrowed_total(sender)
         if free < amount:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Insufficient unescrowed balance')
-        self.balances[sender] = u256(self.balances.get(sender, 0) - amount)
+        self.balances[sender] = gl.u256(self.balances.get(sender, 0) - amount)

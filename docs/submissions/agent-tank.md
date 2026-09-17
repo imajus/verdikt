@@ -93,23 +93,28 @@ every verdict and score on it was read back off a chain.
        .venv/bin/glsim --port 4000 --no-browser &
        .venv/bin/gltest tests/integration -q             # the judge and the token, wired together
 
-6. Deploy the pair to Studio Dev, the submission's required network:
+6. Both contracts are live on Studio Devnet (chain 61997) — the record is
+   deployments/genlayer-studio-devnet.json in the repo:
+       SettlementToken  0xDb079bb8071a34A30C7aB9F86bD563151EAffCb4
+       SlaClaimJudge    0x1d75FFdFF568f929f515fa17cB0E64D38d1a5cf2
+
+7. Or deploy your own:
        cp .env.example .env            # then fill in GENLAYER_PRIVATE_KEY
        .venv/bin/python scripts/deploy.py
-   Funding is one `sim_fundAccount` RPC call, no faucet. It deploys the token
-   first, the judge second, and reads both back off chain before it writes
-   deployments/genlayer-studio-dev.json.
+   Funding is one sim_fundAccount RPC call, no faucet. It deploys the token
+   first, the judge second, and reads both back off chain. Consensus takes
+   minutes, not seconds.
 ```
 
 ## Private notes for judges (max 500)
 
 ```
-Honest scope: the deterministic leg (CRE, Arc, ENS) is live on testnets and has been for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: contracts, 72 direct tests, 5 integration tests against a real node, and a deploy script verified end-to-end on glsim.
+Honest scope: the deterministic leg (CRE, Arc, ENS) has been live on testnets for weeks — docs/evidence/ has the transcripts. The GenLayer leg is new on feat/genlayer: 108 direct tests plus an integration suite against a real node.
 
-Studio Dev deploy reverts on an open upstream bug (genlayer-cli#421), not a config issue here — a fresh, funded account hits the same revert. Please judge the design and the tests, not a testnet address.
+Both contracts are live on Studio Devnet (61997), addresses in the how-to. Reaching it needs the v0.19 client, an explicit fee distribution (genlayer-cli#421) and the v0.6 runner — a different SDK surface, so the contracts were migrated to it.
 ```
 
-*498 characters.*
+*476 characters.*
 
 ## Demo video
 
@@ -125,9 +130,11 @@ Worth being straight about, because the submission text above is compressed:
 - **Live and real:** the CRE leg. `VerdiktRegistry` on Arc Testnet, subnames and
   hourly scores on Sepolia, the proxy on `*.verdikt.bond`, real agents paying
   real providers. `docs/evidence/`.
-- **Built and tested, not yet deployed:** the GenLayer leg. `SlaClaimJudge`,
-  `SettlementToken`, the proxy's SLA and evidence endpoints, the deploy script.
-  Blocked on genlayer-cli#421 (Studio Dev reverting every write), not on code
-  here — see genlayer/scripts/_networks.py for the detail.
+- **Deployed and exercised:** the GenLayer leg. `SlaClaimJudge` and
+  `SettlementToken` on Studio Devnet, deployed and read back off chain, with a
+  real `mint` write settled through consensus. The proxy's SLA and evidence
+  endpoints are built and tested but **not yet deployed**, so a claim opened
+  against the live judge would resolve `UNDETERMINED` for want of evidence —
+  see genlayer/scripts/_networks.py for what reaching that network takes.
 - **Designed, not built:** the dashboard surfacing semantic settlements (#91),
   the `semanticConformance` score (#92), the claimant CLI (#94).

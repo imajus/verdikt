@@ -24,7 +24,7 @@ export const SEMANTIC_OUTCOMES = Object.freeze(['OPEN', 'BREACH', 'MET', 'UNDETE
  * and `rpcUrls` overridden, since it is the same consensus deployment fronted
  * by a different RPC for pre-release testing.
  */
-const STUDIO_DEV = Object.freeze({
+const STUDIO_DEVNET = Object.freeze({
   ...chains.studionet,
   id: 61_997,
   name: 'GenLayer Studio Devnet',
@@ -37,7 +37,7 @@ const CHAINS = Object.freeze({
   studionet: chains.studionet,
   testnet_asimov: chains.testnetAsimov,
   testnet_bradbury: chains.testnetBradbury,
-  studio_dev: STUDIO_DEV
+  studio_devnet: STUDIO_DEVNET
 });
 
 /**
@@ -115,7 +115,7 @@ export const isBreach = (settlement) => settlement.outcome === 'BREACH';
  */
 export function createGenLayerReader({ network, judgeAddress, rpcUrl } = {}) {
   if (!judgeAddress) return null;
-  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'studio_dev')];
+  const chain = CHAINS[/** @type {keyof typeof CHAINS} */ (network ?? 'studio_devnet')];
   if (!chain) return null;
 
   const client = createClient(rpcUrl ? { chain, endpoint: rpcUrl } : { chain });

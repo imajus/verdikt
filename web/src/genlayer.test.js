@@ -107,16 +107,16 @@ describe('createGenLayerReader', () => {
     expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
   });
 
-  // studio_dev is the Agent Tank submission target, not testnet_bradbury —
+  // studio_devnet is the Agent Tank submission target, not testnet_bradbury —
   // and it is not one of genlayer-js@1.x's four built-in chains, so it has to
   // resolve through the hand-built chain object rather than a lookup miss.
-  it('defaults to studio_dev when no network is given', () => {
+  it('defaults to studio_devnet when no network is given', () => {
     const reader = createGenLayerReader({ judgeAddress: `0x${'ab'.repeat(20)}` });
     expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
   });
 
-  it('builds a reader for studio_dev explicitly', () => {
-    const reader = createGenLayerReader({ network: 'studio_dev', judgeAddress: `0x${'ab'.repeat(20)}` });
+  it('builds a reader for studio_devnet explicitly', () => {
+    const reader = createGenLayerReader({ network: 'studio_devnet', judgeAddress: `0x${'ab'.repeat(20)}` });
     expect(reader?.judgeAddress).toBe(`0x${'ab'.repeat(20)}`);
   });
 });
