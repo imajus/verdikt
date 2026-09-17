@@ -27,9 +27,10 @@ interface ProxyConfig {
    */
   paymentRpcUrls: Record<number, string>;
   /**
-   * The GenLayer claim judge's address and chain id, or `null` when unset —
-   * see `genlayerConfig` in config.js for why relaying these is not a
-   * GenLayer dependency (issue #114).
+   * The GenLayer claim judge's address and chain id, from
+   * `deployments/genlayer-studio-devnet.json` — `null` only when that record
+   * names no judge or an override is malformed. See `genlayerConfig` in
+   * config.js for why relaying these is not a GenLayer dependency (issue #114).
    */
   genlayer: { chainId: number; judgeAddress: string } | null;
   /**

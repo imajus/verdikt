@@ -573,8 +573,11 @@ async function verified({ request, record, upstream, paymentHeader, decode, work
     // requestId and the SLA it read never needs to read this repo to find the
     // contract. `getContractSchema`/`get_config()` on the judge itself answer
     // everything else. Omitted when `config.genlayer` is unset rather than
-    // sent stale or empty.
-    ...(config.genlayer
+    // sent stale or empty — and omitted on a call with no verdict for exactly
+    // the reason the evidence cache above skips one: there is nothing for a
+    // claim to be bound to, and no envelope was kept, so naming a judge would
+    // point the agent at a claim it can never open.
+    ...(config.genlayer && result.outcome
       ? {
           'x-verdikt-judge-chain-id': String(config.genlayer.chainId),
           'x-verdikt-judge-address': config.genlayer.judgeAddress
