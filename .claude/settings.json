@@ -4,7 +4,7 @@
     "ethereum"
   ],
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
     "cloudflare@cloudflare": true,
     "genlayer-docs@genlayerlabs": true,
     "genlayer-dev@genlayerlabs": true
