@@ -14,7 +14,6 @@ an appeal of the CRE verdict. See docs/roadmap/genlayer.md.
 """
 
 import base64
-import datetime
 import json
 from dataclasses import dataclass
 
@@ -302,7 +301,7 @@ class SlaClaimJudge(gl.contract.Contract):
             slug=slug,
             claimant=claimant,
             criteria=criteria,
-            filed_at=gl.u256(_now()),
+            filed_at=gl.u256(self._now_bucketed()),
             disclosure_signature=disclosure_signature,
             paid_amount=gl.u256(paid_amount),
             bond=self.bond_amount,
@@ -422,7 +421,7 @@ class SlaClaimJudge(gl.contract.Contract):
         claim = self._require_open(key)
         if gl.message.sender_address != claim.claimant:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Only the claimant may cancel')
-        if _now() < int(claim.filed_at) + ADJUDICATION_WINDOW_SECONDS:
+        if self._now_bucketed() < int(claim.filed_at) + ADJUDICATION_WINDOW_SECONDS:
             raise gl.vm.UserError(f'{ERROR_EXPECTED} Adjudication window has not lapsed')
 
         claim.outcome = OUTCOME_CANCELLED
@@ -920,22 +919,6 @@ def available_escrow(escrowed: int, deposits: int, bonds: int) -> int:
     return escrowed - deposits - bonds
 
 
-def _now() -> int:
-    """
-    The transaction's timestamp, in epoch seconds.
-
-    Read off the VM rather than a clock, so the leader and every validator
-    judging a deadline see the same instant: in deterministic mode
-    `get_timestamp` is the transaction's own timestamp, not wall time.
-
-    This used to dig the value out of `gl.message_raw['datetime']` and parse
-    it, because the runner pinned at the time exposed it nowhere else. The
-    runner this contract now pins has `gl.vm.get_timestamp()`, so the
-    workaround is gone.
-    """
-    return int(gl.vm.get_timestamp().timestamp())
-
-
 def withdrawal_refusal(*, open_claims: int, requested_at: int, cooldown_elapsed: bool) -> str | None:
     """
     Whether a deposit may leave. Pure — the refusal text, or `None` to proceed.
@@ -1025,7 +1008,7 @@ def check_eligibility(verdict: dict, claimant: str, slug: str) -> str | None:
     #
     # Why it is off: every payment option `aisa` offers is
     # `GatewayWalletBatched`, so the payer a verdict books is the agent
-    # wallet's *backing EOA* (0xe1107cc4… for request 0xbd9e632b…), and Circle
+    # wallet's *backing EOA* (0xe1107cc4… for request 0x5f04b3ac…), and Circle
     # will not sign as that address — `circle wallet sign --address
     # 0xe1107cc4…` answers `Wallet not found`, and Circle supports no GenLayer
     # chain to send the claim from in any case. `aisa` is also the only

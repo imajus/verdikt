@@ -87,6 +87,7 @@ Provide these through the runner environment or its external Docker
 | `CRE_ETH_PRIVATE_KEY` | `RUNNER_CRE_BROADCAST=true`, or the hourly score job | Funded burner key for `cre workflow simulate --broadcast`; never use a mainnet or application signing key. **Needs gas on both chains**: `verify` broadcasts to Arc, `aggregate` broadcasts to Sepolia. |
 | `ARC_RPC_URL` | The hourly score job | Arc RPC for the post-run **read-back**, not for the workflow — `cre` resolves its own RPCs from `cre/workflows/project.yaml`. `bin/check-published-scores.mjs` refuses to start without it rather than inherit the SDK's public default, which rate-limits after three `eth_getLogs` calls and fails moments after a publish that worked. |
 | `SEPOLIA_RPC_URL` | The hourly score job | Sepolia RPC for the same read-back, on the same terms. |
+| `GENLAYER_RESOLVER_PRIVATE_KEY` | The claim resolver job | Funded Studio Dev key for `resolve_claim`. **Must not be any account that files claims**: on a MET outcome the bounty is released out of the claimant's bond to the resolver, so a self-resolved claim costs the claimant nothing. Fund it with one `sim_fundAccount` call — Studio Dev has no faucet queue. |
 
 All other settings have defaults. See [`.env.example`](.env.example) for
 `RUNNER_PORT`, timeouts, request-size limit, workflow location/target/name,
@@ -166,6 +167,71 @@ the read-back disagrees.
 `verify` supervisor. `publish-scores.sh` always passes `--broadcast` and
 refuses to run without `CRE_ETH_PRIVATE_KEY`, because a run without it reads
 Arc, prints a plausible summary and writes nothing.
+
+## Semantic claim resolution
+
+`SlaClaimJudge.resolve_claim` is permissionless by design — whoever sends it
+earns the bounty (`docs/roadmap/genlayer.md`). That is a market, not a
+scheduler. GenLayer's validators judge the content *inside* that call, each one
+independently re-fetching the evidence, but nothing triggers the call itself,
+so a filed claim sits `OPEN` until somebody sends one.
+[`bin/resolve-claims.mjs`](bin/resolve-claims.mjs) is that somebody: it reads
+`list_claims`, resolves everything still open, and exits.
+
+**It must run as an account that never files claims.** On a `MET` outcome
+`_settle` releases the bounty out of the *claimant's* bond to the resolver, so
+resolving with the claimant's own key makes it `release(claimant, claimant, …)`
+— one balance debited and credited — and the cost of filing a junk claim
+quietly disappears. The script refuses any claim whose `claimant` is its own
+address for that reason.
+
+Two things worth knowing before relying on it:
+
+- **The bounty does not pay for the gas.** The bounty is a fixed amount of
+  `SettlementToken`; `resolve_claim` gas is GEN, and nothing reimburses it.
+  On Studio Dev that is free (`sim_fundAccount`), so the job is sustainable
+  here and would not be on a network with real gas.
+- **Resolving everything on a two-minute tick means no other bounty hunter
+  ever gets there first.** The permissionless market stays theoretical while
+  this job is running. That is a demo convenience, not the design.
+
+It needs `genlayer-js@2.0.0-rc.1`, pinned in this package and deliberately not
+the `1.1.8` that `web/` uses. 1.x **cannot write to Studio Dev at all**:
+consensus v0.6 rejects a write carrying no explicit fee distribution, and 1.x
+exposes no way to supply one, so every write returns a bare "transaction
+reverted" against the consensus contract. Verified against the live chain. The
+2.x line adds `fees` / `estimateFeesDistribution` and ships `studioDevnet` as a
+real chain. `web/` stays on 1.x because it only reads.
+
+### Dokploy job
+
+| Field | Value |
+| --- | --- |
+| Type | Application (this runner's container) |
+| Schedule | `*/2 * * * *` — fast enough that a reviewer filing a claim sees it settle |
+| Command | `node /app/runner/bin/resolve-claims.mjs` |
+
+`GENLAYER_RESOLVER_PRIVATE_KEY` comes from the runner's own env file, like
+every other secret here — `docker exec` inherits the container's environment,
+not the job definition's.
+
+Run `node /app/runner/bin/resolve-claims.mjs --dry-run` once by hand after a
+rebuild. It lists what it would resolve and sends nothing. A quiet run is
+honest output, not a broken one:
+
+```text
+resolve-claims: … resolver 0x8fa1817E… judge 0x1d75FFdF… chain 61997
+resolve-claims: … 3 claim(s) on chain, 1 open
+resolve-claims: … resolving 0xabc…:meets-criteria slug=aisa
+resolve-claims: … OK 0xabc…:meets-criteria -> BREACH (compensation=250000 bounty=100000) tx=0x…
+resolve-claims: … done — 1 resolved, 0 failed
+```
+
+A claim that fails three runs in a row is left alone (`RESOLVER_MAX_ATTEMPTS`,
+state in `RESOLVER_STATE_PATH`) rather than retried forever — an evidence
+endpoint that is down should not mean an unbounded stream of reverting
+transactions. The run exits non-zero when everything it attempted failed, so
+the job turns red instead of logging reassuringly.
 
 ## Security and operational limits
 
