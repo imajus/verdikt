@@ -9,8 +9,6 @@
 // about *who* a claim belongs to: the gate below asks Arc who paid and asks a
 // signature whether that payer consents, which is the whole of it.
 
-import { verifyPersonalMessage } from '@verdikt/sdk';
-
 /** The header a caller presents its payer signature in. */
 export const EVIDENCE_AUTH_HEADER = 'x-verdikt-evidence-auth';
 
