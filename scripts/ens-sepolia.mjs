@@ -1,5 +1,6 @@
 // Shared ENSv2-on-Sepolia constants and helpers for the scripts in this
-// directory (`spike-ens.mjs`, `setup-ens.mjs`).
+// directory (`setup-ens.mjs`, `grant-registrar-roles.mjs`,
+// `publish-semantic-scores.mjs`).
 //
 // This is operational tooling, not application code. The rule that
 // `packages/sdk/ens.js` is the only file that knows ENS exists holds for the

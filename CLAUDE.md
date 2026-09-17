@@ -91,7 +91,7 @@ Foundry installs to `~/.foundry/bin` and its installer writes the `PATH` line to
 
 `pnpm demo` runs the whole registry loop against a throwaway anvil in seconds and asserts the refund arithmetic rather than narrating it. It is the fastest check that a contract change has not broken the accounting.
 
-`node scripts/pay-x402.mjs <url>` signs a real x402 payment from the live challenge; `--send` spends. `pnpm onboard` mints and configures one `<slug>.verdikt.eth`.
+Two scripts that used to live here are gone, and both removals close a path rather than leaving a gap. Paying: `scripts/pay-x402.mjs` signed a raw ERC-3009 payment from an EOA — real paid calls now go through the Circle agent wallet, which `.claude/skills/verdikt-paid-call-sweep` drives end to end. Onboarding: `scripts/onboard-service.mjs` minted a subname as the operator — `<slug>.verdikt.eth` is now claimed self-serve through the dashboard's wizard (`claimSubname` → `publishSla` → `publishUrl` → `registerService` in `web/src/actions.js`), which is the only path and the permissionless one.
 
 ## Architecture
 

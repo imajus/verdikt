@@ -4,8 +4,7 @@
 r"""
 The claimant's CLI: file a semantic claim and see it through (issue #94).
 
-A CLI rather than a web UI, matching `scripts/pay-x402.mjs` and `pnpm onboard`
-on the deterministic side. The audience is an agent operator who already has a
+A CLI rather than a web UI. The audience is an agent operator who already has a
 key and a request id, not a visitor.
 
 Every subcommand that moves money **reads the balance back afterwards**. A
@@ -134,9 +133,9 @@ def cmd_sign(args):
     from eth_account import Account
     from eth_account.messages import encode_defunct
 
-    key = os.environ.get('VERDIKT_PAYER_PRIVATE_KEY') or os.environ.get('GENLAYER_PRIVATE_KEY')
+    key = os.environ.get('GENLAYER_PRIVATE_KEY')
     if not key:
-        raise SystemExit('set VERDIKT_PAYER_PRIVATE_KEY (or GENLAYER_PRIVATE_KEY) to the account that paid')
+        raise SystemExit('set GENLAYER_PRIVATE_KEY to the account that paid')
     account = Account.from_key(key)
     message = DISCLOSURE_PREFIX + args.request_id.lower()
     signature = account.sign_message(encode_defunct(text=message)).signature.hex()

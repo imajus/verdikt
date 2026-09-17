@@ -127,9 +127,8 @@ Consensus takes **minutes**, not the 30 seconds the client waits by default;
 
 ## Filing a claim
 
-`scripts/claim.py` is the claimant's CLI — a CLI rather than a web UI, matching
-`scripts/pay-x402.mjs` and `pnpm onboard` on the deterministic side, because the
-audience is an operator who already has a key and a request id.
+`scripts/claim.py` is the claimant's CLI — a CLI rather than a web UI, because
+the audience is an operator who already has a key and a request id.
 
 The judge and token addresses come from `deployments/genlayer-studio-devnet.json`,
 so there is nothing to export but the key. `--judge`/`--token`, or

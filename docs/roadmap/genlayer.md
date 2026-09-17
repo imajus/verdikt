@@ -620,9 +620,8 @@ glsim will not let a write transaction make. See the comment in
 ## Filing a claim, and what an honest demo shows
 
 `genlayer/scripts/claim.py` is the claimant's CLI: sign, mint, bond, open,
-resolve, status, cancel, withdraw. A CLI rather than a web UI, matching
-`scripts/pay-x402.mjs` and `pnpm onboard` — the audience is an operator who
-already holds a key and a request id.
+resolve, status, cancel, withdraw. A CLI rather than a web UI — the audience is
+an operator who already holds a key and a request id.
 
 `sign` is the step that is easy to skip and impossible to work around. The proxy
 discloses evidence only to the payer, so a claim opened without the payer's

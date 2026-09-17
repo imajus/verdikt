@@ -5,8 +5,8 @@
 //
 // After `DeployRegistrar.s.sol` deploys the contract, it holds no roles yet —
 // it cannot call `claim()` successfully until the operator grants it exactly
-// the two root roles `onboard-service.mjs`'s human operator already exercises
-// today: ROLE_REGISTRAR on the subname registry (so it can call `register()`
+// the two root roles the operator-run onboarding script used to exercise by
+// hand: ROLE_REGISTRAR on the subname registry (so it can call `register()`
 // on a claimant's behalf) and RESOLVER_ROLES_VERDIKT_NEEDS on the resolver (so
 // it can call `authorizeTextRoles` and `setAddr`). Verified against the live
 // Sepolia bytecode via Sourcify — see VerdiktSubnameRegistrar.sol's own
@@ -21,7 +21,7 @@
 //
 // Environment:
 //   ENS_DEPLOYER_PRIVATE_KEY — the verdikt.eth operator key. The same key
-//                              onboard-service.mjs and setup-ens.mjs use.
+//                              setup-ens.mjs uses.
 //   SEPOLIA_RPC_URL           — optional, defaults to the SDK's public RPC.
 
 import { createPublicClient, createWalletClient, http } from 'viem';

@@ -27,10 +27,11 @@ interface IAuthorizingResolver {
 ///         Tasks.md 5.3 stretch 1 — provider self-serve).
 ///
 /// @dev **Why this contract can do what only the operator could do before.**
-///      `scripts/onboard-service.mjs` mints a subname, grants `sla`/`url` to
-///      the provider and `conformance`/`availability` to the score writer, and
-///      sets the address record — four EAC-gated calls, run by a human holding
-///      the `verdikt.eth` operator key. Verified against the live Sepolia
+///      Onboarding was four EAC-gated calls run by a human holding the
+///      `verdikt.eth` operator key (`scripts/onboard-service.mjs`, deleted once
+///      this contract replaced it): mint the subname, grant `sla`/`url` to the
+///      provider and `conformance`/`availability` to the score writer, set the
+///      address record. Verified against the live Sepolia
 ///      bytecode (Sourcify, chain 11155111): `PermissionedRegistry.register`
 ///      requires `ROLE_REGISTRAR` at `ROOT_RESOURCE` (`RegistryRolesLib.sol`),
 ///      and `PermissionedResolver.authorizeTextRoles`/`setAddr` resolve

@@ -6,9 +6,11 @@ Answers [Tasks.md §0.2](../Tasks.md); resolves the ENSv2 entry under
 
 **Verdict: green. ENSv2 stays. No fallback to ENSv1's PublicResolver.**
 
-Reproduce with `pnpm spike:ens` (31/31 checks). Run
-`pnpm spike:ens --read-only` to check only the live-Sepolia facts, without
-spawning a fork.
+The harness that produced this — `scripts/spike-ens.mjs`, 31/31 checks against a
+Sepolia fork, plus a `--read-only` mode for the live facts alone — has since been
+removed. What it proved is below and is now enforced by the contracts it shaped
+(`VerdiktSubnameRegistrar`), not by a runnable script; recover it from git
+history if a future ENSv2 change needs re-testing rather than re-reading.
 
 ## What was proven
 

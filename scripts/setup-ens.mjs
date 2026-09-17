@@ -412,8 +412,9 @@ function printPlan(txs, { parentLabel, operator, outPath, full }) {
       `address is fixed by (factory, sender, salt), so the fork predicts it exactly.\n` +
       `Sign these from any wallet, or run with --send and skip the copying entirely.\n\n` +
       `Afterwards, put the two deployed addresses in deployments/sepolia.json as\n` +
-      `ens.resolver and ens.subnameRegistry, then confirm with\n` +
-      `  pnpm spike:ens --read-only --parent ${parentLabel}`
+      `ens.resolver and ens.subnameRegistry, then confirm by reading "${parentLabel}" back\n` +
+      `off Sepolia — resolveServiceRecord() for any subname under it returns records\n` +
+      `only if both are wired.`
   );
 }
 

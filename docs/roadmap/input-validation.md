@@ -156,8 +156,9 @@ merely routes around it is precisely what #21 has to settle.
    Everything else is downstream of it.
 2. **Schema source** — the three options above.
 3. **Advisory or blocking by default**, and whether a bypass header exists.
-4. **Whether onboarding authors one** — `pnpm onboard` would be the natural
-   place to prompt for an input schema when minting `<slug>.verdikt.eth`.
+4. **Whether onboarding authors one** — the dashboard's registration wizard
+   would be the natural place to prompt for an input schema, alongside the SLA
+   it already collects before minting `<slug>.verdikt.eth`.
 
 ## Sources
 

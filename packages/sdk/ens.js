@@ -59,8 +59,10 @@ export const ENS_BACKEND = Object.freeze({
 });
 
 /**
- * ENSv2 Beta on Sepolia. Confirmed on-chain by Spike A; `pnpm spike:ens
- * --read-only` re-verifies it, because a beta deployment can move.
+ * ENSv2 Beta on Sepolia. Confirmed on-chain by Spike A (docs/spikes/
+ * A-ens-sepolia.md). A beta deployment can move, and nothing re-verifies this
+ * automatically since the spike harness was removed — check it has code before
+ * blaming a resolver read.
  */
 export const SEPOLIA_UNIVERSAL_RESOLVER = '0x4a1817d13e9cf196f471725176355c1234b63c70';
 

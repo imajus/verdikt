@@ -79,7 +79,8 @@ source of truth to verify against.
 - [x] Determine tooling: does viem/ethers/the ENS SDK support these, or are
       raw ABI calls needed?
 
-Deliverable: `scripts/spike-ens.mjs` running all of the above green.
+Deliverable: `scripts/spike-ens.mjs` running all of the above green. The script
+has since been deleted — the gate below is its record.
 
 > **Gate passed.** 31/31 green — `pnpm spike:ens`, run against `verdikt.eth`
 > itself. Per-key EAC enforces, `sla` round-trips byte-identical, and
@@ -154,8 +155,9 @@ Every refund depends on recovering the payer and the amount from the header.
 
 - [x] **A real X-PAYMENT header exists, and it settles.** Not captured from
       somebody else — *produced*, which is stronger, because it can be produced
-      again at will. `scripts/pay-x402.mjs` builds and signs one for the live
-      challenge, and the authorization inside it was submitted straight to Base
+      again at will. `scripts/pay-x402.mjs` (since deleted, but in git history
+      and transcribed in the evidence log below) built and signed one for the
+      live challenge, and the authorization inside it was submitted straight to Base
       Sepolia USDC, which accepted it:
       [`0xc2e071e6…`](https://sepolia.basescan.org/tx/0xc2e071e6e5701a87fe1d66a2500b4b88935aa8dbbeb4bb14db46c1496c81d061).
       The token contract itself is the authority on whether that signature binds
@@ -961,11 +963,13 @@ day saved in Phase 4 here.
 - [x] Repeat until the bond drains → SUSPENDED
 - [x] A DOWN refunds too — that call took payment and delivered nothing
 - [x] `withdraw()` pays exactly what was booked, asserted net of gas
-- [x] Publish SLAs to ENS — `scripts/onboard-service.mjs` (`pnpm onboard`) does
-      the per-service half `setup-ens.mjs` never did: mints
-      `<slug>.verdikt.eth`, grants the provider `sla` + `url` and the score
-      writer `conformance` + `availability` **per key**, and sets the address
-      record. Both demo subnames are live on Sepolia with real records
+- [x] Publish SLAs to ENS — the per-service half `setup-ens.mjs` never did:
+      mints `<slug>.verdikt.eth`, grants the provider `sla` + `url` and the
+      score writer `conformance` + `availability` **per key**, and sets the
+      address record. Both demo subnames were live on Sepolia with real
+      records. Done at the time by `scripts/onboard-service.mjs` (`pnpm
+      onboard`), an operator-run script since deleted — `VerdiktSubnameRegistrar`
+      and the dashboard wizard do the same four steps permissionlessly
 - [x] Dashboard reads it live — the registry is deployed and recorded, so
       `VITE_ARC_RPC_URL` alone switches it off demo data
 - [x] ~~`payTo` mismatch → proxy blocks before payment~~ — demonstrated

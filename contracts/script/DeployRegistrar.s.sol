@@ -17,8 +17,8 @@ import {VerdiktSubnameRegistrar} from "../src/VerdiktSubnameRegistrar.sol";
 ///        DEPLOYER_PRIVATE_KEY  — funded with Sepolia ETH. Does NOT need to be
 ///                                the `verdikt.eth` operator key — deploying
 ///                                the contract needs no ENS role at all.
-///        SUBNAME_DURATION_SECONDS — optional. Defaults to 365 days, same as
-///                                `scripts/onboard-service.mjs`'s onboarding.
+///        SUBNAME_DURATION_SECONDS — optional. Defaults to 365 days, the same
+///                                term operator-run onboarding used.
 ///        SEMANTIC_SCORE_WRITER_ADDRESS — optional. The `semanticConformance`
 ///                                signer's address (derive it from
 ///                                `ENS_SEMANTIC_SIGNER_PRIVATE_KEY` — this

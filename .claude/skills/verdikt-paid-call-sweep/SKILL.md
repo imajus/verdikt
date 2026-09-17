@@ -8,7 +8,7 @@ description: >-
   the proxy or the confidential workflow with real money, reproducing the demo traffic, or answering
   "does a paid call actually work / did it write a verdict / did it refund" — and also for a paid
   call to a single service, since the per-service mechanics are the same. Reach for this before
-  hand-rolling curl or scripts/pay-x402.mjs against these endpoints: real USDC moves per call and
+  hand-rolling curl or a signing script against these endpoints: real USDC moves per call and
   several of the traps here cost money rather than just failing.
 ---
 

@@ -13,7 +13,6 @@
 import { describe, expect, it } from 'vitest';
 import { privateKeyToAccount } from 'viem/accounts';
 import { decodeFunctionData, getAddress, hashTypedData } from 'viem';
-import { DECODED_PAYMENT } from '@verdikt/fixtures';
 import { decodePayment, decodePaymentEnvelope, isPaymentDecodingImplemented } from './payment.js';
 
 const PAYER = privateKeyToAccount('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d');
@@ -395,20 +394,13 @@ describe('decodePayment — schemes it does not implement', () => {
   });
 });
 
-describe('decodePayment — the development stub', () => {
-  // allowStub is an unconditional override, checked before any real
-  // verification is attempted — including a header that would otherwise
-  // verify for real, which is what proves it is not merely a fallback for
-  // schemes decodePayment cannot yet reach.
-  it('short-circuits to the fixture under an explicit opt-in, without attempting real verification', async () => {
-    const payment = await decodePayment(await signedHeader(), { accepts: ACCEPTS, allowStub: true });
-    expect(payment).toEqual({ payer: DECODED_PAYMENT.payer, amount: DECODED_PAYMENT.amount });
-  });
-
-  it('answers even a placeholder GatewayWalletBatched header under the opt-in', async () => {
+describe('decodePayment — no development stub', () => {
+  // There used to be an `allowStub` override here, env-settable, that returned
+  // a fixture payer before any verification ran. It is gone: a payment this
+  // cannot verify is refused, and nothing in the repo can turn that off.
+  it('refuses a payload it cannot verify even when the challenge matches', async () => {
     const placeholderHeader = header({ scheme: 'exact', network: 'eip155:5042002', payload: { somethingCircleShaped: true } });
-    const payment = await decodePayment(placeholderHeader, { accepts: ACCEPTS, allowStub: true });
-    expect(payment.amount).toBe(DECODED_PAYMENT.amount);
+    await expect(decodePayment(placeholderHeader, { accepts: ACCEPTS })).rejects.toThrow();
   });
 });
 

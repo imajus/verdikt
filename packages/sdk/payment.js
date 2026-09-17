@@ -23,10 +23,6 @@
 // been seen to offer.
 
 import { decodeFunctionResult, encodeFunctionData, getAddress, hashTypedData, recoverAddress } from 'viem';
-import { DECODED_PAYMENT } from '@verdikt/fixtures';
-
-/** Set `VERDIKT_ALLOW_STUB_PAYMENT=true` to develop against the fixture. */
-export const STUB_OPT_IN = 'VERDIKT_ALLOW_STUB_PAYMENT';
 
 /**
  * ERC-3009's authorization struct, field order exactly as the EIP defines it.
@@ -200,14 +196,15 @@ function matchingOption(envelope, accepts) {
  * 6-decimal ERC-20 view, not the 18-decimal native one — `VerdiktRegistry`
  * converts (`NATIVE_PER_MINOR_UNIT`) before capping a refund against the bond.
  *
- * `allowStub` is checked before any of that: it is an unconditional
- * development override, not a fallback for schemes verification happens not
- * to reach. Checking it after real verification would mean it stops doing
- * anything the moment a scheme becomes implemented — which just happened to
- * GatewayWalletBatched (issue #41) and would happen again to the next one.
+ * There is no development override any more. A `VERDIKT_ALLOW_STUB_PAYMENT`
+ * env flag used to short-circuit this to a fixture payer, from when Spike C was
+ * open and nothing could be verified at all; it was deleted once both `exact`
+ * transfer methods a real challenge offers verified for real, because its only
+ * remaining effect was to mis-credit a refund if it were ever set by accident.
+ * Verify or refuse — those are the two outcomes.
  *
  * @param {string} header raw payment header value
- * @param {{ accepts?: any[], allowStub?: boolean, ethCall?: EthCall }} [options]
+ * @param {{ accepts?: any[], ethCall?: EthCall }} [options]
  *   `accepts` is the challenge's own array — required to verify anything.
  *   `ethCall` is what lets a *contract* account be verified at all: without it
  *   a smart-contract payer is refused rather than trusted.
@@ -215,9 +212,6 @@ function matchingOption(envelope, accepts) {
  */
 export async function decodePayment(header, options = {}) {
   const envelope = decodePaymentEnvelope(header);
-  const allowStub = options.allowStub ?? process.env[STUB_OPT_IN] === 'true';
-  if (allowStub) return { payer: DECODED_PAYMENT.payer, amount: DECODED_PAYMENT.amount };
-
   const option = options.accepts ? matchingOption(envelope, options.accepts) : null;
 
   if (envelope.scheme === 'exact' && option) {
@@ -227,8 +221,7 @@ export async function decodePayment(header, options = {}) {
   const named = option ? (option.extra?.name ?? 'unknown') : 'unknown (no accepts supplied)';
   throw new Error(
     `decodePayment: cannot verify a "${envelope.scheme}" payment using "${named}" (Spike C, Tasks.md 0.4). ` +
-      `Refusing rather than trusting an unverified payer: this value decides who a refund is credited to. ` +
-      `Set ${STUB_OPT_IN}=true to develop against the fixture, and never anywhere a real bond is at stake.`
+      `Refusing rather than trusting an unverified payer: this value decides who a refund is credited to.`
   );
 }
 
