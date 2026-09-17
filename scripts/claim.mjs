@@ -39,11 +39,21 @@ const fail = (message) => {
   process.exit(1);
 };
 
-/** The claimant's client. The key is the account that paid for the call. */
+/**
+ * The claimant's client. The key is the account that paid for the call.
+ *
+ * `genlayer/.env`'s `GENLAYER_PRIVATE_KEY` is bare hex, no `0x` — `eth_account`
+ * on the Python side accepts that form. `genlayer-js`'s `createAccount` does
+ * not: without the prefix it treats the value as an opaque string rather than
+ * hex and fails deep inside `@noble/curves` with `invalid private key,
+ * expected hex or 32 bytes, got string`. Normalized here so the same env var
+ * works for both CLIs unmodified.
+ */
 export function connect() {
-  const privateKey = process.env.GENLAYER_PRIVATE_KEY;
-  if (!privateKey) fail('GENLAYER_PRIVATE_KEY is unset — that key is the claimant');
-  const account = createAccount(/** @type {`0x${string}`} */ (privateKey));
+  const raw = process.env.GENLAYER_PRIVATE_KEY;
+  if (!raw) fail('GENLAYER_PRIVATE_KEY is unset — that key is the claimant');
+  const privateKey = /** @type {`0x${string}`} */ (raw.startsWith('0x') ? raw : `0x${raw}`);
+  const account = createAccount(privateKey);
   return { client: createClient({ chain: chains.studioDevnet, account }), account };
 }
 
@@ -105,4 +115,140 @@ export async function showBalance(client, token, address, label) {
   const available = await client.readContract({ address: token, functionName: 'available_of', args: [address] });
   console.log(`  ${label}: ${balance} held, ${available} free`);
   return balance;
+}
+
+// ----------------------------------------------------------------- commands
+
+/**
+ * The payer's consent to disclose its own purchased response.
+ *
+ * Signed with the payer's key, which is normally the claimant's: the judge
+ * refuses a claim from anyone else and the proxy refuses a disclosure signed by
+ * anyone else, so the two checks agree by construction.
+ */
+async function cmdSign({ requestId }) {
+  const { account } = connect();
+  const message = disclosureMessage(requestId);
+  const signature = await account.signMessage({ message });
+  console.log(`payer     ${account.address}`);
+  console.log(`message   ${JSON.stringify(message)}`);
+  console.log(`signature ${signature}`);
+}
+
+async function cmdMint({ amount, ...rest }) {
+  const { client, account } = connect();
+  const contracts = addresses(rest);
+  console.log(`minting ${amount} to ${account.address}`);
+  await showBalance(client, contracts.token, account.address, 'before');
+  await write(client, contracts, contracts.token, 'mint', [amount]);
+  await showBalance(client, contracts.token, account.address, 'after ');
+}
+
+/** Hand the judge authority over the bond. The tokens do not move. */
+async function cmdBond({ amount, ...rest }) {
+  const { client, account } = connect();
+  const contracts = addresses(rest);
+  const config = await client.readContract({ address: contracts.judge, functionName: 'get_config', args: [] });
+  const bond = amount ?? config.bond_amount;
+  console.log(`escrowing ${bond} to ${contracts.judge}`);
+  await write(client, contracts, contracts.token, 'escrow', [contracts.judge, bond]);
+  const escrowed = await client.readContract({
+    address: contracts.token,
+    functionName: 'escrow_of',
+    args: [account.address, contracts.judge]
+  });
+  console.log(`  escrowed: ${escrowed}`);
+  await showBalance(client, contracts.token, account.address, 'balance');
+}
+
+async function cmdOpen({ requestId, clause, slug, signature, ...rest }) {
+  const { client } = connect();
+  const contracts = addresses(rest);
+  if (!signature) {
+    fail('no --signature — run `claim.mjs sign --request-id …` first; without it evidence stays sealed');
+  }
+  await write(client, contracts, contracts.judge, 'submit_claim', [requestId, clause, slug, signature]);
+  await printClaim(client, contracts.judge, requestId, clause);
+}
+
+/** Abandon an open claim. Settles nothing against either side. */
+async function cmdCancel({ requestId, clause, ...rest }) {
+  const { client } = connect();
+  const contracts = addresses(rest);
+  // Routes through `_settle` to return the bond, so it needs the allocation.
+  await write(client, contracts, contracts.judge, 'cancel_claim', [requestId, clause], { allocate: true });
+  await printClaim(client, contracts.judge, requestId, clause);
+}
+
+async function cmdStatus({ requestId, clause, ...rest }) {
+  const { client } = connect();
+  const contracts = addresses(rest);
+  await printClaim(client, contracts.judge, requestId, clause);
+}
+
+async function printClaim(client, judge, requestId, clause) {
+  const claim = await client.readContract({
+    address: judge,
+    functionName: 'get_claim',
+    args: [requestId, clause]
+  });
+  console.log(JSON.stringify(claim, (key, value) => (typeof value === 'bigint' ? String(value) : value), 2));
+}
+
+// -------------------------------------------------------------------- entry
+
+const USAGE = `usage: claim.mjs <command> [options]
+
+  sign    --request-id 0x…                      the payer's consent to disclose its own response
+  mint    [--amount 5000000]                    faucet-mint settlement tokens
+  bond    [--amount N]                          escrow the claim bond to the judge
+  open    --request-id 0x… --clause ID --slug S --signature 0x…
+  status  --request-id 0x… --clause ID          read a claim back
+  cancel  --request-id 0x… --clause ID          abandon an open claim once its window has lapsed
+
+  --judge 0x…   --token 0x…                     override deployments/genlayer-studio-devnet.json
+
+GENLAYER_PRIVATE_KEY is the claimant, and must be the payer Arc booked.`;
+
+/** Long flags only, `--flag value` or `--flag=value`. */
+function parseArgs(argv) {
+  const options = {};
+  for (let i = 0; i < argv.length; i += 1) {
+    const arg = argv[i];
+    if (!arg.startsWith('--')) continue;
+    const [flag, inline] = arg.slice(2).split('=');
+    const camel = flag.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+    const value = inline ?? (argv[i + 1]?.startsWith('--') ? undefined : argv[i + 1]);
+    options[camel] = value ?? true;
+    if (inline === undefined && value !== undefined) i += 1;
+  }
+  return options;
+}
+
+const COMMANDS = {
+  sign: cmdSign,
+  mint: cmdMint,
+  bond: cmdBond,
+  open: cmdOpen,
+  status: cmdStatus,
+  cancel: cmdCancel
+};
+
+async function main() {
+  const [command, ...rest] = process.argv.slice(2);
+  const run = COMMANDS[command];
+  if (!run) {
+    console.error(USAGE);
+    process.exit(command ? 1 : 0);
+  }
+  const options = parseArgs(rest);
+  if (command === 'mint') options.amount = options.amount ? BigInt(options.amount) : 5000000n;
+  if (command === 'bond' && options.amount) options.amount = BigInt(options.amount);
+  if (command === 'open' && !options.signature) options.signature = process.env.VERDIKT_DISCLOSURE_SIGNATURE;
+  await run(options);
+}
+
+// Only when run directly, so the test can import the pure helpers.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await main();
 }
