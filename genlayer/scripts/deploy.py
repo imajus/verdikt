@@ -133,19 +133,28 @@ def main() -> int:
     proxy_base_url = (
         args.proxy_base_url or env.get('PROXY_BASE_URL') or 'https://verdikt-proxy.denis-perov.workers.dev'
     )
-    # The judge appends `/internal/sla/<slug>` and `/internal/evidence/<id>`,
-    # so this has to be the apex host and nothing more. The root `.env`'s
-    # `PROXY_BASE_URL` is in fact the CRE *callback* URL and carries a path;
-    # taking it verbatim deploys a judge that fetches
+    # The judge appends `/internal/sla/<slug>` and `/internal/evidence/<id>`
+    # to this, so a base URL that already carries one of the proxy's internal
+    # routes is the wrong value in the right variable — almost always
+    # `CRE_CALLBACK_URL` pasted in, which is the same host plus
+    # `/internal/verification-callback`. That deploys a judge which fetches
     # `…/internal/verification-callback/internal/sla/<slug>`, 404s on every
-    # read, and resolves every claim UNDETERMINED — a judge that looks
-    # deployed and decides nothing. Caught by reading the config back after a
-    # real deploy, which is the only reason this check exists.
-    parsed = urllib.parse.urlsplit(proxy_base_url)
-    if parsed.path.strip('/'):
-        trimmed = urllib.parse.urlunsplit((parsed.scheme, parsed.netloc, '', '', ''))
-        print(f'note: trimming path off proxy base url: {proxy_base_url} -> {trimmed}', file=sys.stderr)
-        proxy_base_url = trimmed
+    # read, and resolves every claim UNDETERMINED: deployed, and deciding
+    # nothing. A real deploy did exactly that, and only the read-back caught
+    # it.
+    #
+    # Refuse rather than silently trim the path off. A proxy legitimately
+    # mounted under a prefix would be broken by trimming, and quietly
+    # rewriting a deployment parameter is how you get a contract whose config
+    # nobody can explain later.
+    if '/internal/' in urllib.parse.urlsplit(proxy_base_url).path:
+        print(
+            f'proxy base url carries an internal route: {proxy_base_url}\n'
+            'This wants the proxy apex host — the judge appends /internal/sla/<slug> itself.\n'
+            'CRE_CALLBACK_URL is a different value; see genlayer/.env.example.',
+            file=sys.stderr,
+        )
+        return 2
     arc = json.loads((REPO / 'deployments' / 'arc-testnet.json').read_text())
     registry = args.registry or env.get('VERDIKT_REGISTRY_ADDRESS') or arc['registry']
     arc_rpc_url = args.arc_rpc_url or env.get('ARC_RPC_URL')
