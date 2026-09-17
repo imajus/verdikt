@@ -9,6 +9,7 @@
     "start": "node src/server.js"
   },
   "dependencies": {
+    "@verdikt/scripts": "workspace:*",
     "@verdikt/sdk": "workspace:*",
     "genlayer-js": "2.0.0-rc.1"
   }

@@ -170,6 +170,9 @@ importers:
 
   runner:
     dependencies:
+      '@verdikt/scripts':
+        specifier: workspace:*
+        version: link:../scripts
       '@verdikt/sdk':
         specifier: workspace:*
         version: link:../packages/sdk

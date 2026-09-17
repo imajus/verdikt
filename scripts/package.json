@@ -7,6 +7,9 @@
   "scripts": {
     "setup:ens": "node --env-file-if-exists=../.env setup-ens.mjs"
   },
+  "exports": {
+    "./genlayer-fees.mjs": "./genlayer-fees.mjs"
+  },
   "dependencies": {
     "@verdikt/fixtures": "workspace:*",
     "@verdikt/sdk": "workspace:*",
