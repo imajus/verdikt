@@ -858,7 +858,7 @@ describe('what a page shows while the chain is still answering', () => {
   // behind the marketplace only bought it a skeleton of a page it is not.
   it('does not make /how wait for a chain it never reads', () => {
     const html = loading('how');
-    expect(html).toContain('Three chains, each for one reason');
+    expect(html).toContain('Two chains, each for one reason');
     expect(html).not.toContain('class="bar"');
   });
 

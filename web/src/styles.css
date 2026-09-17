@@ -37,6 +37,7 @@
      `verdikt` is the cyan stop of the brand mark's gradient, darkened to hold
      on paper; `arc` is its violet stop. */
   --net-sepolia: #985606;
+  --net-genlayer: #9a4f14;
   --net-arc: #6d28a8;
   --net-cre: #1e3a8a;
   --net-verdikt: #0e7490;
@@ -84,6 +85,7 @@
      but trades depth for lightness, since a #1e3a8a navy on near-black is a
      shape you cannot see. */
   --net-sepolia: #e09a4b;
+  --net-genlayer: #dfa165;
   --net-arc: #bb92f0;
   --net-cre: #8da5f8;
   --net-verdikt: #3cc6dd;
@@ -855,8 +857,14 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    below read it and fall back to ink when a thing belongs to nobody — which
    is how the paying agent and the provider's endpoint stay neutral. They are
    the two parties transacting, not systems, and that distinction is the
-   figure's argument, so it is drawn rather than captioned. */
-.dg-sepolia { --zone: var(--net-sepolia); }
+   figure's argument, so it is drawn rather than captioned.
+
+   GenLayer takes the amber slot ENS used to hold. It is free — the figure no
+   longer draws Sepolia at all — and amber is the one hue left that separates
+   cleanly from Arc's purple in the band directly above it. Green was not
+   available at any value: it is `--good`, the PASS colour, everywhere in this
+   product. */
+.dg-genlayer { --zone: var(--net-genlayer); }
 .dg-arc { --zone: var(--net-arc); }
 .dg-cre { --zone: var(--net-cre); }
 .dg-verdikt { --zone: var(--net-verdikt); }
@@ -919,10 +927,10 @@ footer + footer.legal { margin-top: 12px; padding-top: 0; border-top: 0; }
    trace easing is a hard out-expo — a line is visually at its arrowhead about a
    fifth of the way through its duration — so a block's --r is its line's --d
    plus ~900ms, not plus the whole 5066. A dashed read is a step of the same
-   sequence — the proxy reading the url record, the workflow reading the sla,
-   the hourly aggregate — so each surfaces at its own --d rather than all of
-   them at the end; the agent, which starts the call, is the first block up and
-   the last one drawn into. */
+   sequence — the provider's response, and the judge binding a claim to a
+   verdict — so each surfaces at its own --d rather than all of them at the
+   end; the agent, which starts the call, is the first block up and the last
+   one drawn into, and GenLayer is last of all because it is a coda. */
 @media (prefers-reduced-motion: no-preference) {
   .diagram.drawing .dg-flow {
     stroke-dasharray: 1; stroke-dashoffset: 1;

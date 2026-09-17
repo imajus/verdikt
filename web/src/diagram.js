@@ -1,4 +1,4 @@
-// The landing page's request-path schematic.
+// The How it works page's request-path schematic.
 //
 // Drawn, not generated: a technical figure in the same hairline weights the
 // ledger tables use, so the mechanism is set in the page's own language rather
@@ -23,16 +23,25 @@
 // A block is a `<g class="dg-stage">` carrying its own `--r` reveal delay; the
 // grouping is what the fade needs, since a block is a frame, a logo and three
 // or four labels that have to come up together. Timings live in styles.css.
+//
+// **ENS is deliberately absent, and the hourly aggregate with it.** Both are
+// real and live, and neither is something a reader of this page has to hold:
+// where an SLA is hosted is infrastructure, and a trailing reputation score is
+// a marketplace figure shown as a number where it is actually used. Naming a
+// second chain to explain the storage of a document bought the figure a whole
+// band and a pair of crossing reads, for nothing the paying agent does. So the
+// facts those reads carried now sit on the blocks that own them — the proxy
+// relays to the registered endpoint, the workflow judges the published SLA —
+// and the band they occupied went to GenLayer instead. This also means the
+// figure survives issue #116, which drops ENS outright and has not yet decided
+// where an SLA will live afterwards: a figure that never named the host has
+// nothing to correct.
 
 import { LitElement, html } from 'lit';
 
-// TEMPORARY (demo window): the three "1-day"/"one-day" mentions below track
-// WINDOW_SECONDS in cre/lib/reputation.js. Restore "seven-day" / "7-day" / "7
-// days" when that constant goes back. Deliberately still literal text — see
-// the note under DESC on why neither figure interpolates.
 const TITLE = 'How one paid call is judged';
 const DESC =
-  'A paying agent sends its x402 payment to the Verdikt proxy. The proxy reads the service’s url record on ENS, which is the endpoint it relays to. With a payment, the call is replayed inside a Chainlink CRE confidential workflow, which reads the service’s SLA from ENS and evaluates the provider’s response against it without letting the response leave the enclave. The workflow writes PASS, FAIL or DOWN to the VerdiktRegistry on Arc; a FAIL or DOWN credits the payer from the provider’s bond, capped at the smaller of the fixed refund, what was paid, and what remains of the bond, and the agent calls withdraw to collect. Separately, an hourly workflow reads the verdict events off Arc and publishes trailing one-day conformance and availability scores back to ENS.';
+  'A paying agent sends its x402 payment to the Verdikt proxy, which relays the call to the provider’s registered endpoint. The call is replayed inside a Chainlink CRE confidential workflow, which evaluates the provider’s response against the SLA that provider published, without letting the response leave the enclave. The workflow writes PASS, FAIL or DOWN to the VerdiktRegistry on Arc; a FAIL or DOWN credits the payer from the provider’s bond, capped at the smaller of the fixed refund, what was paid, and what remains of the bond, and the agent calls withdraw to collect. Separately, and only when a consumer disputes what the response meant, that consumer files a bonded claim with the SlaClaimJudge on GenLayer, which binds the claim to the verdict already on Arc and settles it MET, BREACH, UNDETERMINED or CANCELLED.';
 
 // Neither figure interpolates anything: server-side rendering parses an <svg>
 // subtree as HTML, where a `${}` between SVG children silently loses its part
@@ -40,16 +49,17 @@ const DESC =
 // with literal ids, and the figure's text alternative lives outside the svg —
 // where it is also the more useful place for it.
 //
-// Horizontal: ENS above, the request path across the middle, Arc below.
+// Horizontal: the request path across the middle, Arc under it, GenLayer under
+// that. Reading down the figure is reading outward in time — what every call
+// does, then what is recorded, then what is only ever done on dispute.
 //
 // The trace runs in the order a call actually travels, one step a second:
-// agent → proxy → ENS (url) → CRE → ENS (sla) → provider → CRE → Arc → ENS
-// (hourly) and, last, Arc → agent. A dashed read is a step of that sequence
-// too, so it carries its own `--d` and surfaces at its turn rather than all
-// of them fading in together at the end. A block's `--r` is the `--d` of the
-// line reaching it plus ~900ms.
+// agent → proxy → CRE → provider → CRE → Arc → agent, and then, a beat later
+// and pointing the other way, GenLayer → Arc. That last one is dashed and
+// arrives last on purpose: it is a coda, not a step, and a reader who stops
+// watching before it has still seen a complete paid call.
 const wide = () => html`
-  <svg class="dg dg-wide" viewBox="0 0 900 372" role="img" aria-label="How one paid call is judged" aria-describedby="dg-alt">
+  <svg class="dg dg-wide" viewBox="0 0 900 354" role="img" aria-label="How one paid call is judged" aria-describedby="dg-alt">
     <defs>
       <marker id="dgw-tip" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
         <path class="dg-tip" d="M0,0 L8,4 L0,8 Z"></path>
@@ -60,92 +70,86 @@ const wide = () => html`
     </defs>
 
     <g class="dg-stage" style="--r:1900ms">
-      <text class="dg-band dg-sepolia" x="0" y="20">ETHEREUM SEPOLIA · ENS</text>
-      <text class="dg-cap dg-sepolia" x="204" y="20">service.verdikt.eth</text>
-      <rect class="dg-box dg-sepolia" x="204" y="28" width="440" height="64"></rect>
-      <line class="dg-div dg-sepolia" x1="424" y1="28" x2="424" y2="92"></line>
-      <use class="dg-logo dg-sepolia" href="#lg-ens" x="216" y="41" width="13" height="13"></use>
-      <text class="dg-key" x="235" y="52">sla · url · address</text>
-      <text class="dg-sub" x="216" y="72">the provider writes these</text>
-      <text class="dg-key" x="436" y="52">conformance · availability</text>
-      <text class="dg-sub" x="436" y="72">only the CRE signer can set</text>
-    </g>
-
-    <g class="dg-stage" style="--r:2900ms">
-      <rect class="dg-bound dg-cre" x="422" y="150" width="228" height="90"></rect>
-      <text class="dg-band end dg-cre" x="640" y="236.5">ENCLAVE BOUNDARY</text>
-      <rect class="dg-box dg-cre" x="428" y="164" width="216" height="62"></rect>
-      <use class="dg-logo dg-cre" href="#lg-cre" x="440" y="177" width="13" height="13"></use>
-      <text class="dg-title" x="459" y="188">CRE confidential workflow</text>
-      <text class="dg-sub" x="440" y="206">replays the payment, in a TEE</text>
+      <rect class="dg-bound dg-cre" x="422" y="26" width="228" height="90"></rect>
+      <text class="dg-band end dg-cre" x="640" y="112.5">ENCLAVE BOUNDARY</text>
+      <rect class="dg-box dg-cre" x="428" y="40" width="216" height="62"></rect>
+      <use class="dg-logo dg-cre" href="#lg-cre" x="440" y="53" width="13" height="13"></use>
+      <text class="dg-title" x="459" y="64">CRE confidential workflow</text>
+      <text class="dg-sub" x="440" y="82">replays the payment, in a TEE</text>
     </g>
 
     <g class="dg-stage" style="--r:0ms">
-      <rect class="dg-box" x="0" y="164" width="136" height="62"></rect>
-      <use class="dg-logo" href="#lg-agent" x="12" y="177" width="13" height="13"></use>
-      <text class="dg-title" x="31" y="188">paying agent</text>
-      <text class="dg-sub" x="12" y="206">signs its own x402</text>
+      <rect class="dg-box" x="0" y="40" width="136" height="62"></rect>
+      <use class="dg-logo" href="#lg-agent" x="12" y="53" width="13" height="13"></use>
+      <text class="dg-title" x="31" y="64">paying agent</text>
+      <text class="dg-sub" x="12" y="82">signs its own x402</text>
     </g>
 
     <g class="dg-stage" style="--r:900ms">
-      <rect class="dg-box dg-verdikt" x="192" y="164" width="176" height="62"></rect>
-      <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="204" y="177" width="13" height="13"></use>
-      <text class="dg-title" x="223" y="188">proxy</text>
-      <text class="dg-key sm dg-verdikt" x="204" y="206">service.verdikt.bond</text>
+      <rect class="dg-box dg-verdikt" x="192" y="40" width="176" height="62"></rect>
+      <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="204" y="53" width="13" height="13"></use>
+      <text class="dg-title" x="223" y="64">proxy</text>
+      <text class="dg-key sm dg-verdikt" x="204" y="82">service.verdikt.bond</text>
+    </g>
+
+    <g class="dg-stage" style="--r:2900ms">
+      <rect class="dg-box" x="708" y="40" width="144" height="62"></rect>
+      <use class="dg-logo" href="#lg-x402" x="720" y="53" width="13" height="13"></use>
+      <text class="dg-title" x="739" y="64">provider</text>
+      <text class="dg-key sm" x="720" y="82">x402 endpoint</text>
     </g>
 
     <g class="dg-stage" style="--r:4900ms">
-      <rect class="dg-box" x="708" y="164" width="144" height="62"></rect>
-      <use class="dg-logo" href="#lg-x402" x="720" y="177" width="13" height="13"></use>
-      <text class="dg-title" x="739" y="188">provider</text>
-      <text class="dg-key sm" x="720" y="206">x402 endpoint</text>
+      <text class="dg-band dg-arc" x="0" y="170">ARC TESTNET</text>
+      <text class="dg-cap dg-arc" x="192" y="170">VerdiktRegistry</text>
+      <rect class="dg-box dg-arc" x="192" y="178" width="468" height="62"></rect>
+      <line class="dg-div dg-arc" x1="424" y1="178" x2="424" y2="240"></line>
+      <use class="dg-logo dg-arc" href="#lg-arc" x="204" y="191" width="13" height="13"></use>
+      <text class="dg-title" x="223" y="202">the verdict ledger</text>
+      <text class="dg-sub" x="204" y="222"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
+      <text class="dg-key" x="436" y="202">bond and owed[payer]</text>
+      <text class="dg-sub" x="436" y="222">refund ≤ min(fixed, paid, bond)</text>
     </g>
 
     <g class="dg-stage" style="--r:6900ms">
-      <text class="dg-band dg-arc" x="0" y="288">ARC TESTNET</text>
-      <text class="dg-cap dg-arc" x="192" y="288">VerdiktRegistry</text>
-      <rect class="dg-box dg-arc" x="192" y="296" width="468" height="62"></rect>
-      <line class="dg-div dg-arc" x1="424" y1="296" x2="424" y2="358"></line>
-      <use class="dg-logo dg-arc" href="#lg-arc" x="204" y="309" width="13" height="13"></use>
-      <text class="dg-title" x="223" y="320">the verdict ledger</text>
-      <text class="dg-sub" x="204" y="340"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan>, final</text>
-      <text class="dg-key" x="436" y="320">bond and owed[payer]</text>
-      <text class="dg-sub" x="436" y="340">refund ≤ min(fixed, paid, bond)</text>
+      <text class="dg-band dg-genlayer" x="0" y="270">GENLAYER</text>
+      <text class="dg-cap dg-genlayer" x="192" y="270">SlaClaimJudge</text>
+      <rect class="dg-box dg-genlayer" x="192" y="278" width="468" height="62"></rect>
+      <line class="dg-div dg-genlayer" x1="424" y1="278" x2="424" y2="340"></line>
+      <use class="dg-logo dg-genlayer" href="#lg-judge" x="204" y="291" width="13" height="13"></use>
+      <text class="dg-title" x="223" y="302">semantic claim</text>
+      <text class="dg-sub" x="204" y="322">on dispute, not every call</text>
+      <text class="dg-key" x="436" y="302">MET · BREACH</text>
+      <text class="dg-sub" x="436" y="322">or UNDETERMINED, charging nobody</text>
     </g>
 
-    <path class="dg-flow" style="--d:0ms" pathLength="1" marker-end="url(#dgw-tip)" d="M136,195 H186"></path>
-    <text class="dg-note mid" x="164" y="183">pays</text>
+    <path class="dg-flow" style="--d:0ms" pathLength="1" marker-end="url(#dgw-tip)" d="M136,71 H186"></path>
+    <text class="dg-note mid" x="164" y="59">pays</text>
 
-    <path class="dg-flow" style="--d:2000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M368,195 H424"></path>
-    <text class="dg-note mid" x="398" y="183">replays</text>
+    <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M368,71 H424"></path>
+    <text class="dg-note mid" x="398" y="59">replays</text>
 
-    <path class="dg-flow" style="--d:4000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M644,187 H702"></path>
-    <text class="dg-note mid" x="676" y="175">calls</text>
-    <path class="dg-read" style="--d:5000ms" marker-end="url(#dgw-tip-quiet)" d="M702,205 H648"></path>
-    <text class="dg-note mid" x="676" y="221">response</text>
+    <path class="dg-flow" style="--d:2000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M644,63 H702"></path>
+    <text class="dg-note mid" x="676" y="51">calls</text>
+    <path class="dg-read" style="--d:3000ms" marker-end="url(#dgw-tip-quiet)" d="M702,81 H648"></path>
+    <text class="dg-note mid" x="676" y="97">response</text>
 
-    <path class="dg-read dg-sepolia" style="--d:1000ms" marker-end="url(#dgw-tip-quiet)" d="M280,164 V98"></path>
-    <text class="dg-note" x="290" y="118">reads the url record</text>
-    <text class="dg-note" x="290" y="132">and relays to it</text>
+    <path class="dg-flow dg-arc" style="--d:4000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M540,120 V172"></path>
+    <text class="dg-note end" x="530" y="136">setVerdict</text>
+    <text class="dg-note end" x="530" y="150"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan></text>
+    <text class="dg-note" x="560" y="136">judged against the SLA</text>
+    <text class="dg-note" x="560" y="150">the provider published</text>
 
-    <path class="dg-read dg-sepolia" style="--d:3000ms" marker-end="url(#dgw-tip-quiet)" d="M540,150 V98"></path>
-    <text class="dg-note" x="550" y="118">reads the sla</text>
+    <path class="dg-flow dg-arc" style="--d:5000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M192,208 H68 V108"></path>
+    <text class="dg-note" x="78" y="128">owed[payer]</text>
+    <text class="dg-note" x="78" y="142">the agent calls withdraw()</text>
 
-    <path class="dg-flow dg-arc" style="--d:6000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M540,240 V290"></path>
-    <text class="dg-note end" x="530" y="262">setVerdict</text>
-    <text class="dg-note end" x="530" y="276"><tspan class="dg-pass">PASS</tspan> · <tspan class="dg-fail">FAIL</tspan> · <tspan class="dg-dn">DOWN</tspan></text>
-
-    <path class="dg-flow dg-arc" style="--d:8000ms" pathLength="1" marker-end="url(#dgw-tip)" d="M192,326 H68 V232"></path>
-    <text class="dg-note" x="78" y="252">owed[payer]</text>
-    <text class="dg-note" x="78" y="266">the agent calls withdraw()</text>
-
-    <path class="dg-read dg-sepolia" style="--d:7000ms" marker-end="url(#dgw-tip-quiet)" d="M660,326 H872 V60 H652"></path>
-    <text class="dg-note end" x="858" y="112">hourly, plain workflow</text>
-    <text class="dg-note end" x="858" y="126">trailing 1-day ratios</text>
+    <path class="dg-read dg-genlayer" style="--d:6000ms" marker-end="url(#dgw-tip-quiet)" d="M300,278 V244"></path>
+    <text class="dg-note" x="310" y="264">binds the claim to that verdict</text>
   </svg>`;
 
-// Vertical: the same six stages stacked, ENS reads folded into each stage's
-// own line so no connector has to cross the column on a narrow screen.
+// Vertical: the same six stages stacked, each fact folded into the stage that
+// owns it so no connector has to cross the column on a narrow screen.
 const tall = () => html`
   <svg class="dg dg-tall" viewBox="0 0 380 700" role="img" aria-label="How one paid call is judged" aria-describedby="dg-alt">
     <defs>
@@ -171,7 +175,7 @@ const tall = () => html`
       <rect class="dg-box dg-verdikt" x="44" y="124" width="304" height="64"></rect>
       <use class="dg-logo dg-verdikt" href="#lg-verdikt" x="56" y="138" width="15" height="15"></use>
       <text class="dg-key sm dg-verdikt" x="77" y="150">proxy · service.verdikt.bond</text>
-      <text class="dg-sub" x="56" y="170">relays by the url record on ENS</text>
+      <text class="dg-sub" x="56" y="170">relays to the registered endpoint</text>
     </g>
 
     <path class="dg-flow" style="--d:1000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,188 V232"></path>
@@ -183,7 +187,7 @@ const tall = () => html`
       <use class="dg-logo dg-cre" href="#lg-cre" x="56" y="260" width="15" height="15"></use>
       <text class="dg-title" x="77" y="272">CRE confidential workflow</text>
       <text class="dg-sub" x="56" y="292">replays the payment in a TEE</text>
-      <text class="dg-sub" x="56" y="308">evaluates it against the sla</text>
+      <text class="dg-sub" x="56" y="308">judges the published SLA</text>
     </g>
 
     <path class="dg-flow" style="--d:2000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M196,330 V366"></path>
@@ -210,34 +214,39 @@ const tall = () => html`
     <path class="dg-flow dg-arc" style="--d:5000ms" pathLength="1" marker-end="url(#dgt-tip)" d="M44,528 H24 V38 H38"></path>
     <text class="dg-note mid" transform="rotate(-90 18 300)" x="18" y="300">owed[payer] · withdraw()</text>
 
-    <path class="dg-read dg-sepolia" style="--d:4000ms" marker-end="url(#dgt-tip-quiet)" d="M196,568 V618"></path>
-    <text class="dg-note" x="206" y="598">hourly aggregate</text>
+    <path class="dg-read dg-genlayer" style="--d:4000ms" marker-end="url(#dgt-tip-quiet)" d="M196,568 V618"></path>
+    <text class="dg-note" x="206" y="598">on dispute only</text>
 
     <g class="dg-stage" style="--r:4900ms">
-      <rect class="dg-box dg-sepolia" x="44" y="624" width="304" height="60"></rect>
-      <use class="dg-logo dg-sepolia" href="#lg-ens" x="56" y="638" width="15" height="15"></use>
-      <text class="dg-key sm dg-sepolia" x="77" y="650">conformance · availability on ENS</text>
-      <text class="dg-sub" x="56" y="670">trailing 1 day, hourly</text>
+      <rect class="dg-box dg-genlayer" x="44" y="624" width="304" height="60"></rect>
+      <use class="dg-logo dg-genlayer" href="#lg-judge" x="56" y="638" width="15" height="15"></use>
+      <text class="dg-key sm dg-genlayer" x="77" y="650">SlaClaimJudge on GenLayer</text>
+      <text class="dg-sub" x="56" y="670">MET · BREACH · UNDETERMINED</text>
     </g>
   </svg>`;
 
 // Partner marks, each taken from its owner's own artwork and normalised into a
-// shared 24-unit box so six logos drawn at six scales sit at one optical
+// shared 24-unit box so the logos, drawn at five scales, sit at one optical
 // weight. They ship as one sprite both figures reference, never duplicated.
-// Sources: ENS from ens.domains/brand and Chainlink from chain.link/brand-assets
-// (both via simple-icons, CC0); Arc's arch and x402's cross lifted from the
-// official wordmarks at arc.network and x402.org; the droplet is Verdikt's own
-// favicon; the paying agent's mark is Material Symbols' smart_toy (Apache 2.0),
-// chosen over a more detailed robot glyph because it is still legible at 13px.
+// Sources: Chainlink from chain.link/brand-assets (via simple-icons, CC0);
+// Arc's arch and x402's cross lifted from the official wordmarks at
+// arc.network and x402.org; the droplet is Verdikt's own favicon; the paying
+// agent's mark is Material Symbols' smart_toy (Apache 2.0), chosen over a more
+// detailed robot glyph because it is still legible at 13px.
+//
+// Two of the six are deliberately *not* anybody's logo. The paying agent is a
+// role rather than a brand, and so is the claim judge: GenLayer publishes a
+// mark, but drawing one from memory would put a wrong version of somebody
+// else's identity on the page, which is worse than drawing none. So the judge
+// gets a plain balance scale on the same terms the agent gets a robot — the
+// thing it does, not who made it.
+//
 // All are drawn in one flat colour — the zone they sit in, or ink for the two
 // parties (agent, provider) that belong to no zone — which is identification
 // inside a schematic, not a badge of endorsement.
 const marks = () => html`
   <svg class="dg-marks" aria-hidden="true" focusable="false">
     <defs>
-      <symbol id="lg-ens" viewBox="0 0 24 24">
-        <path transform="translate(0.000 0.000) scale(1.00000)" d="M11.725.223 5.107 11.13a.146.146 0 0 1-.237.018c-.583-.692-2.753-3.64-.067-6.327 2.45-2.452 5.572-4.2 6.73-4.804.13-.068.269.08.192.206m-.366 23.747c.132.093.295-.064.206-.2-1.478-2.251-6.392-9.744-7.07-10.869-.67-1.11-1.987-2.953-2.097-4.53-.011-.158-.228-.19-.283-.042a10 10 0 0 0-.27.85c-1.105 4.11.5 8.472 3.985 10.916zm.909-.193 6.618-10.907a.146.146 0 0 1 .237-.018c.582.692 2.753 3.64.067 6.327-2.45 2.452-5.572 4.2-6.73 4.804-.13.068-.269-.08-.192-.206M12.641.028c-.132-.093-.295.065-.206.2 1.478 2.252 6.392 9.745 7.07 10.87.67 1.109 1.987 2.952 2.097 4.53.011.157.228.19.283.041.088-.239.182-.524.27-.85 1.105-4.11-.5-8.472-3.985-10.915z"></path>
-      </symbol>
       <symbol id="lg-cre" viewBox="0 0 24 24">
         <path transform="translate(0.000 0.000) scale(1.00000)" d="M12 0L9.798 1.266l-6 3.468L1.596 6v12l2.202 1.266 6.055 3.468L12.055 24l2.202-1.266 5.945-3.468L22.404 18V6l-2.202-1.266-6-3.468zM6 15.468V8.532l6-3.468 6 3.468v6.936l-6 3.468z"></path>
       </symbol>
@@ -249,6 +258,9 @@ const marks = () => html`
       </symbol>
       <symbol id="lg-agent" viewBox="0 0 24 24">
         <path transform="translate(-1.091 25.636) scale(0.02727)" d="M160-360q-50 0-85-35t-35-85q0-50 35-85t85-35v-80q0-33 23.5-56.5T240-760h120q0-50 35-85t85-35q50 0 85 35t35 85h120q33 0 56.5 23.5T800-680v80q50 0 85 35t35 85q0 50-35 85t-85 35v160q0 33-23.5 56.5T720-120H240q-33 0-56.5-23.5T160-200v-160Zm200-80q25 0 42.5-17.5T420-500q0-25-17.5-42.5T360-560q-25 0-42.5 17.5T300-500q0 25 17.5 42.5T360-440Zm240 0q25 0 42.5-17.5T660-500q0-25-17.5-42.5T600-560q-25 0-42.5 17.5T540-500q0 25 17.5 42.5T600-440ZM320-280h320v-80H320v80Z"></path>
+      </symbol>
+      <symbol id="lg-judge" viewBox="0 0 24 24">
+        <path d="M11.3 3.2h1.4v17.2h-1.4zM6.5 20.4h11v1.4h-11zM4 5.6h16v1.4H4zM1 7.4h6.4L4.2 12.6zM16.6 7.4H23l-3.2 5.2z"></path>
       </symbol>
       <symbol id="lg-verdikt" viewBox="0 0 24 24">
         <path transform="translate(-4.879 -5.275) scale(0.13187)" d="M128,40 C170,40 198,72 198,112 C198,160 128,222 128,222 C128,222 58,160 58,112 C58,72 86,40 128,40 Z"></path>

@@ -173,8 +173,8 @@ export const landing = (go, marketplace = null, mode = 'demo', error = null) => 
 
     ${entry('04', html`
       <h2>The request path</h2>
-      <p>Two chains carry a paid call, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token. Ethereum Sepolia holds the public record on ENS: the SLA a provider publishes and the scores anything else can integrate against.</p>
-      <p>Between them, a Chainlink CRE Confidential Workflow does the judging. The call is replayed inside a TEE, so nobody has to be trusted with the response, and the verdict it writes carries a proof of the computation that produced it.</p>`, html`
+      <p>Two chains, one job each. Arc holds the contracts — registry, bond, verdicts, refunds — and the payment itself, since USDC is its gas token, so what was paid and what comes back are the same asset in the same place. GenLayer holds the semantic claim, on the rare call where a consumer disputes what the answer meant.</p>
+      <p>Doing the judging is a Chainlink CRE Confidential Workflow. The call is replayed inside a TEE, so nobody has to be trusted with the response; it is measured against the SLA that provider published, and the verdict it writes carries a proof of the computation that produced it.</p>`, html`
       <p class="note-head">What never leaves</p>
       <p class="note-line">The observed value stays off the chain. Only the verdict is recorded there — trustlessly, because the TEE proves what computed it.</p>
       <p class="note-line">The whole loop drawn, and the same thing in prose — what happens to a 4xx, why an empty window scores 1000, and what a consumer can still dispute: <a href=${HOW_PATH} @click=${navigateOnClick(go, HOW_PATH)}>how it works</a>.</p>`)}
