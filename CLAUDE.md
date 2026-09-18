@@ -16,6 +16,7 @@ What determinism cannot judge — whether the content *meant* what was promised 
 - `docs/roadmap/erc-8004.md` — post-hackathon research: publishing verdicts to an ERC-8004 Validation Registry. Out of scope for the submission; read it before designing any interop, not after
 - `docs/roadmap/input-validation.md` — post-hackathon research: rejecting a malformed request before it is paid for, closing the gap the 4xx invariant deliberately leaves. Blocked on the same boundary decision as [#21](https://github.com/imajus/verdikt/issues/21)
 - `docs/GenLayer.md` — the design of record for `genlayer/`, the semantic half of a verdict ([#80](https://github.com/imajus/verdikt/issues/80)). Shipped in #110, so this is no longer a roadmap note: it moved out of `docs/roadmap/` when the work landed, and what is left in that directory is genuinely unbuilt. Read it before changing anything under `genlayer/` — it is newer than the issues, and it is mostly an argument record, so it answers "why is it shaped like this" where the code only answers "what does it do"
+- `docs/roadmap/post-hackathon-mvp.md` — **decided, not yet implemented.** This repo stays public and frozen as the hackathon record; the actual rebuild (GenLayer, ENS, and Chainlink CRE all cut; verification moves into the proxy; rebrand) happens in a new private org. Read it before assuming any of GenLayer/ENS/CRE are staying — they aren't
 
 ## Current state
 
